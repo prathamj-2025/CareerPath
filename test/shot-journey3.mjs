@@ -1,0 +1,11 @@
+import { chromium } from "playwright";
+const B = process.env.BASE || "http://localhost:3111";
+const OUT = new URL("../shots/", import.meta.url).pathname;
+const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH || undefined });
+const page = await browser.newPage({ viewport: { width: 390, height: 800 }, colorScheme: "light" });
+await page.goto(B); await page.screenshot({ path: OUT + "J-m-1.png", fullPage: true });
+await page.click('[data-action="login"]'); await page.waitForSelector(".skill-list");
+await page.screenshot({ path: OUT + "J-m-2.png", fullPage: true });
+const ov = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
+console.log("h-scroll:", ov);
+await browser.close();
