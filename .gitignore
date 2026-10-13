@@ -1,0 +1,15 @@
+# Never commit keys
+.env
+.env.*
+!.env.example
+
+node_modules
+.vercel/
+.DS_Store
+*.log
+
+# test output
+shot-*.png
+
+# visual regression output
+shots/
