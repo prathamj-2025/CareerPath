@@ -1,8 +1,9 @@
 /* Progress saved to the database (against test/fakesupabase.mjs): stars, points, lessons done, module results.
    Start servers the same way as accounts.spec.mjs. */
 import { chromium } from 'playwright';
+import { keyOf } from './keys.mjs';
 
-const BASE = process.env.REAL_URL || 'http://localhost:3114';
+const BASE = process.env.REAL_URL || 'http://localhost:3115';   // real accounts with the service key and the fake model
 const FAKE = process.env.FAKE_URL || 'http://localhost:3113';
 const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH || undefined });
 let failed = 0;
@@ -41,9 +42,10 @@ async function pickPM(page) {
   await page.click('[data-action="onb-know"]');
   await page.click('[data-action="pick-role"][data-role="pm"]');
   await page.waitForSelector('[data-action="open-track"]');
+  await page.waitForTimeout(1500);     // the server grades against the saved roadmap, so let it save first
 }
 async function perfectExam(page, skillId, n) {
-  const key = await page.evaluate(id => window.CP_ROLES.find(r => r.id === 'pm').skills.find(s => s.id === id).assessment.map(q => q.a), skillId);
+  const key = keyOf('pm', skillId);
   await page.click('[data-action="open-track"][data-track="pm-fundamentals"]');
   await page.waitForTimeout(150);
   await page.click('.skill-row:nth-child(' + n + ')');

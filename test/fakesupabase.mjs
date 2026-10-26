@@ -11,9 +11,11 @@ const refreshes = new Map();  // refresh token -> user id
 let n = 0;
 let failing = false;   // when true, progress calls fail like a dropped connection
 const uuid = () => '00000000-0000-4000-8000-' + String(++n).padStart(12, '0');
-const ALLOWED = new Set(['name', 'school', 'major', 'grad_year', 'picture_url', 'roadmap_id', 'roadmap_history', 'onboarding', 'points', 'show_on_leaderboard']);
+// 007: points are no longer writable by the student.
+const ALLOWED = new Set(['name', 'school', 'major', 'grad_year', 'picture_url', 'roadmap_id', 'roadmap_history', 'onboarding', 'show_on_leaderboard']);
 const progress = new Map();   // 'user|skill' -> row
 const modules = new Map();    // 'user|track' -> row
+const attempts = new Map();   // id -> exam_attempts row (written only with the service key)
 const subs = new Map();       // 'user|challenge' -> challenge_submissions row (written only with the service key)
 const SECRET = 'sb_secret_test';
 const log = [];               // every write, so tests can see what the site sent
@@ -61,6 +63,20 @@ function session(u) {
     user: { id: u.id, email: u.email, identities: [{}] } };
 }
 const who = req => tokens.get(String(req.headers.authorization || '').replace(/^Bearer /, ''));
+const isService = req => req.headers.apikey === SECRET;
+// PostgREST filters used by the server functions: col=eq.x, col=gte.x, col=is.null
+function matches(row, url) {
+  for (const [k, v] of url.searchParams) {
+    if (['select', 'order', 'limit', 'offset', 'on_conflict'].includes(k)) continue;
+    const m = /^(eq|gte|lte|is)\.(.*)$/.exec(v); if (!m) continue;
+    const [, op, val] = m, cur = row[k];
+    if (op === 'eq' && String(cur) !== val) return false;
+    if (op === 'is' && val === 'null' && cur != null) return false;
+    if (op === 'gte' && !(cur != null && String(cur) >= val)) return false;
+    if (op === 'lte' && !(cur != null && String(cur) <= val)) return false;
+  }
+  return true;
+}
 
 const server = http.createServer(async (req, res) => {
   res.setHeader('access-control-allow-origin', '*');
@@ -96,7 +112,7 @@ const server = http.createServer(async (req, res) => {
   if (p === '/__admin') { const u = users.get(url.searchParams.get('email')); profiles.get(u.id).role = 'admin'; return send(200, {}); }
   if (p === '/__expire') { tokens.clear(); return send(200, {}); }   // access tokens die, refresh tokens live
   if (p === '/__profile') { const u = users.get(url.searchParams.get('email')); return send(200, profiles.get(u.id) || null); }
-  if (p === '/__reset') { rt.joins = []; rt.fanouts = []; rt.tokenUpdates = 0; rt.refuse = false; for (const c of sockets) c.ws.terminate(); users.clear(); profiles.clear(); tokens.clear(); refreshes.clear(); progress.clear(); modules.clear(); subs.clear(); log.length = 0; return send(200, {}); }
+  if (p === '/__reset') { rt.joins = []; rt.fanouts = []; rt.tokenUpdates = 0; rt.refuse = false; for (const c of sockets) c.ws.terminate(); users.clear(); profiles.clear(); tokens.clear(); refreshes.clear(); progress.clear(); modules.clear(); subs.clear(); attempts.clear(); log.length = 0; return send(200, {}); }
   if (p === '/__progress') { const u = users.get(url.searchParams.get('email')); return send(200, { skills: [...progress.values()].filter(r => r.user_id === u.id), modules: [...modules.values()].filter(r => r.user_id === u.id) }); }
   if (p === '/__seed') {   // put saved progress on the server before the student signs in (as if from another device)
     const u = users.get(url.searchParams.get('email')); const b = body;
@@ -106,6 +122,7 @@ const server = http.createServer(async (req, res) => {
     return send(200, {});
   }
   if (p === '/__subs') return send(200, [...subs.values()]);
+  if (p === '/__attempts') { const u = users.get(url.searchParams.get('email')); return send(200, [...attempts.values()].filter(r => r.user_id === u.id)); }
   if (p === '/__log') return send(200, log);
   if (p === '/__rt') {
     const by = {}; for (const c of sockets) { const em = c.uid && profiles.get(c.uid) && profiles.get(c.uid).email; by[em || 'unjoined'] = (by[em || 'unjoined'] || []).concat([...c.chans]); }
@@ -157,32 +174,74 @@ const server = http.createServer(async (req, res) => {
   if (p === '/auth/v1/recover') return send(200, {});
   if (p === '/auth/v1/logout') { tokens.delete(String(req.headers.authorization || '').replace(/^Bearer /, '')); return send(204); }
 
-  // ---- progress tables (PostgREST) ----
+  // ---- progress tables (PostgREST). Students read their own rows; 007 removed their right to write scores,
+  //      so only the server (service key) writes here. ----
   if (p === '/rest/v1/skill_progress' || p === '/rest/v1/module_results') {
-    const id = who(req); if (!id) return send(401, { message: 'JWT expired', code: 'PGRST301' });
+    const svc = isService(req);
+    const id = svc ? null : who(req); if (!svc && !id) return send(401, { message: 'JWT expired', code: 'PGRST301' });
     if (failing) return send(503, { message: 'down' });
     const store = p.endsWith('skill_progress') ? progress : modules;
     const key = p.endsWith('skill_progress') ? 'skill_id' : 'track_id';
-    const me = profiles.get(id);
+    const me = id ? profiles.get(id) : null;
     if (req.method === 'GET') {
-      const want = (url.searchParams.get('user_id') || '').replace(/^eq\./, '');
-      return send(200, [...store.values()].filter(r => (me.role === 'admin' || r.user_id === id) && (!want || r.user_id === want)));
+      return send(200, [...store.values()].filter(r => (svc || me.role === 'admin' || r.user_id === id) && matches(r, url)));
     }
     if (req.method === 'POST') {
+      if (!svc) return send(403, { code: '42501', message: 'permission denied for table ' + p.split('/').pop() });
       const rows = Array.isArray(body) ? body : [body];
-      if (rows.some(r => r.user_id !== id)) return send(403, { code: '42501', message: 'new row violates row-level security policy' });
       if (rows.some(r => r.stars > 5 || r.best > 100)) return send(400, { code: '23514', message: 'check constraint' });
-      log.push({ table: p.split('/').pop(), rows: rows.length });
+      log.push({ table: p.split('/').pop(), rows: rows.length, service: true });
       rows.forEach(r => {
         const old = store.get(r.user_id + '|' + r[key]);
         store.set(r.user_id + '|' + r[key], r);
         if (store === progress && (!old || old.stars !== r.stars)) {      // skill_progress_board_* triggers
+          const owner = profiles.get(r.user_id);
           const sfx = (String(r.skill_id).match(/-([a-z]+)$/) || [])[1];
-          const t = boardOf({ school: me.school, roadmap_id: sfx }); if (t) fanout(t);
+          const t = owner && boardOf({ school: owner.school, roadmap_id: sfx }); if (t) fanout(t);
         }
       });
-      return send(201);
+      return (req.headers.prefer || '').includes('return=representation') ? send(201, rows) : send(201);
     }
+    return send(403, { code: '42501', message: 'permission denied' });
+  }
+  if (p === '/rest/v1/rpc/save_lessons') {          // the one score-table write a student keeps
+    const id = who(req); if (!id) return send(401, { message: 'JWT expired', code: 'PGRST301' });
+    if (failing) return send(503, { message: 'down' });
+    if (!body.p_skill || String(body.p_skill).length > 80) return send(400, { message: 'bad skill' });
+    const k = id + '|' + body.p_skill, old = progress.get(k) || { user_id: id, skill_id: body.p_skill, stars: 0, best: 0, attempts: 0, project: false, lessons_done: [], history: [] };
+    const done = [...new Set([...(old.lessons_done || []), ...(body.p_done || [])].filter(x => x >= 0 && x < 200))].sort((a, b) => a - b);
+    progress.set(k, { ...old, lessons_done: done });
+    log.push({ table: 'save_lessons', rows: 1 });
+    return send(204);
+  }
+  if (p === '/rest/v1/rpc/add_points') {            // service role only
+    if (!isService(req)) return send(401, { code: '42501', message: 'permission denied for function add_points' });
+    const pr = profiles.get(body.p_user); if (!pr) return send(404, {});
+    const before = { ...pr };
+    pr.points = Math.min(Math.max((pr.points || 0) + Number(body.p_delta || 0), 0), 999999);
+    const t = boardOf(pr); if (t) fanout(t);
+    return send(200, pr.points);
+  }
+  if (p === '/rest/v1/exam_attempts') {
+    const svc = isService(req);
+    const id = svc ? null : who(req); if (!svc && !id) return send(401, { message: 'JWT expired', code: 'PGRST301' });
+    if (req.method === 'GET') {
+      const me = id ? profiles.get(id) : null;
+      return send(200, [...attempts.values()].filter(r => (svc || me.role === 'admin' || r.user_id === id) && matches(r, url)));
+    }
+    if (!svc) return send(403, { code: '42501', message: 'permission denied for table exam_attempts' });
+    if (req.method === 'POST') {
+      if (!['skill', 'module', 'project'].includes(body.kind)) return send(400, { code: '23514', message: 'check constraint' });
+      const row = { id: uuid(), started_at: new Date().toISOString(), submitted_at: null, answers: null, score: null, right: null, items: [], ...body };
+      attempts.set(row.id, row);
+      return (req.headers.prefer || '').includes('return=representation') ? send(201, [row]) : send(201);
+    }
+    if (req.method === 'PATCH') {
+      const hit = [...attempts.values()].filter(r => matches(r, url));
+      hit.forEach(r => Object.assign(r, body));
+      return (req.headers.prefer || '').includes('return=representation') ? send(200, hit) : send(204);
+    }
+    if (req.method === 'DELETE') { [...attempts.values()].filter(r => matches(r, url)).forEach(r => attempts.delete(r.id)); return send(204); }
   }
 
   // ---- weekly challenge submissions: students read their own; only the server (service key) writes ----
@@ -236,6 +295,20 @@ const server = http.createServer(async (req, res) => {
   }
 
   // ---- profiles (PostgREST) ----
+  if (p === '/rest/v1/profiles' && isService(req) && req.method === 'GET') {
+    return send(200, [...profiles.values()].filter(r => matches(r, url)));
+  }
+  if (p === '/rest/v1/profiles' && isService(req) && req.method === 'PATCH') {   // the server may set any column, e.g. points
+    const want = (url.searchParams.get('id') || '').replace(/^eq\./, '');
+    const me = profiles.get(want); if (!me) return send(200, []);
+    const before = { ...me };
+    Object.assign(me, body);
+    if (['points', 'roadmap_id', 'school', 'name', 'show_on_leaderboard'].some(k => before[k] !== me[k])) {
+      const t = boardOf(me); if (t) fanout(t);
+      const t0 = boardOf(before); if (t0 && t0 !== t) fanout(t0);
+    }
+    return send(204);
+  }
   if (p === '/rest/v1/profiles') {
     const id = who(req); if (!id) return send(401, { message: 'JWT expired', code: 'PGRST301' });
     const want = (url.searchParams.get('id') || '').replace(/^eq\./, '');

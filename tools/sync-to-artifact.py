@@ -13,6 +13,10 @@ h = h.replace('</head>\n<body>', '').replace('</body>\n</html>', '')
 open(os.path.join(out, 'index.html'), 'w', encoding='utf-8').write(h)
 for f in os.listdir(src):
     if f.endswith('.js'): shutil.copy(os.path.join(src, f), os.path.join(out, f))
+# The artifact copy is the browser-only demo, which grades on the page, so it gets the full curriculum with answer keys.
+content = os.path.join(os.path.dirname(__file__), '..', 'content')
+for f in os.listdir(content):
+    if f.endswith('.js'): shutil.copy(os.path.join(content, f), os.path.join(out, f))
 vend = os.path.join(src, 'vendor')
 if os.path.isdir(vend):
     os.makedirs(os.path.join(out, 'vendor'), exist_ok=True)

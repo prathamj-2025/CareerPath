@@ -111,9 +111,7 @@ window.CP_COURSE_BA = {
      "Uniquely identifies each claim in the table",
      "Points each claim to a row in the policies table",
      "Records which handler last edited the claim"
-    ],
-    "a": 2,
-    "why": "A foreign key holds another table's primary key. claims.policy_id links each claim to the policy it was filed on."
+    ]
    },
    {
     "lvl": 1,
@@ -123,9 +121,7 @@ window.CP_COURSE_BA = {
      "Only the claims that have a matching row in handlers",
      "Every handler, with claim columns NULL where there is no match",
      "Only the handlers who have no claims assigned to them"
-    ],
-    "a": 0,
-    "why": "A LEFT JOIN keeps every row from the left table, here claims. Unassigned claims stay in the result with NULL handler details."
+    ]
    },
    {
     "lvl": 2,
@@ -135,9 +131,7 @@ window.CP_COURSE_BA = {
      "One claim row is an exact duplicate of another",
      "One handler_id is missing from the handlers table",
      "One claim has a NULL value in handler_id"
-    ],
-    "a": 3,
-    "why": "COUNT(*) counts rows, while COUNT(column) counts only non-NULL values. One claim, 5012, has no handler."
+    ]
    },
    {
     "lvl": 2,
@@ -147,9 +141,7 @@ window.CP_COURSE_BA = {
      "20 days, within SLA",
      "20 days, breached SLA",
      "34 days, breached SLA"
-    ],
-    "a": 1,
-    "why": "August 14 to August 31 is 17 days, plus 3 days in September, for 20 days. That is within the 30-day SLA."
+    ]
    },
    {
     "lvl": 3,
@@ -159,9 +151,7 @@ window.CP_COURSE_BA = {
      "Switch every join to a LEFT JOIN and run it again",
      "Divide each customer's premium total by two afterward",
      "Use AVG(premium) instead of SUM(premium) in the query"
-    ],
-    "a": 0,
-    "why": "Each policy has two claims, so the join repeats each premium twice (fan-out). Pre-aggregating claims to the policy grain keeps one row per policy."
+    ]
    },
    {
     "lvl": 3,
@@ -171,9 +161,7 @@ window.CP_COURSE_BA = {
      "The claim opened at any point from August 1 to August 31",
      "Opened on or before August 31 and not closed by August 31",
      "The claim has no closed date, or it closed after August 31"
-    ],
-    "a": 2,
-    "why": "Today's status cannot describe a past date, and a claim must have been opened by the cut-off. Open at a date means opened by then and not yet closed then."
+    ]
    },
    {
     "lvl": 4,
@@ -183,9 +171,7 @@ window.CP_COURSE_BA = {
      "Compare claim by claim at the same grain to find each break",
      "Rerun both totals tomorrow and see if the gap has closed",
      "Adjust the claims figure to match finance before sending it"
-    ],
-    "a": 1,
-    "why": "Equal counts can hide offsetting breaks. A claim-level FULL OUTER JOIN showed a mismatch, a payment missing in finance and an unknown claim that together explain the 850."
+    ]
    },
    {
     "lvl": 4,
@@ -195,9 +181,7 @@ window.CP_COURSE_BA = {
      "One combined rate for open and resolved claims, without labels",
      "The breach rate with all open claims treated as resolved today",
      "The resolved breach rate plus a count of open claims past SLA"
-    ],
-    "a": 3,
-    "why": "A rate on resolved claims ignores late work still in the queue. Showing both gives the manager the full SLA picture."
+    ]
    },
    {
     "lvl": 5,
@@ -207,9 +191,7 @@ window.CP_COURSE_BA = {
      "Change the policy to a similar one and fix the status, then load",
      "Hold the row, log both failures and send them to the data owner",
      "Delete the row from staging so that all the checks pass cleanly"
-    ],
-    "a": 2,
-    "why": "Guessing a policy or deleting the row hides a real problem. Holding it with evidence lets the data owner correct it at the source."
+    ]
    },
    {
     "lvl": 5,
@@ -219,9 +201,7 @@ window.CP_COURSE_BA = {
      "Ask finance to copy the claims team's numbers from now on",
      "Run the backlog query more often during month-end week",
      "Round both backlog figures to the nearest ten before sharing"
-    ],
-    "a": 0,
-    "why": "The gap comes from differing definitions, not from the data. An agreed, documented definition with sources and rules removes the cause."
+    ]
    }
   ]
  },
@@ -333,9 +313,7 @@ window.CP_COURSE_BA = {
      "To record the agenda and decisions of each workshop",
      "To link each requirement to its source, stories and tests",
      "To list every stakeholder with their influence and interest"
-    ],
-    "a": 2,
-    "why": "An RTM links requirements backward to sources and needs and forward to stories and test cases, which supports coverage checks and impact analysis."
+    ]
    },
    {
     "lvl": 1,
@@ -345,9 +323,7 @@ window.CP_COURSE_BA = {
      "The form shall let users attach up to 10 photos per claim",
      "Adjusters need to see all their new claims in one place",
      "Reduce the time to log a claim to under 4 business hours"
-    ],
-    "a": 0,
-    "why": "The response-time target describes how well the system performs, which makes it non-functional. The others are functional, stakeholder and business requirements."
+    ]
    },
    {
     "lvl": 2,
@@ -357,9 +333,7 @@ window.CP_COURSE_BA = {
      "The claims form should be designed with users in mind",
      "The claims form shall be as simple as possible for customers",
      "In testing, 4 of 5 first-time users complete a claim without help"
-    ],
-    "a": 3,
-    "why": "Only the last option is measurable and testable. The others still rely on vague words like easy, intuitive and simple."
+    ]
    },
    {
     "lvl": 2,
@@ -369,9 +343,7 @@ window.CP_COURSE_BA = {
      "It combines three requirements in one statement",
      "It is a business requirement, not a solution one",
      "It uses shall, which is reserved for designs"
-    ],
-    "a": 1,
-    "why": "A good requirement is atomic. This should be split into three requirements with their own IDs so each can be traced and tested."
+    ]
    },
    {
     "lvl": 3,
@@ -381,9 +353,7 @@ window.CP_COURSE_BA = {
      "Ask what makes a claim urgent and what happens to it today",
      "Explain that colors are design choices and skip the topic",
      "Suggest a priority dropdown instead, since it is more flexible"
-    ],
-    "a": 1,
-    "why": "The adjuster has offered a solution. Asking what problem it solves uncovers the real need, such as injury claims being handled first, while keeping design options open."
+    ]
    },
    {
     "lvl": 3,
@@ -393,9 +363,7 @@ window.CP_COURSE_BA = {
      "Run a MoSCoW session with the intake team",
      "Shadow several clerks while they process real claims",
      "Ask the supervisor to confirm the claim in writing"
-    ],
-    "a": 2,
-    "why": "Observation shows how work is really done. At Harborline it revealed personal tracking spreadsheets that the interview had missed."
+    ]
    },
    {
     "lvl": 4,
@@ -405,9 +373,7 @@ window.CP_COURSE_BA = {
      "Add the question right away, since compliance needs it",
      "Reject it, because the requirements were already signed off",
      "Hold it until after launch and add it in the next release"
-    ],
-    "a": 0,
-    "why": "Change control means logging the request and analyzing impact before a decision. Accepting or rejecting it without analysis skips the step that makes the trade-off visible."
+    ]
    },
    {
     "lvl": 4,
@@ -417,9 +383,7 @@ window.CP_COURSE_BA = {
      "Move all Should items to Won't so the Must items fit",
      "Ask developers to work overtime to cover any overrun",
      "Challenge each Must: would the release fail without it?"
-    ],
-    "a": 3,
-    "why": "Musts at about 94% of capacity leave almost no contingency; DSDM suggests no more than about 60%. Testing each Must against whether the release could launch without it brings priorities back to reality."
+    ]
    },
    {
     "lvl": 5,
@@ -429,9 +393,7 @@ window.CP_COURSE_BA = {
      "Drop availability from scope, since phones are a fallback",
      "Compare downtime and cost per target, then let the VP choose",
      "Set 99.99% to be safe and let IT find the budget later"
-    ],
-    "a": 2,
-    "why": "In a 30-day month, 99.5% allows 3.6 hours of downtime and 99.9% allows 43.2 minutes. Making that trade-off and its cost visible lets the business choose an informed target."
+    ]
    },
    {
     "lvl": 5,
@@ -441,9 +403,7 @@ window.CP_COURSE_BA = {
      "A validation gap; add a requirement for agent-assisted claims",
      "A traceability error; renumber the requirement IDs to fix it",
      "A priority issue; move phone claims to the Won't have list"
-    ],
-    "a": 1,
-    "why": "The requirements were well written but incomplete for the business need, which is a validation gap. Adding a requirement for call center agents to submit on a caller's behalf closes it."
+    ]
    }
   ]
  },
@@ -555,9 +515,7 @@ window.CP_COURSE_BA = {
      "A dotted association line linking a data object",
      "A dashed message flow with an open arrowhead",
      "A thick line drawn around the end event"
-    ],
-    "a": 2,
-    "why": "Message flow, a dashed line with an open arrowhead, connects different pools. Sequence flow orders steps inside one pool and never crosses a pool boundary."
+    ]
    },
    {
     "lvl": 1,
@@ -567,9 +525,7 @@ window.CP_COURSE_BA = {
      "To show the ideal process after the redesign",
      "To copy what the procedure manual says should happen",
      "To list the system requirements for the IT team"
-    ],
-    "a": 0,
-    "why": "The as-is map is an honest picture of current practice. It becomes the baseline for finding problems and measuring improvement."
+    ]
    },
    {
     "lvl": 2,
@@ -579,9 +535,7 @@ window.CP_COURSE_BA = {
      "11.1%",
      "5.6%",
      "5%"
-    ],
-    "a": 3,
-    "why": "Cycle time is 36 + 4 = 40 hours. PCE = value-added time / cycle time = 2 / 40 = 5%."
+    ]
    },
    {
     "lvl": 2,
@@ -591,9 +545,7 @@ window.CP_COURSE_BA = {
      "12 business days",
      "275 business days",
      "7,500 business days"
-    ],
-    "a": 1,
-    "why": "Little's Law gives cycle time = WIP / throughput = 300 / 25 = 12 business days."
+    ]
    },
    {
     "lvl": 3,
@@ -603,9 +555,7 @@ window.CP_COURSE_BA = {
      "A parallel gateway split and a parallel gateway join",
      "An inclusive gateway split with no join afterward",
      "Two message flows from the adjuster lane to the appraiser lane"
-    ],
-    "a": 1,
-    "why": "A parallel gateway starts all branches at once, and the parallel join waits until every branch is complete before the flow continues."
+    ]
    },
    {
     "lvl": 3,
@@ -615,9 +565,7 @@ window.CP_COURSE_BA = {
      "Average the two figures and record 5 hours",
      "Record 8 hours and log the gap as a finding",
      "Leave the wait off until the teams agree"
-    ],
-    "a": 2,
-    "why": "The as-is map shows what actually happens, and timestamps are evidence of that. The gap between the manual and reality is itself a finding to discuss."
+    ]
    },
    {
     "lvl": 4,
@@ -627,9 +575,7 @@ window.CP_COURSE_BA = {
      "Intake, because it is the first step in the flow",
      "Finance, because payment is the final step",
      "Every step equally, to keep the flow balanced"
-    ],
-    "a": 0,
-    "why": "The bottleneck is the step with the highest utilization, here appraisal at 40 / 42, about 95%. Improving other steps first just moves work into the appraisal queue faster."
+    ]
    },
    {
     "lvl": 4,
@@ -639,9 +585,7 @@ window.CP_COURSE_BA = {
      "Discard the 5 Whys and start a new fishbone session",
      "Report it to the claims director as the final root cause",
      "Ask why the process allows the error, and check data"
-    ],
-    "a": 3,
-    "why": "Blaming people usually stops short of the root cause. Asking why the process allows the error, and checking evidence, led Harborline to the missing checklist and upload option."
+    ]
    },
    {
     "lvl": 5,
@@ -651,9 +595,7 @@ window.CP_COURSE_BA = {
      "Neither, because rework never counts in cycle time",
      "You: Branch A becomes about 16.7 h, still under 26 h",
      "The colleague, but only for claims over $5,000"
-    ],
-    "a": 2,
-    "why": "With parallel branches, cycle time follows the longest path. Branch A with rework is about 16.7 hours, still shorter than Branch B's 26 hours, so the cycle time does not change."
+    ]
    },
    {
     "lvl": 5,
@@ -663,9 +605,7 @@ window.CP_COURSE_BA = {
      "Present the to-be estimates as confirmed results to build confidence",
      "Show only the to-be map, since everyone already knows the as-is",
      "Show as-is in calendar days and to-be in business days for clarity"
-    ],
-    "a": 0,
-    "why": "Using the same metrics and clearly labeling estimates builds trust, and a pilot with agreed success criteria turns estimates into measured results."
+    ]
    }
   ]
  },
@@ -777,9 +717,7 @@ window.CP_COURSE_BA = {
      "It sorts the rows by the first column",
      "It expands to include new rows automatically",
      "It converts text-numbers into real numbers"
-    ],
-    "a": 2,
-    "why": "A Table grows when rows are added, so formulas, PivotTables and charts based on it pick up new data."
+    ]
    },
    {
     "lvl": 1,
@@ -789,9 +727,7 @@ window.CP_COURSE_BA = {
      "A formula that links to another sheet",
      "A check that has passed successfully",
      "A calculation copied across the row"
-    ],
-    "a": 0,
-    "why": "Blue font marks typed inputs; black marks formulas and green marks links to other sheets."
+    ]
    },
    {
     "lvl": 2,
@@ -801,9 +737,7 @@ window.CP_COURSE_BA = {
      "Medium",
      "Major",
      "Large"
-    ],
-    "a": 3,
-    "why": "Match mode -1 returns an exact match or the next smaller value, and 10,000 matches the Large threshold exactly."
+    ]
    },
    {
     "lvl": 2,
@@ -813,9 +747,7 @@ window.CP_COURSE_BA = {
      "3",
      "4",
      "5"
-    ],
-    "a": 1,
-    "why": "NETWORKDAYS counts working days including both the start and end date: Friday, Monday and Tuesday."
+    ]
    },
    {
     "lvl": 3,
@@ -825,9 +757,7 @@ window.CP_COURSE_BA = {
      "Set the last argument to FALSE or switch to XLOOKUP",
      "Wrap the formula in IFERROR to hide the bad matches",
      "Change the column number in the formula from 2 to 3"
-    ],
-    "a": 1,
-    "why": "Without its last argument VLOOKUP uses approximate match, which returns wrong rows silently; exact match fixes it."
+    ]
    },
    {
     "lvl": 3,
@@ -837,9 +767,7 @@ window.CP_COURSE_BA = {
      "2.00 years",
      "1.78 years",
      "2.40 years"
-    ],
-    "a": 2,
-    "why": "Cumulative cash is -58,336 after Year 1, so payback is 1 + 58,336 / 74,496 = 1.78 years."
+    ]
    },
    {
     "lvl": 4,
@@ -849,9 +777,7 @@ window.CP_COURSE_BA = {
      "Add a cell comment explaining what each typed number means",
      "Copy the same formula across to Year 1 and Year 3 as well",
      "Paste the result as a value so nobody can break it later"
-    ],
-    "a": 0,
-    "why": "Assumptions buried in formulas are missed when they change; each should live once in a labelled input cell."
+    ]
    },
    {
     "lvl": 4,
@@ -861,9 +787,7 @@ window.CP_COURSE_BA = {
      "Run Remove Duplicates on every column of the raw export",
      "Wrap all downstream lookups in IFERROR to skip bad rows",
      "Record the steps in Power Query, refresh, and reconcile totals"
-    ],
-    "a": 3,
-    "why": "Power Query replays recorded cleaning steps on each new file without touching the source, and reconciling counts and totals confirms the result."
+    ]
    },
    {
     "lvl": 5,
@@ -873,9 +797,7 @@ window.CP_COURSE_BA = {
      "The Base case NPV alone, to keep the message simple",
      "The Base case with the Low to High range and the break-even",
      "The Low case alone, since cautious numbers are always safest"
-    ],
-    "a": 2,
-    "why": "Decision makers need the expected result plus the realistic range and the assumption that could change the answer."
+    ]
    },
    {
     "lvl": 5,
@@ -885,9 +807,7 @@ window.CP_COURSE_BA = {
      "As freed capacity, counting cash only where spending falls",
      "Leave them out, since only headcount cuts count as savings",
      "As cash savings, but discounted at a higher rate than 8%"
-    ],
-    "a": 1,
-    "why": "Hours saved become cash only if spending actually falls; otherwise they are capacity to redeploy, and the case should say so."
+    ]
    }
   ]
  },
@@ -994,9 +914,7 @@ window.CP_COURSE_BA = {
      "Only the people who fund or formally approve the project",
      "Anyone who affects, is affected by, or believes they are affected by the project",
      "Only the end users who will work with the new system"
-    ],
-    "a": 2,
-    "why": "Stakeholders include anyone who can affect or is affected by the project, and even people who only believe they are affected can slow it down."
+    ]
    },
    {
     "lvl": 1,
@@ -1006,9 +924,7 @@ window.CP_COURSE_BA = {
      "Put the budget figures at the top of every report",
      "Describe events in time order so the reader can follow along",
      "Open with background so the reader understands the context"
-    ],
-    "a": 0,
-    "why": "Bottom line up front means the reader gets the conclusion and the decision needed immediately, with detail underneath."
+    ]
    },
    {
     "lvl": 2,
@@ -1018,9 +934,7 @@ window.CP_COURSE_BA = {
      "Low power, high interest: keep informed",
      "Low power, low interest: monitor",
      "High power, low interest: keep satisfied"
-    ],
-    "a": 3,
-    "why": "Budget approval gives her high power, and limited day-to-day involvement means low interest, so the strategy is keep satisfied."
+    ]
    },
    {
     "lvl": 2,
@@ -1030,9 +944,7 @@ window.CP_COURSE_BA = {
      "Awareness",
      "Ability",
      "Reinforcement"
-    ],
-    "a": 1,
-    "why": "Awareness is understanding why the change is happening. The agents have the skills but not the reason, so Awareness is the gap to address."
+    ]
    },
    {
     "lvl": 3,
@@ -1042,9 +954,7 @@ window.CP_COURSE_BA = {
      "Add him to the monthly staff newsletter and wait for him to raise questions",
      "Ask him to review and sign off the requirements once UAT has finished",
      "Invite him to every daily stand-up so that he is always fully informed"
-    ],
-    "a": 0,
-    "why": "High-power, low-interest stakeholders need targeted engagement early on the topics that affect them, so their requirements are captured before late rework is needed."
+    ]
    },
    {
     "lvl": 3,
@@ -1054,9 +964,7 @@ window.CP_COURSE_BA = {
      "\"Thank you for your continued support of the claims intake project this quarter.\"",
      "\"Integration is 3 weeks late; I recommend option B and need your decision by Friday.\"",
      "\"Please find attached the full integration test log and the vendor's latest notes.\""
-    ],
-    "a": 2,
-    "why": "It leads with the problem, the recommendation and the deadline, which is bottom line up front. The others bury or omit the ask."
+    ]
    },
    {
     "lvl": 4,
@@ -1066,9 +974,7 @@ window.CP_COURSE_BA = {
      "Meet each separately to learn the needs behind their positions, then facilitate options",
      "Escalate straight to the sponsor without discussing it with either of them",
      "Propose that agents read half of the disclosure on every call as a compromise"
-    ],
-    "a": 1,
-    "why": "Understanding the interests behind each position opens options that can meet both, such as a short summary plus the full text sent by message, which Compliance must then confirm."
+    ]
    },
    {
     "lvl": 4,
@@ -1078,9 +984,7 @@ window.CP_COURSE_BA = {
      "Report Amber as a compromise so the sponsor is not alarmed",
      "Leave the schedule rating blank until the vendor confirms new dates",
      "Report Red with impact, options and a recommendation, telling the team first"
-    ],
-    "a": 3,
-    "why": "RAG only works if it follows the agreed definitions. An honest Red with options lets the sponsor act early, and telling the team first avoids surprises."
+    ]
    },
    {
     "lvl": 5,
@@ -1090,9 +994,7 @@ window.CP_COURSE_BA = {
      "Replace him in the working group with a more supportive handler",
      "Ask him for a private 1:1 to hear his concerns and past experiences",
      "Send him a detailed document showing the new system will be faster"
-    ],
-    "a": 2,
-    "why": "Listening privately uncovers the interests behind his position, such as fear of lower productivity scores, which you can then address through involvement and evidence."
+    ]
    },
    {
     "lvl": 5,
@@ -1102,9 +1004,7 @@ window.CP_COURSE_BA = {
      "Keep the date for now, add targeted training and support, and review at week -2",
      "Go live as planned, since training can simply continue after launch",
      "Stop the readiness survey and rely on champions' informal feedback instead"
-    ],
-    "a": 1,
-    "why": "With four weeks left, targeted effort can close the gaps, and a review at week -2 gives the sponsor an informed go or no-go decision based on updated data."
+    ]
    }
   ]
  }

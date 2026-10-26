@@ -43,7 +43,11 @@ async function pickRole(page, id) {
 // Change a student's own profile row the way the site does, so the database (here: the fake) fires its trigger.
 async function patch(page, body) {
   const { access, user } = await page.evaluate(() => { const s = JSON.parse(localStorage.getItem('cp-session')); return { access: s.access, user: s.user }; });
-  const r = await fetch(FAKE + '/rest/v1/profiles?id=eq.' + user.id, { method: 'PATCH', headers: { authorization: 'Bearer ' + access, 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  // Points are server-only now: a score change is made with the service key, as api/exam.js does. Other fields stay the student's own.
+  const svc = 'points' in body;
+  const headers = svc ? { apikey: 'sb_secret_test', authorization: 'Bearer sb_secret_test', 'content-type': 'application/json' }
+                       : { authorization: 'Bearer ' + access, 'content-type': 'application/json' };
+  const r = await fetch(FAKE + '/rest/v1/profiles?id=eq.' + user.id, { method: 'PATCH', headers, body: JSON.stringify(body) });
   need(r.status === 204, 'patch failed ' + r.status);
 }
 const rt = () => j('/__rt');

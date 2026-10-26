@@ -15,7 +15,7 @@ const need = (c, m) => { if (!c) throw new Error(m); };
 const db = new PGlite();
 // What Supabase provides before our files run.
 await db.exec(`
-  create role anon nologin; create role authenticated nologin;
+  create role anon nologin; create role authenticated nologin; create role service_role nologin bypassrls;
   create schema auth;
   create table auth.users (id uuid primary key default gen_random_uuid(), email text, raw_user_meta_data jsonb default '{}'::jsonb);
   create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
@@ -65,8 +65,9 @@ await step('a student cannot make themselves an admin or change their email', as
   need(await fails(A, `update public.profiles set role = 'admin' where id = $1`, [A]), 'role edit allowed');
   need(await fails(A, `update public.profiles set email = 'x@x.com' where id = $1`, [A]), 'email edit allowed');
 });
-await step('a student can edit their own details, roadmap and points, but not someone else\'s', async () => {
-  await as(A, `update public.profiles set school = 'UCLA', roadmap_id = 'pm', points = 120, onboarding = '{"resume":null}' where id = $1`, [A]);
+await step('a student can edit their own details and roadmap, but not someone else\'s', async () => {
+  await as(A, `update public.profiles set school = 'UCLA', roadmap_id = 'pm', onboarding = '{"resume":null}' where id = $1`, [A]);
+  await db.query(`update public.profiles set points = 120 where id = $1`, [A]);      // what the server does after grading
   const mine = await db.query(`select school, roadmap_id, points from public.profiles where id = $1`, [A]);
   need(mine.rows[0].school === 'UCLA' && mine.rows[0].roadmap_id === 'pm' && mine.rows[0].points === 120, JSON.stringify(mine.rows));
   await as(A, `update public.profiles set school = 'Hacked' where id = $1`, [B]);
@@ -77,33 +78,34 @@ await step('invalid roadmaps, negative points and oversized data are refused', a
   need(await fails(A, `update public.profiles set points = -5 where id = $1`, [A]), 'negative points accepted');
   need(await fails(A, `update public.profiles set roadmap_history = '{}'::jsonb where id = $1`, [A]), 'non-array history accepted');
 });
-await step('progress: a student writes and reads only their own rows', async () => {
-  await as(A, `insert into public.skill_progress (user_id, skill_id, stars, best, attempts, lessons_done, history) values ($1, 'discovery-pm', 3, 82, 2, '{0,1,2}', '[{"pct":82}]')`, [A]);
-  await as(B, `insert into public.skill_progress (user_id, skill_id, stars) values ($1, 'discovery-pm', 1)`, [B]);
+await step('progress: a student reads only their own rows (the server writes them)', async () => {
+  await db.query(`insert into public.skill_progress (user_id, skill_id, stars, best, attempts, lessons_done, history) values ($1, 'discovery-pm', 3, 82, 2, '{0,1,2}', '[{"pct":82}]')`, [A]);
+  await db.query(`insert into public.skill_progress (user_id, skill_id, stars) values ($1, 'discovery-pm', 1)`, [B]);
   need((await as(A, `select * from public.skill_progress`)).rows.length === 1, 'A saw more than their own row');
   need((await as(B, `select * from public.skill_progress`)).rows[0].stars === 1, 'B saw the wrong row');
   need((await as(ADM, `select * from public.skill_progress`)).rows.length === 2, 'admin could not read all');
 });
 await step('progress: writing a row for another student is refused', async () => {
   need(await fails(A, `insert into public.skill_progress (user_id, skill_id) values ($1, 'x-pm')`, [B]), 'insert for another user allowed');
-  await as(A, `update public.skill_progress set stars = 5 where user_id = $1`, [B]);
+  need(await fails(A, `update public.skill_progress set stars = 5 where user_id = $1`, [B]), 'update of another student allowed');
   need((await db.query(`select stars from public.skill_progress where user_id = $1`, [B])).rows[0].stars === 1, 'another student\'s progress was changed');
 });
-await step('progress: impossible values are refused', async () => {
-  need(await fails(A, `insert into public.skill_progress (user_id, skill_id, stars) values ($1, 'y-pm', 6)`, [A]), 'six stars accepted');
-  need(await fails(A, `insert into public.skill_progress (user_id, skill_id, best) values ($1, 'z-pm', 101)`, [A]), 'score over 100 accepted');
-  need(await fails(A, `insert into public.module_results (user_id, track_id, history) values ($1, 'm', '{}'::jsonb)`, [A]), 'bad history accepted');
+const dbFails = async (sql, params) => { try { await db.query(sql, params); } catch (e) { return String(e.message); } return null; };
+await step('progress: impossible values are refused even from the server', async () => {
+  need(await dbFails(`insert into public.skill_progress (user_id, skill_id, stars) values ($1, 'y-pm', 6)`, [A]), 'six stars accepted');
+  need(await dbFails(`insert into public.skill_progress (user_id, skill_id, best) values ($1, 'z-pm', 101)`, [A]), 'score over 100 accepted');
+  need(await dbFails(`insert into public.module_results (user_id, track_id, history) values ($1, 'm', '{}'::jsonb)`, [A]), 'bad history accepted');
 });
 await step('progress: saving the same skill twice updates it, and the update time moves', async () => {
   const before = (await db.query(`select updated_at from public.skill_progress where user_id = $1`, [A])).rows[0].updated_at;
   await new Promise(r => setTimeout(r, 20));
-  await as(A, `insert into public.skill_progress (user_id, skill_id, stars, attempts) values ($1, 'discovery-pm', 4, 3)
-               on conflict (user_id, skill_id) do update set stars = excluded.stars, attempts = excluded.attempts`, [A]);
+  await db.query(`insert into public.skill_progress (user_id, skill_id, stars, attempts) values ($1, 'discovery-pm', 4, 3)
+                  on conflict (user_id, skill_id) do update set stars = excluded.stars, attempts = excluded.attempts`, [A]);
   const r = (await db.query(`select stars, attempts, updated_at from public.skill_progress where user_id = $1`, [A])).rows[0];
   need(r.stars === 4 && r.attempts === 3 && new Date(r.updated_at) > new Date(before), JSON.stringify(r));
 });
 await step('module results follow the same rules', async () => {
-  await as(A, `insert into public.module_results (user_id, track_id, best, attempts, passed, passed_on) values ($1, 'pm-fundamentals', 90, 1, true, 'Oct 26, 2026')`, [A]);
+  await db.query(`insert into public.module_results (user_id, track_id, best, attempts, passed, passed_on) values ($1, 'pm-fundamentals', 90, 1, true, 'Oct 26, 2026')`, [A]);
   need((await as(B, `select * from public.module_results`)).rows.length === 0, 'B saw A\'s module result');
   need(await fails(B, `insert into public.module_results (user_id, track_id) values ($1, 'm2')`, [A]), 'insert for another user allowed');
 });
@@ -239,7 +241,7 @@ await db.exec(`update public.profiles set roadmap_id = 'pm' where id in ('${R1}'
 
 await step('live: a points change sends one empty "changed" message on that school and roadmap channel', async () => {
   await clear();
-  await as(R1, `update public.profiles set points = 40 where id = $1`, [R1]);
+  await db.query(`update public.profiles set points = 40 where id = $1`, [R1]);
   const m = await sent();
   need(m.length === 1 && m[0].topic === 'board:university-of-michigan:pm' && m[0].event === 'changed', JSON.stringify(m));
   need(JSON.stringify(m[0].payload) === '{}', 'the message carries data: ' + JSON.stringify(m[0].payload));
@@ -247,18 +249,18 @@ await step('live: a points change sends one empty "changed" message on that scho
 await step('live: a change that cannot move the board sends nothing', async () => {
   await clear();
   await as(R1, `update public.profiles set major = 'CS' where id = $1`, [R1]);
-  await as(R1, `update public.profiles set points = 40 where id = $1`, [R1]);
+  await db.query(`update public.profiles set points = 40 where id = $1`, [R1]);
   need((await sent()).length === 0, 'unnecessary message sent');
 });
 await step('live: star changes on a skill ping the board, a repeat save of the same stars does not', async () => {
   await clear();
-  await as(R2, `insert into public.skill_progress (user_id, skill_id, stars, best, attempts) values ($1, 'sql-foundations-pm', 3, 80, 1)`, [R2]);
+  await db.query(`insert into public.skill_progress (user_id, skill_id, stars, best, attempts) values ($1, 'sql-foundations-pm', 3, 80, 1)`, [R2]);
   let m = await sent();
   need(m.length === 1 && m[0].topic === 'board:usc:pm', JSON.stringify(m));
   await clear();
-  await as(R2, `update public.skill_progress set attempts = 2 where user_id = $1`, [R2]);
+  await db.query(`update public.skill_progress set attempts = 2 where user_id = $1`, [R2]);
   need((await sent()).length === 0, 'same stars still sent a message');
-  await as(R2, `update public.skill_progress set stars = 4 where user_id = $1`, [R2]);
+  await db.query(`update public.skill_progress set stars = 4 where user_id = $1`, [R2]);
   need((await sent()).length === 1, 'star change sent no message');
 });
 await step('live: switching roadmap or school tells both the board you left and the board you joined', async () => {
@@ -304,13 +306,71 @@ await step('live: who may listen. Own school boards and challenge channels only,
 });
 await step('live: a Realtime failure never stops a score from saving', async () => {
   await db.exec(`create or replace function realtime.send(payload jsonb, event text, topic text, private boolean default true) returns void language plpgsql as $$ begin raise exception 'realtime is down'; end $$`);
-  await as(R1, `update public.profiles set points = 99 where id = $1`, [R1]);
+  await db.query(`update public.profiles set points = 99 where id = $1`, [R1]);
   need((await db.query(`select points from public.profiles where id = $1`, [R1])).rows[0].points === 99, 'score lost while Realtime was down');
   await db.exec(`create or replace function realtime.send(payload jsonb, event text, topic text, private boolean default true) returns void language sql as $$ insert into realtime.messages (topic, event, payload) values (topic, event, payload) $$`);
 });
 await step('live: channel names are one spelling for one school', async () => {
   const r = (await db.query(`select public.board_slug('  University of Michigan ') a, public.board_slug('U.S.C.') b, public.board_slug(null) c, public.board_slug('Georgia Tech') d`)).rows[0];
   need(r.a === 'university-of-michigan' && r.b === 'u-s-c' && r.c === '' && r.d === 'georgia-tech', JSON.stringify(r));
+});
+
+// ---- 007: scores, stars and points are written by the server only ----
+const S1 = '77777777-7777-4777-8777-777777777771', S2 = '77777777-7777-4777-8777-777777777772';
+for (const [id, name] of [[S1, 'Sia One'], [S2, 'Tom Two']]) {
+  await db.query(`insert into auth.users (id, email, raw_user_meta_data) values ($1, $2, $3)`, [id, id.slice(-1) + '@s.edu', JSON.stringify({ name, school: 'USC', major: 'EM', grad_year: '2027' })]);
+}
+await db.exec(`grant all on all tables in schema public to service_role`);
+async function svc(sql, params) {
+  await db.exec(`set role service_role`);
+  try { return await db.query(sql, params); } finally { await db.exec(`reset role`); }
+}
+await step('grading: a student cannot write stars, scores, history, projects or module results from the site', async () => {
+  need(await fails(S1, `insert into public.skill_progress (user_id, skill_id, stars) values ($1, 'discovery-pm', 5)`, [S1]), 'inserted a skill row');
+  await svc(`insert into public.skill_progress (user_id, skill_id, stars, best, attempts) values ($1, 'discovery-pm', 2, 70, 1)`, [S1]);
+  need(await fails(S1, `update public.skill_progress set stars = 5, best = 100, project = true where user_id = $1`, [S1]), 'raised own stars');
+  need(await fails(S1, `update public.skill_progress set skill_id = 'prd-pm' where user_id = $1`, [S1]), 'renamed a row to move stars');
+  need(await fails(S1, `delete from public.skill_progress where user_id = $1`, [S1]), 'deleted own progress');
+  need(await fails(S1, `insert into public.module_results (user_id, track_id, passed) values ($1, 'pm-fundamentals', true)`, [S1]), 'inserted a module pass');
+  need(await fails(S1, `update public.module_results set passed = true where user_id = $1`, [S1]), 'edited a module result');
+  const r = (await svc(`select stars, best from public.skill_progress where user_id = $1`, [S1])).rows[0];
+  need(r.stars === 2 && r.best === 70, JSON.stringify(r));
+});
+await step('grading: a student cannot set their own points, the server adds them in one step', async () => {
+  need(await fails(S1, `update public.profiles set points = 99999 where id = $1`, [S1]), 'points edited by the student');
+  need(await fails(S1, `select public.add_points($1, 500)`, [S1]), 'a student called add_points');
+  const a = (await svc(`select public.add_points($1, 250) as p`, [S1])).rows[0].p;
+  const b = (await svc(`select public.add_points($1, 100) as p`, [S1])).rows[0].p;
+  need(a === 250 && b === 350, a + ' ' + b);
+  need((await svc(`select public.add_points($1, -9999) as p`, [S1])).rows[0].p === 0, 'points went below zero');
+  await db.exec(`set role anon`); let blocked = false;
+  try { await db.query(`select public.add_points($1, 5)`, [S1]); } catch { blocked = true; } await db.exec(`reset role`);
+  need(blocked, 'a visitor called add_points');
+});
+await step('grading: save_lessons saves only the lessons list for the signed-in student, and never removes lessons', async () => {
+  await as(S2, `select public.save_lessons('foundations-pm', '{2,0,1}')`);
+  await as(S2, `select public.save_lessons('foundations-pm', '{1,5}')`);
+  const r = (await svc(`select lessons_done, stars, attempts, project from public.skill_progress where user_id = $1 and skill_id = 'foundations-pm'`, [S2])).rows[0];
+  need(JSON.stringify(r.lessons_done) === '[0,1,2,5]' && r.stars === 0 && r.attempts === 0 && r.project === false, JSON.stringify(r));
+  await svc(`update public.skill_progress set stars = 3, best = 80, attempts = 2 where user_id = $1 and skill_id = 'foundations-pm'`, [S2]);
+  await as(S2, `select public.save_lessons('foundations-pm', '{9}')`);
+  const k = (await svc(`select lessons_done, stars, best, attempts from public.skill_progress where user_id = $1 and skill_id = 'foundations-pm'`, [S2])).rows[0];
+  need(JSON.stringify(k.lessons_done) === '[0,1,2,5,9]' && k.stars === 3 && k.best === 80 && k.attempts === 2, 'saving lessons changed the score: ' + JSON.stringify(k));
+  need(await fails(S2, `select public.save_lessons('', '{1}')`), 'empty skill id accepted');
+  await db.exec(`set role anon`); let blocked = false;
+  try { await db.query(`select public.save_lessons('x', '{1}')`); } catch { blocked = true; } await db.exec(`reset role`);
+  need(blocked, 'a visitor saved lessons');
+});
+await step('grading: exam attempts are readable by their owner and admins, and written only by the server', async () => {
+  await svc(`insert into public.exam_attempts (user_id, kind, target, items) values ($1, 'skill', 'discovery-pm', '[{"skill":"discovery-pm","qid":"discovery-pm-q1"}]')`, [S1]);
+  need((await as(S1, `select * from public.exam_attempts`)).rows.length === 1, 'owner cannot read own attempt');
+  need((await as(S2, `select * from public.exam_attempts`)).rows.length === 0, 'another student read it');
+  need((await as(ADM, `select * from public.exam_attempts`)).rows.length === 1, 'admin cannot read');
+  need(await fails(S1, `insert into public.exam_attempts (user_id, kind, target) values ($1, 'skill', 'x')`, [S1]), 'student created an attempt');
+  need(await fails(S1, `update public.exam_attempts set score = 100 where user_id = $1`, [S1]), 'student edited an attempt');
+  need(await fails(S1, `delete from public.exam_attempts where user_id = $1`, [S1]), 'student deleted an attempt');
+  need(await dbFails(`insert into public.exam_attempts (user_id, kind, target, score) values ($1, 'skill', 'x', 101)`, [S1]), 'score over 100 accepted');
+  need(await dbFails(`insert into public.exam_attempts (user_id, kind, target) values ($1, 'nonsense', 'x')`, [S1]), 'unknown kind accepted');
 });
 
 console.log(failed ? failed + ' failed' : 'all passed');

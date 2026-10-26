@@ -157,17 +157,10 @@
 
   /* ---------------- scoring ---------------- */
 
-  function levelFor(pct) {
-    var lv = LEVELS[0];
-    LEVELS.forEach(function (l) { if (pct >= l.min) lv = l; });
-    return lv;
-  }
+  var GR = window.CP_GRADING;   // stars, pass mark and module-exam rules live in grading.js, shared with the server
+  function levelFor(pct) { return GR.levelFor(LEVELS, pct); }
 
-  function awardFor(pct, projectDone) {
-    var lv = levelFor(pct);
-    if (lv.stars === 5 && !projectDone) return { stars: 4, label: LEVELS[4].label, capped: true };
-    return { stars: lv.stars, label: lv.label, capped: false };
-  }
+  function awardFor(pct, projectDone) { return GR.awardFor(LEVELS, pct, projectDone); }
 
   function starHTML(n, size) {
     var s = '<span class="stars"' + (size ? ' style="font-size:' + size + '"' : "") + ">";
@@ -187,7 +180,7 @@
   }
   /* Job-ready is 3 stars ("Job-ready proficiency" in CP_LEVELS). The roadmap counts
      progress in these, because "has any star" made one lucky quiz look like a skill. */
-  var JOB_READY = 3;
+  var JOB_READY = GR.JOB_READY;
   function jobReadyCount(user) {
     if (user._ready != null) return user._ready;
     var r = role(user.roleId); if (!r) return 0;
@@ -200,17 +193,7 @@
      are drawn from those sub-modules' assessments. Roles without tracks keep one
      certificate per skill. */
 
-  function skillsOfTrack(r, t, requiredOnly) {
-    var out = [];
-    t.groups.forEach(function (g) {
-      if (requiredOnly && !g.required) return;
-      g.skills.forEach(function (id) {
-        var s = r.skills.filter(function (x) { return x.id === id; })[0];
-        if (s) out.push(s);
-      });
-    });
-    return out;
-  }
+  function skillsOfTrack(r, t, requiredOnly) { return GR.skillsOfTrack(r, t, requiredOnly); }
   function trackOfSkill(r, skillId) {
     if (!r || !r.tracks) return null;
     return r.tracks.filter(function (t) {
@@ -225,7 +208,7 @@
     if (!user.mexams[tid]) user.mexams[tid] = { best: 0, attempts: 0, passed: false, passedOn: "", history: [] };
     return user.mexams[tid];
   }
-  function passMark() { return LEVELS[JOB_READY].min; }
+  function passMark() { return GR.passMark(LEVELS); }
   function trackStatus(user, r, t) {
     var req = skillsOfTrack(r, t, true);
     var ready = req.filter(function (s) { return prog(user, s.id).stars >= JOB_READY; });
@@ -749,20 +732,15 @@
       name: f.name || "", school: f.school || "", major: f.major || "", grad_year: String(f.gradYear || ""),
       roadmap_id: f.roleId || null, roadmap_history: f.roleHistory || [],
       onboarding: { resume: f.resume || null, placement: f.placement || null },
-      points: f.points || 0,
       show_on_leaderboard: f.showOnBoard !== false
     };
   }
   function profilePatch(u) { return patchFrom(u); }
 
-  /* Local progress shapes <-> database rows. */
-  function skillRow(p) {
-    /* The project submission rides inside history as one entry of its own kind, so the table needs no new column. */
-    var hist = (p.history || []).slice(-50);
-    if (p.projectSub) hist.push(Object.assign({ kind: "project" }, p.projectSub));
-    return { stars: p.stars || 0, best: p.best || 0, attempts: p.attempts || 0, project: !!p.project,
-      lessons_done: (p.lessonsDone || []).slice(0, 200), history: hist };
-  }
+  /* Local progress shapes <-> database rows.
+     Scores, stars, points, attempts and the project are written by the server only (api/exam.js, api/grade-project.js),
+     and the database refuses them from the page. The page saves one thing itself: which lessons were opened. */
+  function lessonsKey(p) { return JSON.stringify((p.lessonsDone || []).slice().sort(function (a, b) { return a - b; })); }
   /* Saved history -> the scored attempts, plus the project submission kept apart from them. */
   function splitHistory(raw) {
     var list = Array.isArray(raw) ? raw : [], sub = null, hist = [];
@@ -771,29 +749,19 @@
     });
     return { history: hist, sub: sub };
   }
-  function modRow(m) {
-    return { best: m.best || 0, attempts: m.attempts || 0, passed: !!m.passed, passed_on: m.passedOn || "",
-      history: (m.history || []).slice(-60) };
-  }
   /* A skill the student only opened has nothing worth saving. */
   function blankSkill(p) { return !p.attempts && !p.stars && !p.project && !p.projectSub && !(p.lessonsDone && p.lessonsDone.length); }
 
   function pendingRows(u) {
-    var sk = [], md = [];
-    if (!sync.progressReady) return { sk: sk, md: md };   // never write before the saved copy has been read
+    var sk = [];
+    if (!sync.progressReady) return { sk: sk };   // never write before the saved copy has been read
     Object.keys(u.progress || {}).forEach(function (id) {
       var p = u.progress[id];
-      if (!p || blankSkill(p)) return;
-      var row = skillRow(p), j = JSON.stringify(row);
-      if (sync.skills[id] !== j) sk.push({ id: id, j: j, row: Object.assign({ user_id: u.id, skill_id: id }, row) });
+      if (!p || !(p.lessonsDone && p.lessonsDone.length)) return;
+      var j = lessonsKey(p);
+      if (sync.skills[id] !== j) sk.push({ id: id, j: j, done: JSON.parse(j) });
     });
-    Object.keys(u.mexams || {}).forEach(function (id) {
-      var m = u.mexams[id];
-      if (!m || (!m.attempts && !m.passed)) return;
-      var row = modRow(m), j = JSON.stringify(row);
-      if (sync.mods[id] !== j) md.push({ id: id, j: j, row: Object.assign({ user_id: u.id, track_id: id }, row) });
-    });
-    return { sk: sk, md: md };
+    return { sk: sk };
   }
 
   function syncProfile() {
@@ -801,7 +769,7 @@
     var u = me();
     if (!u || u.role !== "student") return;
     var pend = pendingRows(u);
-    if (JSON.stringify(profilePatch(u)) === sync.last && !pend.sk.length && !pend.md.length) return;
+    if (JSON.stringify(profilePatch(u)) === sync.last && !pend.sk.length) return;
     clearTimeout(sync.timer);
     sync.timer = setTimeout(function () { flushProfile(u.id); }, 800);
   }
@@ -814,20 +782,12 @@
     if (body !== sync.last) {
       jobs.push(CP_AUTH.saveProfile(JSON.parse(body)).then(function (r) { if (!r.error) sync.last = body; return r; }));
     }
-    if (pend.sk.length) {
-      jobs.push(CP_AUTH.rest("POST", "skill_progress?on_conflict=user_id,skill_id", pend.sk.map(function (x) { return x.row; }),
-        "resolution=merge-duplicates,return=minimal").then(function (r) {
-        if (!r.error) pend.sk.forEach(function (x) { sync.skills[x.id] = x.j; });
+    pend.sk.forEach(function (x) {
+      jobs.push(CP_AUTH.rest("POST", "rpc/save_lessons", { p_skill: x.id, p_done: x.done }, "return=minimal").then(function (r) {
+        if (!r.error) sync.skills[x.id] = x.j;
         return r;
       }));
-    }
-    if (pend.md.length) {
-      jobs.push(CP_AUTH.rest("POST", "module_results?on_conflict=user_id,track_id", pend.md.map(function (x) { return x.row; }),
-        "resolution=merge-duplicates,return=minimal").then(function (r) {
-        if (!r.error) pend.md.forEach(function (x) { sync.mods[x.id] = x.j; });
-        return r;
-      }));
-    }
+    });
     Promise.all(jobs).then(function (rs) {
       sync.busy = false;
       if (rs.some(function (r) { return r.error; })) sync.timer = setTimeout(syncProfile, 15000);   // try again shortly
@@ -856,8 +816,8 @@
       retireRoadmap(u);
     }
     u.showOnBoard = server.showOnBoard;
-    // Points never go backwards: keep whichever copy is higher, and the next save sends it up.
-    u.points = Math.max(u.points || 0, server.points);
+    // Points are set by the server alone, so the saved total is the truth.
+    u.points = server.points;
     sync.last = JSON.stringify(patchFrom(server));   // what the server holds now; anything different is sent on the next save
     return u;
   }
@@ -874,24 +834,16 @@
       var sp = splitHistory(r.history);
       var srv = { stars: r.stars, best: r.best, attempts: r.attempts, project: r.project, projectSub: sp.sub,
         lessonsDone: (r.lessons_done || []).slice(), history: sp.history };
-      sync.skills[r.skill_id] = JSON.stringify(skillRow(srv));
+      sync.skills[r.skill_id] = lessonsKey(srv);
       var loc = u.progress[r.skill_id];
-      var win = (!loc || blankSkill(loc) || loc.attempts <= srv.attempts) ? srv : loc;
-      var merged = Object.assign({}, win);
+      // The server owns every score. This browser only adds lessons it opened that the server has not seen yet.
+      var merged = Object.assign({}, srv);
       merged.lessonsDone = union(srv.lessonsDone, loc && loc.lessonsDone);
-      merged.project = !!(srv.project || (loc && loc.project));
-      merged.projectSub = (loc && loc.projectSub && (!srv.projectSub || (loc.projectSub.tries || 0) > (srv.projectSub.tries || 0)))
-        ? loc.projectSub : srv.projectSub;
       u.progress[r.skill_id] = merged;
     });
     (modRows || []).forEach(function (r) {
-      var srv = { best: r.best, attempts: r.attempts, passed: r.passed, passedOn: r.passed_on || "", history: r.history || [] };
-      sync.mods[r.track_id] = JSON.stringify(modRow(srv));
-      var loc = u.mexams[r.track_id];
-      var win = (!loc || loc.attempts <= srv.attempts) ? srv : loc;
-      var merged = Object.assign({}, win);
-      var other = win === srv ? loc : srv;
-      if (other && other.passed && !merged.passed) { merged.passed = true; merged.passedOn = other.passedOn || ""; }
+      // Module exam results are written by the server only, so the saved copy is the truth.
+      var merged = { best: r.best, attempts: r.attempts, passed: r.passed, passedOn: r.passed_on || "", history: r.history || [] };
       u.mexams[r.track_id] = merged;
     });
     sync.progressReady = true;
@@ -954,7 +906,27 @@
     return next(0);
   }
 
+  /* The site files carry no answer keys. Admins fetch them after sign-in so the question bank and the preview can show them. */
+  function loadAdminKeys() {
+    return CP_AUTH.token().then(function (t) {
+      if (!t) return;
+      return fetch("/api/keys", { headers: { authorization: "Bearer " + t } }).then(function (r) { return r.ok ? r.json() : null; }).then(function (b) {
+        if (!b || !b.keys) return;
+        ROLES.forEach(function (r) {
+          r.skills.forEach(function (sk) {
+            (b.keys[r.id + "/" + sk.id] || []).forEach(function (k) {
+              var q = sk.assessment.filter(function (x) { return x.qid === k.qid; })[0];
+              if (q) { q.a = k.a; q.why = k.why; }
+            });
+          });
+        });
+        render();
+      });
+    }).catch(function () { /* the bank shows no answers until the next sign-in */ });
+  }
+
   function loadAdminData() {
+    loadAdminKeys();
     return Promise.all([
       pageAll("profiles", "select=*&role=eq.student&order=created_at.asc"),
       pageAll("skill_progress", "select=*&order=user_id.asc,skill_id.asc"),
@@ -2158,7 +2130,7 @@
           return '<a class="pill accent" href="practice-data/' + f + '.csv" download>' + f + ".csv</a>";
         }).join("") + "</div></div>";
     }
-    return '<div class="page-head"><button class="btn sm ghost" style="margin-bottom:10px" data-action="nav" data-nav="roadmap">&larr; Roadmap</button>' +
+    return examErrBox() + '<div class="page-head"><button class="btn sm ghost" style="margin-bottom:10px" data-action="nav" data-nav="roadmap">&larr; Roadmap</button>' +
         '<div class="eyebrow">Module ' + (idx + 1) + " of " + r.tracks.length + "</div><h1>" + esc(t.name) + "</h1>" +
         '<p class="sub">' + esc(t.summary) + "</p></div>" + steps + dataCard +
       t.groups.map(function (g) {
@@ -2178,6 +2150,76 @@
 
   /* A module exam is a fresh draw from the sub-modules' own graded assessments, spread
      evenly across the required sub-modules and skewed away from the easiest level. */
+  /* ---------------- server grading (real accounts) ----------------
+     With real accounts the server picks the questions, grades the answers and records the result (api/exam.js). The page
+     holds no answer keys, so it cannot grade; it sends the answers and shows what comes back. The browser-only demo and the
+     admin preview still grade on the page, which is why they keep the keys. */
+  function serverGrading() { return REAL && !state.preview; }
+
+  function apiPost(path, payload) {
+    return CP_AUTH.token().then(function (t) {
+      if (!t) return { error: { code: "signed_out", message: "Your session expired. Sign in again." } };
+      return fetch(path, { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer " + t }, body: JSON.stringify(payload) })
+        .then(function (r) {
+          return r.json().catch(function () { return null; }).then(function (b) {
+            if (r.ok && b && !b.error) return { data: b };
+            return { error: (b && b.error) || { code: "server_error", message: "The server could not be reached. Try again." } };
+          });
+        });
+    }).catch(function () { return { error: { code: "network", message: "Could not reach the server. Check your connection and try again." } }; });
+  }
+
+  function examErrBox() {
+    return state.examErr ? '<div class="check-panel warn" style="margin-bottom:16px"><b>Could not start the exam.</b><p class="tiny" style="margin-top:4px">' + esc(state.examErr) + "</p></div>" : "";
+  }
+
+  /* The server's list of question ids -> the questions on this page (text and options, no answers). */
+  function localQuestions(user, items) {
+    var r = role(user.roleId);
+    return items.map(function (it) {
+      var sk = skill(user.roleId, it.skill), q = findQ(sk, it.qid);
+      return q ? { q: q.q, opts: q.opts, lvl: q.lvl, qid: q.qid, v: q.v, skillId: sk.id, skillName: sk.name } : null;
+    }).filter(Boolean);
+  }
+  function resOk(res, i, q) { return res.ok ? !!res.ok[i] : res.answers[i] === q.a; }
+  function resKey(res, i, q) { return res.ka && res.ka[i] != null ? res.ka[i] : q.a; }
+  function resWhy(res, i, q) { return res.kw && res.kw[i] != null ? res.kw[i] : q.why; }
+
+  /* Hand the finished attempt to the server and show its answer. A failed send keeps the answers so the student can retry. */
+  function sendExam(kind, e) {
+    var u = actor();
+    state.pendingExam = { kind: kind, e: e };
+    state.result = kind === "skill" ? { skillId: e.skillId, busy: true } : null;
+    state.mresult = kind === "module" ? { trackId: e.trackId, busy: true } : null;
+    go(kind === "skill" ? "result" : "mresult");
+    apiPost("/api/exam", { action: "submit", attempt: e.attempt, answers: e.answers }).then(function (r) {
+      if (me() !== u) return;
+      if (r.error) {
+        var bad = kind === "skill" ? state.result : state.mresult;
+        if (bad) { bad.busy = false; bad.err = r.error.message; bad.retry = ["already_submitted", "no_attempt", "expired"].indexOf(r.error.code) < 0; }
+        return render();
+      }
+      var d = r.data;
+      state.pendingExam = null; state.exam = null; state.mexam = null;
+      u.points = d.points;
+      var ok = d.detail.map(function (x) { return x.ok; }), ka = d.detail.map(function (x) { return x.a; }), kw = d.detail.map(function (x) { return x.why; });
+      if (kind === "skill") {
+        var p = prog(u, e.skillId), sp = splitHistory(d.progress.history);
+        p.stars = d.progress.stars; p.best = d.progress.best; p.attempts = d.progress.attempts; p.project = d.progress.project;
+        p.history = sp.history; if (sp.sub) p.projectSub = sp.sub;
+        state.result = { skillId: e.skillId, pct: d.pct, right: d.right, total: d.total, answers: e.answers, award: d.award, qs: e.qs,
+          newStars: d.newStars, pointsAwarded: d.pointsAwarded, ok: ok, ka: ka, kw: kw };
+        sync.skills[e.skillId] = lessonsKey(p);
+      } else {
+        var m = mex(u, e.trackId);
+        m.best = d.module.best; m.attempts = d.module.attempts; m.passed = d.module.passed; m.passedOn = d.module.passedOn; m.history = d.module.history;
+        state.mresult = { trackId: e.trackId, pct: d.pct, right: d.right, items: e.items, answers: e.answers, pass: d.passed, first: d.first,
+          points: d.pointsAwarded, ok: ok, ka: ka, kw: kw };
+      }
+      render();
+    });
+  }
+
   function buildModuleExam(r, t) {
     var req = skillsOfTrack(r, t, true), per = Math.ceil(t.questions / req.length), items = [];
     req.forEach(function (sk) {
@@ -2222,12 +2264,13 @@
 
   function viewModuleResult(user) {
     var res = state.mresult, r = role(user.roleId), t = trackById(r, res.trackId);
+    if (res.busy || res.err) return scoringView(res, null, "module");
     var by = {};
     res.items.forEach(function (q, i) {
       var b = by[q.skillId] || (by[q.skillId] = { name: q.skillName, right: 0, total: 0 });
-      b.total++; if (res.answers[i] === q.a) b.right++;
+      b.total++; if (resOk(res, i, q)) b.right++;
     });
-    var weak = res.items.filter(function (q, i) { return res.answers[i] !== q.a; });
+    var weak = res.items.filter(function (q, i) { return !resOk(res, i, q); });
     var st = trackStatus(user, r, t);
     return '<div class="page-head result-head"><div class="eyebrow">Module exam result &middot; ' + esc(t.name) + "</div>" +
         '<h1 class="result-h1"><span class="big">' + res.pct + "%</span> <span class=\"rest\">&mdash; " + (res.pass ? "Passed" : "Not yet") + "</span></h1>" +
@@ -2251,12 +2294,12 @@
       (weak.length ? '<div class="card"><h3 style="margin-bottom:4px">Review these ' + weak.length + "</h3>" +
         '<p class="tiny muted" style="margin-bottom:13px">Each one you missed, with the reasoning.</p><div class="stack" style="gap:16px">' +
         res.items.map(function (q, i) {
-          if (res.answers[i] === q.a) return "";
+          if (resOk(res, i, q)) return "";
           return '<div><p style="font-weight:500;margin-bottom:8px"><span class="pill" style="margin-right:6px">' + esc(q.skillName) + "</span>" + esc(q.q) + "</p>" +
             '<div class="opts">' + q.opts.map(function (o, j) {
-              var sx = j === q.a ? "correct" : (res.answers[i] === j ? "wrong" : "");
+              var sx = j === resKey(res, i, q) ? "correct" : (res.answers[i] === j ? "wrong" : "");
               return '<div class="opt" data-state="' + sx + '"><span class="key">' + "ABCD"[j] + "</span><span>" + esc(o) + "</span></div>";
-            }).join("") + '</div><div class="why"><b>Why:</b> ' + esc(q.why) + "</div></div>";
+            }).join("") + '</div><div class="why"><b>Why:</b> ' + esc(resWhy(res, i, q)) + "</div></div>";
         }).join("") + "</div></div>"
         : '<div class="card"><h3>Every question correct.</h3></div>') +
       "</div>" +
@@ -2426,7 +2469,7 @@
     var r = role(user.roleId);
     var lessonsDone = p.lessonsDone.length;
 
-    return '<div class="page-head">' +
+    return examErrBox() + '<div class="page-head">' +
         (state.preview ? "" : (trackOfSkill(r, s.id)
           ? '<button class="btn sm ghost" style="margin-bottom:10px" data-action="open-track" data-track="' + trackOfSkill(r, s.id).id + '">&larr; ' + esc(trackOfSkill(r, s.id).name) + "</button>"
           : '<button class="btn sm ghost" style="margin-bottom:10px" data-action="nav" data-nav="roadmap">&larr; Roadmap</button>')) +
@@ -2815,13 +2858,13 @@
   function viewExam(user) {
     var s = skill(user.roleId, state.route.skill);
     var e = state.exam;
-    var item = s.assessment[e.idx];
-    var pctDone = Math.round(e.idx / s.assessment.length * 100);
+    var qs = e.qs || s.assessment;
+    var item = qs[e.idx];
 
     return '<div class="page-head"><div class="eyebrow">Assessment &middot; ' + esc(s.name) + "</div>" +
-        "<h1>Question " + (e.idx + 1) + " of " + s.assessment.length + "</h1></div>" +
-      '<div class="segs" role="progressbar" aria-valuemin="0" aria-valuemax="' + s.assessment.length + '" aria-valuenow="' + e.idx + '">' +
-        s.assessment.map(function (q, j) { return '<i class="' + (j < e.idx ? "on" : "") + '"></i>'; }).join("") +
+        "<h1>Question " + (e.idx + 1) + " of " + qs.length + "</h1></div>" +
+      '<div class="segs" role="progressbar" aria-valuemin="0" aria-valuemax="' + qs.length + '" aria-valuenow="' + e.idx + '">' +
+        qs.map(function (q, j) { return '<i class="' + (j < e.idx ? "on" : "") + '"></i>'; }).join("") +
       "</div>" +
       '<div class="q-card"><div class="progress-head">' +
         '<span class="pill">Level ' + item.lvl + '</span><span class="tiny muted ver">' + esc(item.qid) + " v" + item.v + "</span></div>" +
@@ -2834,18 +2877,34 @@
 
   function r0(user) { return role(user.roleId); }
 
+  /* Shown while the server scores an attempt, and when scoring could not finish. */
+  function scoringView(res, s, kind) {
+    var back = kind === "skill" ? '<button class="btn" data-action="open-skill" data-skill="' + res.skillId + '">Back to the skill</button>'
+                                : '<button class="btn" data-action="open-track" data-track="' + res.trackId + '">Back to the module</button>';
+    if (res.busy) {
+      return '<div class="page-head"><div class="eyebrow">' + (kind === "skill" ? "Assessment" : "Module exam") + '</div><h1>Scoring your answers</h1>' +
+        '<p class="sub">The result is calculated on the server. This takes a moment.</p></div><div class="card"><p class="muted">Please wait...</p></div>';
+    }
+    return '<div class="page-head"><div class="eyebrow">' + (kind === "skill" ? "Assessment" : "Module exam") + '</div><h1>Your answers were not scored yet</h1></div>' +
+      '<div class="check-panel warn"><b>' + esc(res.err) + '</b><p class="tiny" style="margin-top:4px">Nothing was recorded. ' +
+      (res.retry ? "Your answers are still here, so you can send them again." : "Start the exam again.") + "</p></div>" +
+      '<div class="row" style="margin-top:16px">' + (res.retry ? '<button class="btn primary" data-action="exam-retry">Send my answers again</button>' : "") + back + "</div>";
+  }
+
   function viewResult(user) {
     var res = state.result;
     var s = skill(user.roleId, res.skillId);
     var p = prog(user, res.skillId);
+    if (res.busy || res.err) return scoringView(res, s, "skill");
+    var qs = res.qs || s.assessment;
     var byLevel = {};
-    s.assessment.forEach(function (q, i) {
+    qs.forEach(function (q, i) {
       var k = "L" + q.lvl;
       if (!byLevel[k]) byLevel[k] = { right: 0, total: 0 };
       byLevel[k].total++;
-      if (res.answers[i] === q.a) byLevel[k].right++;
+      if (resOk(res, i, q)) byLevel[k].right++;
     });
-    var weak = s.assessment.filter(function (q, i) { return res.answers[i] !== q.a; });
+    var weak = qs.filter(function (q, i) { return !resOk(res, i, q); });
 
     return '<div class="page-head result-head"><div class="eyebrow">Result &middot; ' + esc(s.name) + "</div>" +
         '<h1 class="result-h1"><span class="big">' + res.pct + "%</span> <span class=\"rest\">&mdash; " + res.award.label + "</span></h1>" +
@@ -2861,7 +2920,7 @@
       "</div>" +
 
       '<div class="summary-row">' +
-        summaryCell("Score", res.right + "<small> / " + s.assessment.length + "</small>") +
+        summaryCell("Score", res.right + "<small> / " + qs.length + "</small>") +
         summaryCell("Percent", res.pct + "<small>%</small>") +
         summaryCell("Stars", res.award.stars + "<small> / 5</small>") +
         summaryCell("Attempt", String(p.attempts)) +
@@ -2880,13 +2939,13 @@
         (weak.length ? '<div class="card"><h3 style="margin-bottom:4px">Review these ' + weak.length + "</h3>" +
           '<p class="tiny muted" style="margin-bottom:13px">Each one you missed, with the reasoning.</p>' +
           '<div class="stack" style="gap:16px">' +
-            s.assessment.map(function (q, i) {
-              if (res.answers[i] === q.a) return "";
+            qs.map(function (q, i) {
+              if (resOk(res, i, q)) return "";
               return '<div><p style="font-weight:500;margin-bottom:8px"><span class="pill" style="margin-right:6px">L' + q.lvl + "</span>" + esc(q.q) + "</p>" +
                 '<div class="opts">' + q.opts.map(function (o, j) {
-                  var st = j === q.a ? "correct" : (res.answers[i] === j ? "wrong" : "");
+                  var st = j === resKey(res, i, q) ? "correct" : (res.answers[i] === j ? "wrong" : "");
                   return '<div class="opt" data-state="' + st + '"><span class="key">' + "ABCD"[j] + "</span><span>" + esc(o) + "</span></div>";
-                }).join("") + '</div><div class="why"><b>Why:</b> ' + esc(q.why) + "</div>" +
+                }).join("") + '</div><div class="why"><b>Why:</b> ' + esc(resWhy(res, i, q)) + "</div>" +
                 '<div class="row" style="margin-top:9px"><button class="tutor-inline" data-action="tutor-explain" data-i="' + i + '">Ask the assistant why</button></div>' +
                 "</div>";
             }).join("") + "</div></div>"
@@ -4068,7 +4127,7 @@
       render();
     },
 
-    "open-skill": function (el) { state.quiz = null; go("skill", { skill: el.dataset.skill }); },
+    "open-skill": function (el) { state.quiz = null; state.examErr = ""; go("skill", { skill: el.dataset.skill }); },
 
     "start-learn": function (el) {
       state.lessonIdx = el.dataset.lesson ? +el.dataset.lesson : 0;
@@ -4198,6 +4257,17 @@
     },
 
     "start-exam": function (el) {
+      if (serverGrading()) {
+        var sid = el.dataset.skill, u0 = actor();
+        if (state.examBusy) return;
+        state.examBusy = true; state.examErr = "";
+        return apiPost("/api/exam", { action: "start", kind: "skill", id: sid }).then(function (r) {
+          state.examBusy = false;
+          if (r.error) { state.examErr = r.error.message; go("skill", { skill: sid }); return; }
+          state.exam = { skillId: sid, idx: 0, answers: [], attempt: r.data.attempt, qs: localQuestions(u0, r.data.items) };
+          go("assess", { skill: sid });
+        });
+      }
       state.exam = { skillId: el.dataset.skill, idx: 0, answers: [] };
       go("assess", { skill: el.dataset.skill });
     },
@@ -4208,7 +4278,8 @@
       var s = skill(subject.roleId, e.skillId);
       e.answers.push(+el.dataset.i);
       e.idx++;
-      if (e.idx < s.assessment.length) { window.scrollTo(0, 0); return render(); }
+      if (e.idx < (e.qs || s.assessment).length) { window.scrollTo(0, 0); return render(); }
+      if (e.attempt) return sendExam("skill", e);
       finishExam(subject, s, e);
     },
 
@@ -4229,6 +4300,19 @@
       d.busy = true; d.err = "";
       render();
       var sent = d.text;
+      if (serverGrading()) {
+        // Real accounts: the server reviews the project and records the result, the page only shows it.
+        return apiPost("/api/grade-project", { skill: sid, text: sent }).then(function (r) {
+          d.busy = false;
+          if (me() !== u) return;
+          if (r.error) { d.err = r.error.message; return render(); }
+          var sp = splitHistory(r.data.progress.history);
+          p.stars = r.data.progress.stars; p.project = r.data.progress.project; p.projectSub = sp.sub || r.data.sub;
+          u.points = r.data.points;
+          sync.skills[sid] = lessonsKey(p);
+          render();
+        });
+      }
       var convo = [{ role: "user", content: PRJ.prompt((role(u.roleId) || {}).name, s.name, s.project, sent) }];
       askModel({ rules: PRJ.rules(todayLong()), convo: convo, signal: null, onText: null })
         .then(function (res) {
@@ -4270,12 +4354,27 @@
 
     "open-cert": function (el) { go("cert", { skill: el.dataset.skill }); },
 
-    "open-track": function (el) { go("track", { track: el.dataset.track }); },
+    "open-track": function (el) { state.examErr = ""; go("track", { track: el.dataset.track }); },
+
+    "exam-retry": function () {
+      var x = state.pendingExam;
+      if (x) sendExam(x.kind, x.e);
+    },
 
     "start-mexam": function (el) {
       var u = actor(), r = role(u.roleId), t = trackById(r, el.dataset.track);
       if (!t || !t.cert) return;
       if (!trackStatus(u, r, t).eligible) return go("track", { track: t.id });
+      if (serverGrading()) {
+        if (state.examBusy) return;
+        state.examBusy = true; state.examErr = "";
+        return apiPost("/api/exam", { action: "start", kind: "module", id: t.id }).then(function (x) {
+          state.examBusy = false;
+          if (x.error) { state.examErr = x.error.message; go("track", { track: t.id }); return; }
+          state.mexam = { trackId: t.id, attempt: x.data.attempt, items: localQuestions(u, x.data.items), idx: 0, answers: [] };
+          go("mexam", { track: t.id });
+        });
+      }
       state.mexam = { trackId: t.id, items: buildModuleExam(r, t), idx: 0, answers: [] };
       go("mexam", { track: t.id });
     },
@@ -4286,6 +4385,7 @@
       e.answers.push(+el.dataset.i);
       e.idx++;
       if (e.idx < e.items.length) { window.scrollTo(0, 0); return render(); }
+      if (e.attempt) return sendExam("module", e);
       finishModuleExam(u, r, t, e);
     },
 
@@ -5125,14 +5225,14 @@
     var u = actor();
     var s = skill(u.roleId, state.result.skillId);
     var i = +el.dataset.i;
-    var q = s.assessment[i];
+    var q = (state.result.qs || s.assessment)[i];
     var chose = state.result.answers[i];
     openTutor();
     tutorAsk(
       "I just got this assessment question wrong and I want to understand why.\n\n" +
       "Question: " + q.q + "\n" +
       q.opts.map(function (o, j) { return "ABCD"[j] + ") " + o; }).join("\n") + "\n\n" +
-      "I chose " + "ABCD"[chose] + ". The correct answer is " + "ABCD"[q.a] + ".\n\n" +
+      "I chose " + "ABCD"[chose] + ". The correct answer is " + "ABCD"[resKey(state.result, i, q)] + ".\n\n" +
       "Explain why my answer is wrong and why the correct one is right, for my target role. " +
       "Then give me one short way to remember it.",
       "",

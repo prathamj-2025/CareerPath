@@ -48,8 +48,20 @@ http.createServer(async (req, res) => {
   const seen = JSON.stringify({ roles: body.messages.map(m => m.role), model: body.model });
   const sent = JSON.stringify(body.messages || []);
 
-  if (body.stream === false) {                       // non-streaming callers (the challenge reviewer on the server)
+  const projectReply = () => {
+    // Scores the submission by markers the test puts in it, so the stand-in responds to its input.
+    const m = /SUBMISSION\\n([\s\S]*?)\\nSUBMISSION>>>/.exec(sent);
+    const text = m ? m[1] : '';
+    if (/BADJSON/.test(text)) return 'I think this is fine, maybe a 90.';
+    const score = /GOODPROJECT/.test(text) ? 82 : /IGNORE/.test(text) ? 15 : 55;
+    return JSON.stringify({ score, summary: score >= 70 ? 'Specific and well reasoned. The recommendation is clear.' : 'The idea is right but it stays generic. Add numbers and a decision.',
+      criteria: [{ label: 'Follows the brief', ok: score >= 70, note: 'Covers the parts the brief asked for.' }, { label: 'Specific evidence', ok: score >= 70, note: 'Uses concrete detail.' },
+        { label: 'Clear recommendation', ok: score >= 80, note: 'States a decision.' }, { label: 'Readable structure', ok: true, note: 'Easy to scan.' }],
+      next: ['Add a number that supports your main claim.'] });
+  };
+  if (body.stream === false) {                       // non-streaming callers (the challenge and project reviewers on the server)
     res.setHeader('content-type', 'application/json');
+    if (/project reviewer on CareerPath/.test(sent)) { res.end(JSON.stringify({ choices: [{ message: { content: projectReply() } }] })); return; }
     const asked = /Score already awarded: (\d+)%/.exec(sent);
     res.end(JSON.stringify({ choices: [{ message: { content: 'REVIEW: you scored ' + (asked ? asked[1] : '?') + '% on the rubric. Add a clear first step next time.' } }] }));
     return;
@@ -77,17 +89,7 @@ http.createServer(async (req, res) => {
     }));
     pieces = ['{"ranking":', JSON.stringify(ranking), "}"];
   } else if (/project reviewer on CareerPath/.test(sent)) {
-    // Scores the submission by markers the test puts in it, so the stand-in responds to its input.
-    const m = /SUBMISSION\\n([\s\S]*?)\\nSUBMISSION>>>/.exec(sent);
-    const text = m ? m[1] : '';
-    if (/BADJSON/.test(text)) pieces = ['I think this is fine, maybe a 90.'];
-    else {
-      const score = /GOODPROJECT/.test(text) ? 82 : /IGNORE/.test(text) ? 15 : 55;
-      pieces = [JSON.stringify({ score, summary: score >= 70 ? 'Specific and well reasoned. The recommendation is clear.' : 'The idea is right but it stays generic. Add numbers and a decision.',
-        criteria: [{ label: 'Follows the brief', ok: score >= 70, note: 'Covers the parts the brief asked for.' }, { label: 'Specific evidence', ok: score >= 70, note: 'Uses concrete detail.' },
-          { label: 'Clear recommendation', ok: score >= 80, note: 'States a decision.' }, { label: 'Readable structure', ok: true, note: 'Easy to scan.' }],
-        next: ['Add a number that supports your main claim.'] })];
-    }
+    pieces = [projectReply()];
   } else if (/You give hints on CareerPath/.test(sent)) {
     pieces = ['Ask yourself who the ', 'user is before the metric. HINTED'];
   } else {

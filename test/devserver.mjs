@@ -9,10 +9,15 @@ import handler from '../api/ask.js';
 import configHandler from '../api/config.js';
 import googleAuthHandler from '../api/google-auth.js';
 import gradeHandler from '../api/grade-challenge.js';
-const API = { '/api/ask': handler, '/api/config': configHandler, '/api/google-auth': googleAuthHandler, '/api/grade-challenge': gradeHandler };
+import examHandler from '../api/exam.js';
+import projectHandler from '../api/grade-project.js';
+import keysHandler from '../api/keys.js';
+const API = { '/api/ask': handler, '/api/config': configHandler, '/api/google-auth': googleAuthHandler, '/api/grade-challenge': gradeHandler, '/api/exam': examHandler, '/api/grade-project': projectHandler, '/api/keys': keysHandler };
 
 const PORT = Number(process.env.PORT || 3111);
 const ROOT = path.join(import.meta.dirname, '..', 'public');
+const CONTENT = path.join(import.meta.dirname, '..', 'content');
+const CURRICULUM = new Set(['data.js', 'data2.js', 'data4.js', 'data5.js', 'lessons-pm.js', 'lessons-ba.js', 'lessons-pjm.js']);
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
                 '.css': 'text/css; charset=utf-8', '.json': 'application/json' };
 
@@ -35,8 +40,12 @@ http.createServer(async (req, res) => {
   }
 
   const rel = url.pathname === '/' ? 'index.html' : url.pathname.replace(/^\/+/, '');
-  const file = path.join(ROOT, rel);
-  if (!file.startsWith(ROOT)) { res.statusCode = 403; res.end('no'); return; }
+  // The browser-only demo grades on the page, so it is served the full curriculum with answer keys (content/). Real-account
+  // mode is served exactly what production serves: the stripped copies in public/, which carry no keys.
+  const demo = process.env.CP_DEMO === '1';
+  const full = demo && CURRICULUM.has(rel);
+  const file = path.join(full ? CONTENT : ROOT, rel);
+  if (!file.startsWith(full ? CONTENT : ROOT)) { res.statusCode = 403; res.end('no'); return; }
   try {
     const buf = await readFile(file);
     res.setHeader('content-type', TYPES[path.extname(file)] || 'application/octet-stream');

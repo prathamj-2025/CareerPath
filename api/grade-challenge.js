@@ -133,5 +133,12 @@ export default async function handler(req, res) {
     if (again && again[0]) return res.status(200).json({ ok: true, already: true, submission: shape(c, again[0], 0) });
     return fail(res, 502, "save_failed", "Your answer could not be saved. Try again.");
   }
-  return res.status(200).json({ ok: true, already: false, submission: shape(c, saved[0], L.ch.points(result.pct)) });
+  // Points are added here, in one step, because the browser may no longer set them.
+  const earned = L.ch.points(result.pct);
+  if (earned) {
+    try {
+      await fetch(env.url + "/rest/v1/rpc/add_points", { method: "POST", headers: asServer, body: JSON.stringify({ p_user: uid, p_delta: earned }) });
+    } catch (e) { /* the score is saved; a missed point total is fixed by support rather than failing the submission */ }
+  }
+  return res.status(200).json({ ok: true, already: false, submission: shape(c, saved[0], earned) });
 }
