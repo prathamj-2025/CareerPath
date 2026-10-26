@@ -60,7 +60,7 @@ await step('roadmap shows 5 main modules; progress counts certificates and job-r
   const segs = await page.$$eval('.rm-seg b', els => els.map(e => e.style.width));
   if (segs.join() !== '20%,0%,0%,0%,0%') throw new Error('segments = ' + segs.join());
   const notes = await page.$$eval('.skill-row .rm-note', els => els.map(e => e.textContent.trim()));
-  if (!/1 of 5 sub-modules job-ready/.test(notes[0]) || !/no certificate/.test(notes[4])) throw new Error('notes = ' + notes.join('|'));
+  if (!/1 of 5 sub-modules job-ready/.test(notes[0]) || !/No certificate/.test(notes[4])) throw new Error('notes = ' + notes.join('|'));
   const t = await page.textContent('#view');
   if (/Verified skills|Roadmap complete|skills verified|17%/.test(t)) throw new Error('old conflicting figures still shown');
   const cells = await page.$$eval('.summary-cell .k', els => els.map(e => e.textContent.trim().toLowerCase()));
@@ -561,7 +561,7 @@ await step('signup still creates a student, never an admin', async () => {
 });
 
 await step('mobile width has no horizontal scroll', async () => {
-  await page.click('[data-role="pjm"]');
+  await page.click('.role-card[data-role="pjm"]');
   await page.waitForTimeout(150);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(250);

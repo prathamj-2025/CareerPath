@@ -1,4 +1,4 @@
-/* CareerPath prototype.
+/* CareerPath.
    Two roles share one application: students learn and get assessed, admins manage
    content. All state is in memory for the session. */
 (function () {
@@ -6,6 +6,8 @@
 
   // The CareerPath mark: a mortarboard. Drawn in currentColor so it follows the surface it sits on.
   var CAP = '<svg viewBox="0 0 32 32" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 7 28 13 16 19 4 13Z"/><path d="M9 16.5v5.2c0 2.2 3.1 4 7 4s7-1.8 7-4v-5.2"/><path d="M28 13v7"/></svg>';
+  var BRAND = '<a class="brand" href="/" data-action="home" aria-label="CareerPath home"><div class="brand-mark">' + CAP +
+    '</div><div class="brand-name">career<span>path</span></div></a>';
 
 
   var ROLES = window.CP_ROLES;
@@ -25,6 +27,7 @@
     route: { name: "roadmap" },
     authTab: "login",
     authError: "",
+    roleMenu: false,      // the role switcher in the top bar is open
     authBusy: false,      // a sign-in or sign-up request is in flight
     authNotice: null,     // { kind: "verify" | "reset-sent", email, info } shown instead of the forms
     authDraft: {},        // what was typed in the sign-up form, kept when an error re-draws it
@@ -172,6 +175,7 @@
   }
 
   function totalStars(user) {
+    if (user._stars != null) return user._stars;   // a classmate on the real board: only totals are known
     var r = role(user.roleId); if (!r) return 0;
     return r.skills.reduce(function (a, s) { return a + prog(user, s.id).stars; }, 0);
   }
@@ -184,6 +188,7 @@
      progress in these, because "has any star" made one lucky quiz look like a skill. */
   var JOB_READY = 3;
   function jobReadyCount(user) {
+    if (user._ready != null) return user._ready;
     var r = role(user.roleId); if (!r) return 0;
     return r.skills.filter(function (s) { return prog(user, s.id).stars >= JOB_READY; }).length;
   }
@@ -345,20 +350,86 @@
   }
 
   /* ---------------- live leaderboard ----------------
-     The board updates on screen without a reload. There is no shared backend in
-     this prototype, so peer activity is generated on a timer here and the UI says
-     that in plain words rather than implying the numbers are real. In the product
-     this is a subscription to the same rows every other open page is watching. */
+     The board updates on screen without a reload. On a real deployment it is read from the database
+     every 30 seconds. The preview copy has no shared database, so it generates sample classmates on a
+     timer and the page says so in plain words rather than implying the numbers are real. */
 
-  var live = { timer: null, flash: {}, feed: [], chFeed: [] };
+  var live = { timer: null, flash: {}, feed: [], chFeed: [], rows: null, boardKey: "",
+    off: null, topic: "", rtLive: false, rtTimer: null, rtDirty: false, ticks: 0 };
   var LIVE_ROUTES = ["roadmap", "leaderboard", "challenge"];
 
   function startLive() {
+    if (REAL) { pollBoard(); listenBoard(); }
     if (live.timer) return;
-    live.timer = window.setInterval(liveTick, 4200);
+    // Real mode: the push from the database is the main path. This timer is the safety net, so it runs every
+    // 30 seconds while the live connection is down and only every two minutes while it is up.
+    live.timer = window.setInterval(REAL ? function () {
+      if (live.rtLive && (++live.ticks % 4)) return;
+      pollBoard();
+    } : liveTick, REAL ? 30000 : 4200);
+  }
+
+  /* The same spelling of a school the database uses for channel names (board_slug in 006_realtime.sql). */
+  function boardSlug(s) { return String(s || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, ""); }
+
+  /* Real accounts: hear the moment anyone at this school and roadmap changes a score, and reload the board.
+     The message carries no data, so the board is still read through the same function as before. */
+  function listenBoard() {
+    var user = me();
+    if (!user || !user.school || !user.roleId || !window.CP_AUTH || !CP_AUTH.listen) return;
+    var topic = "board:" + boardSlug(user.school) + ":" + user.roleId;
+    if (live.topic === topic && live.off) return;
+    stopListening();
+    live.topic = topic;
+    live.off = CP_AUTH.listen(topic, boardChanged, function (st) {
+      var was = live.rtLive;
+      live.rtLive = st === "live";
+      if (live.rtLive && !was) pollBoard();      // catch up on anything missed while the line was down
+      if (was !== live.rtLive) paintPill();
+    });
+  }
+  function stopListening() {
+    if (live.off) { live.off(); live.off = null; }
+    live.topic = ""; live.rtLive = false;
+    if (live.rtTimer) { window.clearTimeout(live.rtTimer); live.rtTimer = null; }
+    live.rtDirty = false;
+  }
+  // Reload at once on the first message, then at most every 700 ms, so a burst of saves is one reload.
+  function boardChanged() {
+    if (live.rtTimer) { live.rtDirty = true; return; }
+    pollBoard();
+    live.rtTimer = window.setTimeout(function () {
+      live.rtTimer = null;
+      if (live.rtDirty) { live.rtDirty = false; boardChanged(); }
+    }, 700);
+  }
+  /* "Live" is shown only while the push connection is actually up. */
+  function livePill() {
+    var on = !REAL || live.rtLive;
+    return '<span class="live-pill' + (on ? "" : " off") + '" data-live="pill"><i></i>' + (on ? "Live" : "Refreshing") + "</span>";
+  }
+  function paintPill() {
+    var pills = document.querySelectorAll('[data-live="pill"]');
+    for (var i = 0; i < pills.length; i++) pills[i].outerHTML = livePill();
+  }
+
+  /* Real accounts: the board is read from the database every half minute. Peers appear by short name only. */
+  function pollBoard() {
+    var user = me();
+    if (!REAL || !user || user.role !== "student" || !user.roleId || !user.school || state.preview) return;
+    var key = user.roleId + "|" + user.school;
+    CP_AUTH.rest("POST", "rpc/leaderboard", { p_roadmap: user.roleId, p_school: user.school }).then(function (r) {
+      if (me() !== user || r.error) return;
+      live.rows = (r.body || []).map(function (x) {
+        return { id: x.user_id, name: x.display_name, points: x.points, stars: x.total_stars, ready: x.job_ready };
+      });
+      live.boardKey = key;
+      paintLive();
+    });
   }
   function stopLive() {
     if (live.timer) { window.clearInterval(live.timer); live.timer = null; }
+    stopListening();
   }
 
   function livePeers(user) {
@@ -441,6 +512,7 @@
   }
 
   function feedHTML() {
+    if (REAL) return "";
     if (!live.feed.length) return '<span class="tiny muted">Waiting for the next result.</span>';
     return live.feed.map(function (e, i) {
       return '<div class="feed-row' + (i === 0 ? " new" : "") + '"><span class="feed-dot"></span>' +
@@ -449,6 +521,15 @@
   }
 
   function peersOf(user) {
+    if (REAL) {
+      var rows = live.boardKey === user.roleId + "|" + user.school ? (live.rows || []) : [];
+      var out = rows.filter(function (r) { return r.id !== user.id; }).map(function (r) {
+        return { id: r.id, name: r.name, school: user.school, roleId: user.roleId, role: "student",
+          points: r.points, _stars: r.stars, _ready: r.ready, progress: {} };
+      });
+      out.push(user);   // your own row always reflects what you see on screen
+      return out.sort(function (a, b) { return b.points - a.points || totalStars(b) - totalStars(a); });
+    }
     return state.users.filter(function (u) {
       return u.role === "student" && u.school === user.school && u.roleId === user.roleId;
     }).sort(function (a, b) { return b.points - a.points || totalStars(b) - totalStars(a); });
@@ -487,9 +568,13 @@
   }
 
   function liveNote() {
-    return '<p class="tiny muted">Peer results in this prototype are generated on a timer, because there is no ' +
-      "shared backend yet. In the product this is a live subscription, so every open page sees the same row change " +
-      "at the same moment.</p>";
+    if (REAL) {
+      return '<p class="tiny muted">Ranked from every student\u2019s saved results at your school on this roadmap. ' +
+        "It moves the moment anyone\u2019s score changes. Other students appear by first name and last initial only. " +
+        "You can hide yourself on your Profile page.</p>";
+    }
+    return '<p class="tiny muted">The classmates on this board are samples, and their results are simulated, because this ' +
+      "preview copy has no shared database. On the live site the board is built from real students&rsquo; saved results.</p>";
   }
 
   /* ---------------- saved accounts ----------------
@@ -510,7 +595,7 @@
     syncProfile();
     try {
       var mine = state.users.filter(function (u) {
-        return u.role === "student" && !u.seeded && !BUILT_IN[String(u.email).toLowerCase()];
+        return u.role === "student" && !u.seeded && !u.remote && !BUILT_IN[String(u.email).toLowerCase()];
       });
       if (REAL) {
         mine.forEach(function (u) { stash[u.id] = u; });
@@ -562,32 +647,87 @@
      role, the chosen roadmap, the roadmaps left behind, and the resume and placement summaries.
      Progress and scores still live in this browser until the progress step moves them too. */
 
-  var sync = { last: "", timer: null, inflight: "" };
+  var sync = { last: "", timer: null, busy: false, skills: {}, mods: {}, progressReady: false };
 
-  function profilePatch(u) {
+  /* The profile columns the site writes, always in the same order so two copies compare as equal text. */
+  function patchFrom(f) {
     return {
-      name: u.name, school: u.school || "", major: u.major || "", grad_year: String(u.gradYear || ""),
-      roadmap_id: u.roleId || null,
-      roadmap_history: u.roleHistory || [],
-      onboarding: { resume: u.resume || null, placement: u.placement || null }
+      name: f.name || "", school: f.school || "", major: f.major || "", grad_year: String(f.gradYear || ""),
+      roadmap_id: f.roleId || null, roadmap_history: f.roleHistory || [],
+      onboarding: { resume: f.resume || null, placement: f.placement || null },
+      points: f.points || 0,
+      show_on_leaderboard: f.showOnBoard !== false
     };
+  }
+  function profilePatch(u) { return patchFrom(u); }
+
+  /* Local progress shapes <-> database rows. */
+  function skillRow(p) {
+    return { stars: p.stars || 0, best: p.best || 0, attempts: p.attempts || 0, project: !!p.project,
+      lessons_done: (p.lessonsDone || []).slice(0, 200), history: (p.history || []).slice(-60) };
+  }
+  function modRow(m) {
+    return { best: m.best || 0, attempts: m.attempts || 0, passed: !!m.passed, passed_on: m.passedOn || "",
+      history: (m.history || []).slice(-60) };
+  }
+  /* A skill the student only opened has nothing worth saving. */
+  function blankSkill(p) { return !p.attempts && !p.stars && !p.project && !(p.lessonsDone && p.lessonsDone.length); }
+
+  function pendingRows(u) {
+    var sk = [], md = [];
+    if (!sync.progressReady) return { sk: sk, md: md };   // never write before the saved copy has been read
+    Object.keys(u.progress || {}).forEach(function (id) {
+      var p = u.progress[id];
+      if (!p || blankSkill(p)) return;
+      var row = skillRow(p), j = JSON.stringify(row);
+      if (sync.skills[id] !== j) sk.push({ id: id, j: j, row: Object.assign({ user_id: u.id, skill_id: id }, row) });
+    });
+    Object.keys(u.mexams || {}).forEach(function (id) {
+      var m = u.mexams[id];
+      if (!m || (!m.attempts && !m.passed)) return;
+      var row = modRow(m), j = JSON.stringify(row);
+      if (sync.mods[id] !== j) md.push({ id: id, j: j, row: Object.assign({ user_id: u.id, track_id: id }, row) });
+    });
+    return { sk: sk, md: md };
   }
 
   function syncProfile() {
-    if (!REAL) return;
+    if (!REAL || sync.busy) return;
     var u = me();
     if (!u || u.role !== "student") return;
-    var body = JSON.stringify(profilePatch(u));
-    if (body === sync.last || body === sync.inflight) return;
+    var pend = pendingRows(u);
+    if (JSON.stringify(profilePatch(u)) === sync.last && !pend.sk.length && !pend.md.length) return;
     clearTimeout(sync.timer);
-    sync.timer = setTimeout(function () {
-      sync.inflight = body;
-      CP_AUTH.saveProfile(JSON.parse(body)).then(function (r) {
-        sync.inflight = "";
-        if (r.error) { sync.timer = setTimeout(syncProfile, 15000); return; }   // try again shortly
-        sync.last = body;
-      });
-    }, 800);
+    sync.timer = setTimeout(function () { flushProfile(u.id); }, 800);
+  }
+
+  function flushProfile(id) {
+    var u = me();
+    if (!u || u.id !== id || sync.busy) return;
+    var body = JSON.stringify(profilePatch(u)), pend = pendingRows(u), jobs = [];
+    sync.busy = true;
+    if (body !== sync.last) {
+      jobs.push(CP_AUTH.saveProfile(JSON.parse(body)).then(function (r) { if (!r.error) sync.last = body; return r; }));
+    }
+    if (pend.sk.length) {
+      jobs.push(CP_AUTH.rest("POST", "skill_progress?on_conflict=user_id,skill_id", pend.sk.map(function (x) { return x.row; }),
+        "resolution=merge-duplicates,return=minimal").then(function (r) {
+        if (!r.error) pend.sk.forEach(function (x) { sync.skills[x.id] = x.j; });
+        return r;
+      }));
+    }
+    if (pend.md.length) {
+      jobs.push(CP_AUTH.rest("POST", "module_results?on_conflict=user_id,track_id", pend.md.map(function (x) { return x.row; }),
+        "resolution=merge-duplicates,return=minimal").then(function (r) {
+        if (!r.error) pend.md.forEach(function (x) { sync.mods[x.id] = x.j; });
+        return r;
+      }));
+    }
+    Promise.all(jobs).then(function (rs) {
+      sync.busy = false;
+      if (rs.some(function (r) { return r.error; })) sync.timer = setTimeout(syncProfile, 15000);   // try again shortly
+      else syncProfile();                                                                           // pick up changes made meanwhile
+    });
   }
 
   function adoptProfile(p) {
@@ -603,21 +743,71 @@
     u.progress = u.progress || {}; u.challenges = u.challenges || {}; u.mexams = u.mexams || {};
     var ob = p.onboarding || {};
     var hist = Array.isArray(p.roadmap_history) ? p.roadmap_history : [];
+    var server = { name: p.name, school: p.school, major: p.major, gradYear: p.grad_year,
+      roleId: role(p.roadmap_id) ? p.roadmap_id : null, roleHistory: hist, resume: ob.resume || null,
+      placement: ob.placement || null, points: p.points || 0, showOnBoard: p.show_on_leaderboard !== false };
     if (p.roadmap_id || hist.length || ob.resume || ob.placement) {
-      u.roleId = role(p.roadmap_id) ? p.roadmap_id : null;
-      u.roleHistory = hist; u.resume = ob.resume || null; u.placement = ob.placement || null;
+      u.roleId = server.roleId; u.roleHistory = hist; u.resume = server.resume; u.placement = server.placement;
       retireRoadmap(u);
-      sync.last = JSON.stringify(profilePatch(u));
-    } else {
-      // Nothing saved on the server yet: whatever this browser already holds is sent up on the next save.
-      sync.last = JSON.stringify({ name: u.name, school: u.school || "", major: u.major || "", grad_year: String(u.gradYear || ""),
-        roadmap_id: null, roadmap_history: [], onboarding: { resume: null, placement: null } });
     }
+    u.showOnBoard = server.showOnBoard;
+    // Points never go backwards: keep whichever copy is higher, and the next save sends it up.
+    u.points = Math.max(u.points || 0, server.points);
+    sync.last = JSON.stringify(patchFrom(server));   // what the server holds now; anything different is sent on the next save
     return u;
+  }
+
+  /* Merge the saved progress with what this browser already holds. More attempts wins; lessons done are combined. */
+  function adoptProgress(u, skillRows, modRows) {
+    sync.skills = {}; sync.mods = {};
+    function union(a, b) {
+      var out = (a || []).slice();
+      (b || []).forEach(function (i) { if (out.indexOf(i) < 0) out.push(i); });
+      return out.sort(function (x, y) { return x - y; });
+    }
+    (skillRows || []).forEach(function (r) {
+      var srv = { stars: r.stars, best: r.best, attempts: r.attempts, project: r.project,
+        lessonsDone: (r.lessons_done || []).slice(), history: r.history || [] };
+      sync.skills[r.skill_id] = JSON.stringify(skillRow(srv));
+      var loc = u.progress[r.skill_id];
+      var win = (!loc || blankSkill(loc) || loc.attempts <= srv.attempts) ? srv : loc;
+      var merged = Object.assign({}, win);
+      merged.lessonsDone = union(srv.lessonsDone, loc && loc.lessonsDone);
+      merged.project = !!(srv.project || (loc && loc.project));
+      u.progress[r.skill_id] = merged;
+    });
+    (modRows || []).forEach(function (r) {
+      var srv = { best: r.best, attempts: r.attempts, passed: r.passed, passedOn: r.passed_on || "", history: r.history || [] };
+      sync.mods[r.track_id] = JSON.stringify(modRow(srv));
+      var loc = u.mexams[r.track_id];
+      var win = (!loc || loc.attempts <= srv.attempts) ? srv : loc;
+      var merged = Object.assign({}, win);
+      var other = win === srv ? loc : srv;
+      if (other && other.passed && !merged.passed) { merged.passed = true; merged.passedOn = other.passedOn || ""; }
+      u.mexams[r.track_id] = merged;
+    });
+    sync.progressReady = true;
+  }
+
+  function loadProgress(u, tries) {
+    return Promise.all([
+      CP_AUTH.rest("GET", "skill_progress?select=*&user_id=eq." + encodeURIComponent(u.id)),
+      CP_AUTH.rest("GET", "module_results?select=*&user_id=eq." + encodeURIComponent(u.id))
+    ]).then(function (rs) {
+      if (state.userId !== u.id && state.finishUser !== u.id) return;               // signed out meanwhile
+      if (rs[0].error || rs[1].error) {
+        // Never save over the stored copy without having read it. Try again shortly.
+        if ((tries || 0) < 6) setTimeout(function () { loadProgress(u, (tries || 0) + 1); }, 10000);
+        return;
+      }
+      adoptProgress(u, rs[0].body, rs[1].body);
+      render();
+    });
   }
 
   function startSession() {
     state.booting = true; state.authBusy = true; render();
+    sync.progressReady = false; sync.skills = {}; sync.mods = {};
     return CP_AUTH.profile().then(function (r) {
       state.booting = false; state.authBusy = false;
       if (r.error) {
@@ -630,13 +820,58 @@
            the leaderboards need. Ask for them before going on. */
         state.finishUser = u.id; state.userId = null;
         state.googlePending = { name: u.name, email: u.email, picture: u.picture };
+        loadProgress(u);
         return render();
       }
       state.userId = u.id; state.authError = ""; state.authNotice = null;
+      if (u.role === "student") loadProgress(u);
       var fresh = u.role === "student" && !u.roleId && !u.resume && !u.placement && !u.roleHistory.length;
-      if (u.role === "admin") return go("a-content");
+      if (u.role === "admin") { loadAdminData(); return go("a-content"); }
       if (fresh) { state.onb = { step: 1 }; return go("onb-resume"); }
       go(u.roleId ? "roadmap" : "roles");
+    });
+  }
+
+  /* Admin: read every student from the database. Row-level rules let only admins do this.
+     These copies live in memory for this visit only and are never written to the browser's storage. */
+  function pageAll(table, params) {
+    var out = [];
+    function next(off) {
+      return CP_AUTH.rest("GET", table + "?" + params + "&limit=1000&offset=" + off).then(function (r) {
+        if (r.error) return r;
+        out = out.concat(r.body || []);
+        return (r.body || []).length === 1000 ? next(off + 1000) : { ok: true, body: out };
+      });
+    }
+    return next(0);
+  }
+
+  function loadAdminData() {
+    return Promise.all([
+      pageAll("profiles", "select=*&role=eq.student&order=created_at.asc"),
+      pageAll("skill_progress", "select=*&order=user_id.asc,skill_id.asc"),
+      pageAll("module_results", "select=*&order=user_id.asc,track_id.asc")
+    ]).then(function (rs) {
+      if (rs.some(function (r) { return r.error; }) || !isAdmin()) return;
+      state.users = state.users.filter(function (u) { return !u.remote; });
+      var byId = {};
+      rs[0].body.forEach(function (p) {
+        var ob = p.onboarding || {};
+        var u = newUser({ name: p.name, email: p.email, role: "student", school: p.school, major: p.major, gradYear: p.grad_year,
+          roleId: role(p.roadmap_id) ? p.roadmap_id : null, points: p.points, roleHistory: p.roadmap_history || [] });
+        u.id = p.id; u.password = null; u.remote = true; u.resume = ob.resume || null; u.placement = ob.placement || null;
+        byId[p.id] = u; state.users.push(u);
+      });
+      rs[1].body.forEach(function (r) {
+        var u = byId[r.user_id]; if (!u) return;
+        u.progress[r.skill_id] = { stars: r.stars, best: r.best, attempts: r.attempts, project: r.project,
+          lessonsDone: r.lessons_done || [], history: r.history || [] };
+      });
+      rs[2].body.forEach(function (r) {
+        var u = byId[r.user_id]; if (!u) return;
+        u.mexams[r.track_id] = { best: r.best, attempts: r.attempts, passed: r.passed, passedOn: r.passed_on || "", history: r.history || [] };
+      });
+      render();
     });
   }
 
@@ -677,7 +912,7 @@
       ["Jing Liu", "USC", "ba", 1250, 5, 80], ["Noor Hassan", "USC", "ba", 800, 3, 60],
       ["Ellie Brandt", "USC", "pjm", 1500, 5, 75], ["Raj Menon", "UCLA", "pm", 1600, 5, 0]
     ];
-    classmates.forEach(function (c) {
+    (REAL ? [] : classmates).forEach(function (c) {
       var u = newUser({ name: c[0], school: c[1],
         email: c[0].split(" ")[0].toLowerCase() + "@" + (c[1] === "USC" ? "usc.edu" : "ucla.edu"),
         password: "-", major: "Engineering Management", gradYear: "2027", roleId: c[2], points: c[3], seeded: true });
@@ -706,7 +941,8 @@
       roles: { pm: ["product manager"] }, when: "Sep 12, 2026" };
     if (student) student.placement = { answered: 8, total: 8, when: "Sep 12, 2026",
       perRole: { pm: { weight: 19, points: 6, signal: 1 }, ba: { weight: 9, points: 2, signal: 0.47 },
-                 pjm: { weight: 7, points: 1, signal: 0.37 } } };
+                 pjm: { weight: 7, points: 1, signal: 0.37 } },
+      matches: { pm: 86, pjm: 41, ba: 38 } };
   }
 
   /* ---------------- helpers ---------------- */
@@ -791,6 +1027,7 @@
     return out.join("");
   }
   function go(name, params) {
+    state.roleMenu = false;
     state.route = Object.assign({ name: name }, params || {});
     window.scrollTo(0, 0);
     render();
@@ -833,7 +1070,7 @@
 
     el.innerHTML =
       '<div class="auth-aside">' +
-        '<div class="brand"><div class="brand-mark">' + CAP + '</div><div class="brand-name">career<span>path</span></div></div>' +
+        BRAND +
         '<div class="auth-hero">' +
           '<span class="tag-pill">Skills-first learning</span>' +
           '<div class="auth-claim">Pick a role.<br>Learn the skills.<br><em>Prove it.</em></div>' +
@@ -861,8 +1098,10 @@
             '<div class="or-div"><span>or</span></div></div>') +
         (REAL ? realBody(isSignup) : state.googlePending ? googleFinishForm() : isSignup ? signupForm() : loginForm()) +
         (state.authError ? '<p class="err" style="margin-top:12px" role="alert">' + esc(state.authError) + "</p>" : "") +
+        (state.authInfo && !state.authError ? '<p class="tiny" style="margin-top:12px" role="status">' + esc(state.authInfo) + "</p>" : "") +
         (REAL || isSignup || state.googlePending ? "" : credCards()) +
-        '<p class="tiny muted" style="margin-top:16px;text-align:center"><a href="privacy.html" target="_blank" rel="noopener">Privacy policy</a></p>' +
+        (REAL ? siteLinks("center")
+          : '<p class="tiny muted" style="margin-top:16px;text-align:center"><a href="privacy.html" target="_blank" rel="noopener">Privacy policy</a></p>') +
       "</div></div>";
     if (state.googlePending || (REAL && (state.booting || state.authNotice || state.authTab === "reset" || state.authTab === "forgot"))) {
       var tabs = el.querySelector(".tabs");
@@ -1024,7 +1263,10 @@
       '<div class="field"><label for="su-major">Major</label><select id="su-major">' +
         MAJORS.map(function (m) { return "<option" + (m === draft.major ? " selected" : "") + ">" + esc(m) + "</option>"; }).join("") + "</select></div>" +
       '<button class="btn primary" style="margin-top:6px;justify-content:center"' + (state.authBusy ? " disabled" : "") + ' data-action="signup">Create student account</button>' +
-      '<p class="tiny muted">Sign-up creates a student account. Admin accounts are provisioned by the platform team.</p>' +
+      (REAL
+        ? '<p class="tiny muted">By creating an account you agree to the <a href="terms.html" target="_blank" rel="noopener">Terms of use</a> ' +
+          'and the <a href="privacy.html" target="_blank" rel="noopener">Privacy policy</a>.</p>'
+        : '<p class="tiny muted">Sign-up creates a student account. Admin accounts are provisioned by the platform team.</p>') +
     "</div>";
   }
 
@@ -1086,6 +1328,62 @@
     return n;
   }
 
+  /* ---------------- role switcher (top bar) ----------------
+     The role pill in the bar is the switcher. The match score beside each roadmap is the one the student
+     got from the placement questions, saved with the placement so it can be shown here at any time. */
+  function matchOf(user, id) {
+    var m = user && user.placement && user.placement.matches;
+    return m && typeof m[id] === "number" ? m[id] : null;
+  }
+  function saveMatches(o) {
+    var u = me();
+    if (!u || !o || !o.rec) return;
+    u.placement = u.placement || { answered: 0, total: 0, perRole: {}, when: today() };
+    u.placement.matches = {};
+    o.rec.forEach(function (x) { u.placement.matches[x.roleId] = x.score; });
+  }
+  var CHEV = '<svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.8" ' +
+    'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5"/></svg>';
+
+  function roleSwitchHTML(user) {
+    var r = role(user.roleId);
+    var open = !!state.roleMenu;
+    var list = ROLES.slice();
+    var any = list.some(function (x) { return matchOf(user, x.id) != null; });
+    if (any) list.sort(function (a, b) { return (matchOf(user, b.id) || 0) - (matchOf(user, a.id) || 0); });
+    return '<div class="role-switch">' +
+      '<button class="bar-context role-btn" data-action="role-menu" aria-haspopup="true" aria-expanded="' + open + '" title="Switch roadmap">' +
+        "<span>" + esc(r ? r.name : "Choose a role") + "</span>" + CHEV + "</button>" +
+      '<div class="role-menu" role="menu"' + (open ? "" : " hidden") + ">" +
+        '<div class="role-menu-head">Switch roadmap</div>' +
+        list.map(function (x) {
+          var cur = x.id === user.roleId, m = matchOf(user, x.id);
+          return '<button class="role-opt" role="menuitem" data-action="role-switch" data-role="' + x.id + '" aria-current="' + cur + '">' +
+            '<span class="role-opt-main"><b>' + esc(x.name) + "</b><small>" + esc(x.tagline) + "</small></span>" +
+            '<span class="role-opt-end">' +
+              (m != null ? '<b class="mono">' + m + "%</b><small>match</small>" : "") +
+              (cur ? '<i class="role-cur">Current</i>' : "") +
+            "</span></button>";
+        }).join("") +
+        '<p class="role-menu-note">' + (any ? "Match scores come from your placement questions. " : "") +
+          "Your stars stay with the roadmap they were earned on.</p>" +
+        '<div class="role-menu-foot">' +
+          '<button class="btn sm ghost" data-action="nav" data-nav="roles">Compare roadmaps</button>' +
+          '<button class="btn sm ghost" data-action="onb-open">' + (any ? "Retake the match quiz" : "Get match scores") + "</button>" +
+        "</div>" +
+      "</div></div>";
+  }
+
+  /* Links to the website pages. Only shown on a real deployment: the pages do not exist in the demo copy. */
+  function siteLinks(cls) {
+    if (!REAL) return "";
+    return '<nav class="site-links ' + (cls || "") + '" aria-label="About CareerPath">' +
+      [["about.html", "About"], ["faq.html", "FAQ"], ["help.html", "Help and support"], ["contact.html", "Contact"],
+       ["privacy.html", "Privacy"], ["terms.html", "Terms"]].map(function (l) {
+        return '<a href="' + l[0] + '" target="_blank" rel="noopener">' + l[1] + "</a>";
+      }).join("") + "</nav>";
+  }
+
   function renderShell(user) {
     document.getElementById("auth").hidden = true;
     document.getElementById("shell").hidden = false;
@@ -1102,8 +1400,8 @@
     // and a leaderboard beside it.
     document.getElementById("sidebar").innerHTML =
       '<div class="bar-left">' +
-        '<div class="brand"><div class="brand-mark">' + CAP + '</div><div class="brand-name">career<span>path</span></div></div>' +
-        '<span class="bar-context">' + context + "</span>" +
+        BRAND +
+        (admin ? '<span class="bar-context">' + context + "</span>" : roleSwitchHTML(user)) +
       "</div>" +
       '<nav class="side">' +
         navFor(user).map(function (n) {
@@ -1122,11 +1420,14 @@
         '<button class="btn sm ghost" data-action="logout">Sign out</button>' +
       "</div>";
 
+    var sf = document.getElementById("sitefoot");
+    if (sf) sf.innerHTML = REAL ? '<span>&copy; 2026 CareerPath</span>' + siteLinks() : "";
+
     document.getElementById("mobilebar").innerHTML =
       '<div class="mb-top">' +
-        '<div class="brand"><div class="brand-mark">' + CAP + '</div><div class="brand-name">career<span>path</span></div></div>' +
+        BRAND +
         '<div class="row" style="gap:4px">' +
-          '<span class="pill mono">' + (admin ? "Admin" : user.points + " pts") + "</span>" +
+          (admin ? '<span class="pill mono">Admin</span>' : roleSwitchHTML(user)) +
           themeBtn() +
           '<button class="btn sm ghost" data-action="logout">Out</button>' +
         "</div>" +
@@ -1587,12 +1888,7 @@
       '<div class="skill-list rm-list">' +
         r.skills.map(function (s, i) { return roadmapRow(user, s, i, next); }).join("") +
       "</div>" +
-      '<div class="row rm-foot">' +
-        '<p class="tiny muted">The dashed line after the 3rd star marks the job-ready target. Star 4 needs ' + LEVELS[4].min +
-          "%, and star 5 needs " + LEVELS[5].min + "% plus a submitted project. " +
-          '<b>Any skill can be opened</b> in any order. The numbering is a suggested order, not a lock.</p>' +
-        (state.preview ? "" : '<button class="btn sm" data-action="nav" data-nav="roles">Change role</button>') +
-      "</div>" +
+      (state.preview ? "" : roadmapExtras(user, r)) +
       "</div>" + (state.preview ? "" : roadmapAside(user)) + "</div>";
   }
 
@@ -1630,11 +1926,8 @@
       "</div>" +
       '<div class="roadmap-cols"><div>' +
       '<div class="skill-list rm-list">' + r.tracks.map(function (t, i) { return trackRow(user, r, t, i); }).join("") + "</div>" +
-      '<div class="row rm-foot">' +
-        '<p class="tiny muted">Open a main module to see its sub-modules, the module exam and the certificate. ' +
-          "<b>Any sub-module can be opened</b> in any order. The numbering is a suggested order, not a lock.</p>" +
-        (state.preview ? "" : '<button class="btn sm" data-action="nav" data-nav="roles">Change role</button>') +
-      "</div></div>" + (state.preview ? "" : roadmapAside(user)) + "</div>";
+      (state.preview ? "" : roadmapExtras(user, r)) +
+      "</div>" + (state.preview ? "" : roadmapAside(user)) + "</div>";
   }
 
   function trackProgressCard(user, r) {
@@ -1689,7 +1982,7 @@
       : !t.cert && done ? '<span class="rm-chip ok">&#10003; Complete</span>'
       : st.ready.length > 0 ? '<span class="rm-chip prog">In progress</span>'
       : '<span class="rm-chip">Not started</span>';
-    var note = st.ready.length + " of " + st.req.length + " sub-modules job-ready" + (t.cert ? "" : " &middot; no certificate");
+    var note = st.ready.length + " of " + st.req.length + " sub-modules job-ready" + (t.cert ? "" : '<span class="rm-sub">No certificate for this module</span>');
     return '<button class="skill-row rm-row' + (done ? " is-ready" : "") + (cur ? " is-next" : "") + '" data-action="open-track" data-track="' + t.id + '">' +
       dot + '<span class="rm-name"><span class="skill-name">' + esc(t.name) + "</span>" +
         '<span class="skill-lens">' + esc(t.lens) + "</span></span>" +
@@ -1933,13 +2226,55 @@
 
   /* The board sits beside the roadmap and moves while the student is looking at it,
      which is the point of making it live rather than a page they have to reload. */
+  /* Under the roadmap list: how stars work, and what the student can earn next. The rail beside the list
+     is taller than the list, so without these the left column ends early and leaves a blank block. */
+  function recentResults(user, r) {
+    var out = [];
+    r.skills.forEach(function (sk) {
+      var p = user.progress[sk.id];
+      if (p && p.history) p.history.forEach(function (h) { out.push({ name: sk.name, pct: h.pct, stars: h.stars, when: h.when }); });
+    });
+    return out.slice(-4).reverse();
+  }
+
+  function roadmapExtras(user, r) {
+    var stars = '<div class="card ex-card"><h3>How stars work</h3><p class="tiny muted">Every sub-module is scored by its assessment. Higher scores earn more stars.</p>' +
+      '<ul class="ex-levels">' + [1, 2, 3, 4, 5].map(function (n) {
+        return '<li class="' + (n === JOB_READY ? "target" : "") + '"><span>' + starHTML(n, "13px") + "</span>" +
+          "<span>" + esc(LEVELS[n].label) + "</span><b class=\"mono\">" + LEVELS[n].min + "%" + (n === 5 ? " + project" : "") + "</b></li>";
+      }).join("") + "</ul></div>";
+
+    var second;
+    if (r.tracks) {
+      second = '<div class="card ex-card"><h3>Certificates you can earn</h3>' +
+        '<p class="tiny muted">One per main module. Get every required sub-module job-ready, then pass the module exam.</p>' +
+        '<ul class="ex-certs">' + r.tracks.filter(function (t) { return t.cert; }).map(function (t) {
+          var st = trackStatus(user, r, t);
+          var tag = st.certified ? '<span class="rm-chip ok">&#10003; Certified</span>'
+            : st.eligible ? '<span class="rm-chip prog">Exam ready</span>'
+            : '<span class="tiny muted mono">' + st.ready.length + "/" + st.req.length + "</span>";
+          return '<li><button data-action="open-track" data-track="' + t.id + '"><span>' + esc(t.name) + "</span>" + tag + "</button></li>";
+        }).join("") + "</ul></div>";
+    } else {
+      var rec = recentResults(user, r);
+      second = '<div class="card ex-card"><h3>Recent results</h3>' +
+        (rec.length
+          ? '<ul class="ex-certs">' + rec.map(function (h) {
+              return "<li><div class=\"ex-row\"><span>" + esc(h.name) + '<small class="muted"> &middot; ' + esc(h.when) + "</small></span>" +
+                '<b class="mono">' + h.pct + "%</b></div></li>";
+            }).join("") + "</ul>"
+          : '<p class="tiny muted">Nothing yet. Take any assessment and your score shows up here.</p>') + "</div>";
+    }
+    return '<div class="ex-grid">' + stars + second + "</div>";
+  }
+
   function roadmapAside(user) {
     var c = liveChallenge(user.roleId);
     var sub = c ? user.challenges[c.cid] : null;
 
     return '<aside class="rail">' +
       '<div class="side-card">' +
-        '<div class="side-head"><span>School leaderboard</span><span class="live-pill"><i></i>Live</span></div>' +
+        '<div class="side-head"><span>School leaderboard</span>' + livePill() + '</div>' +
         '<div class="side-board" data-live="board" data-compact="1">' + boardHTML(user, true) + "</div>" +
         '<div class="feed" data-live="feed">' + feedHTML() + "</div>" +
         '<button class="btn sm ghost" style="width:100%;justify-content:center" data-action="nav" data-nav="leaderboard">Full board</button>' +
@@ -2433,7 +2768,7 @@
   function viewLeaderboard(user) {
     var r = role(user.roleId);
     return '<div class="page-head"><div class="eyebrow">' + esc(user.school) + " &middot; " + esc(r.name) + "</div>" +
-        '<h1>School leaderboard <span class="live-pill"><i></i>Live</span></h1>' +
+        '<h1>School leaderboard ' + livePill() + '</h1>' +
         '<p class="sub">You compete only with students at your own school who chose the same target role. Points come from reaching new verified levels and completing practical projects, so repeating an assessment you have already passed adds nothing.</p></div>' +
       '<div class="summary-row" data-live="summary">' + summaryHTML(user) + "</div>" +
       '<div class="card" style="padding:14px 16px">' +
@@ -2507,7 +2842,44 @@
         '<p class="tiny muted" style="margin-bottom:12px">Changing role gives you a different roadmap. Stars stay attached to the role they were earned in, because the assessments differ.</p>' +
         '<button class="btn" data-action="nav" data-nav="roles">Change target role</button></div>' +
       onboardingCard(user) +
-      historyOfRoadmaps(user);
+      historyOfRoadmaps(user) +
+      (REAL ? accountCard(user) + deleteCard() : "");
+  }
+
+  function optionList(list, current) {
+    var all = list.indexOf(current) < 0 && current ? [current].concat(list) : list;
+    return all.map(function (x) { return "<option" + (x === current ? " selected" : "") + ">" + esc(x) + "</option>"; }).join("");
+  }
+
+  /* Real accounts only: edit the details the leaderboards depend on, and choose whether to appear on them. */
+  function accountCard(user) {
+    return '<div class="card" style="margin-top:14px"><h3 style="font-size:15px;margin-bottom:8px">Your details</h3>' +
+      '<div class="stack" style="gap:12px;max-width:420px">' +
+        '<div class="field"><label for="pf-name">Full name</label><input id="pf-name" maxlength="80" value="' + esc(user.name) + '"></div>' +
+        '<div class="field"><label>Email</label><input value="' + esc(user.email) + '" disabled></div>' +
+        '<div class="auth-grid">' +
+          '<div class="field"><label for="pf-school">School</label><select id="pf-school">' + optionList(SCHOOLS, user.school) + "</select></div>" +
+          '<div class="field"><label for="pf-year">Graduation</label><select id="pf-year">' + optionList(["2026", "2027", "2028", "2029"], String(user.gradYear)) + "</select></div>" +
+        "</div>" +
+        '<div class="field"><label for="pf-major">Major</label><select id="pf-major">' + optionList(MAJORS, user.major) + "</select></div>" +
+        '<label class="row" style="gap:8px;align-items:flex-start"><input type="checkbox" id="pf-board"' + (user.showOnBoard !== false ? " checked" : "") + ' style="margin-top:3px">' +
+          "<span>Show me on my school&rsquo;s leaderboard<br><span class=\"tiny muted\">Other students see only your first name and last initial. You still see your own place.</span></span></label>" +
+        '<div class="row" style="gap:10px;align-items:center"><button class="btn primary" data-action="profile-save">Save details</button>' +
+          (state.acctMsg ? '<span class="tiny" role="status">' + esc(state.acctMsg) + "</span>" : "") + "</div>" +
+      "</div></div>";
+  }
+
+  function deleteCard() {
+    var ask = state.delAsk;
+    return '<div class="card" style="margin-top:14px"><h3 style="font-size:15px;margin-bottom:8px">Delete my account</h3>' +
+      '<p class="tiny muted" style="margin-bottom:12px">This removes your sign-in, profile, progress, stars, points and exam results from CareerPath. It cannot be undone.</p>' +
+      (ask
+        ? '<p class="err" style="margin-bottom:10px" role="alert">Are you sure? Everything saved for this account will be deleted.</p>' +
+          '<div class="row" style="gap:10px"><button class="btn" style="border-color:var(--bad);color:var(--bad)"' + (state.delBusy ? " disabled" : "") + ' data-action="delete-confirm">Yes, delete everything</button>' +
+          '<button class="btn ghost" data-action="delete-cancel">Keep my account</button></div>' +
+          (state.delErr ? '<p class="err" style="margin-top:8px">' + esc(state.delErr) + "</p>" : "")
+        : '<button class="btn" data-action="delete-ask">Delete my account</button>') +
+      "</div>";
   }
 
   function onboardingCard(user) {
@@ -3087,7 +3459,7 @@
   function val(id) { var el = document.getElementById(id); return el ? el.value.trim() : ""; }
 
   var actions = {
-    "auth-tab": function (el) { state.authTab = el.dataset.tab; state.authError = ""; render(); },
+    "auth-tab": function (el) { state.authTab = el.dataset.tab; state.authError = ""; state.authInfo = ""; render(); },
 
     fill: function (el) {
       var e = document.getElementById("li-email"), p = document.getElementById("li-pass");
@@ -3153,7 +3525,7 @@
           state.authBusy = false;
           if (r.error) { state.authError = r.error.text; return render(); }
           uu.name = patch.name; uu.school = patch.school; uu.major = patch.major; uu.gradYear = patch.grad_year;
-          sync.last = JSON.stringify(profilePatch(uu));
+          sync.last = "";   // send the full profile on the next save
           state.googlePending = null; state.finishUser = null; state.userId = uu.id;
           state.onb = { step: 1 };
           go("onb-resume");
@@ -3167,6 +3539,39 @@
       state.onb = { step: 1 };
       go("onb-resume");
     },
+    "profile-save": function () {
+      var u = me(); if (!u || !REAL) return;
+      var name = val("pf-name");
+      if (!name) { state.acctMsg = "Your name cannot be empty."; return render(); }
+      u.name = name.slice(0, 80); u.school = val("pf-school") || u.school; u.major = val("pf-major") || u.major;
+      u.gradYear = val("pf-year") || u.gradYear;
+      var box = document.getElementById("pf-board"); u.showOnBoard = box ? box.checked : true;
+      state.acctMsg = "Saved.";
+      live.rows = null; live.boardKey = "";
+      render();   // saving to the database happens right after, as with every other change
+    },
+    "delete-ask": function () { state.delAsk = true; state.delErr = ""; render(); },
+    "delete-cancel": function () { state.delAsk = false; state.delErr = ""; render(); },
+    "delete-confirm": function () {
+      var u = me(); if (!u || !REAL || state.delBusy) return;
+      state.delBusy = true; state.delErr = ""; render();
+      CP_AUTH.rest("POST", "rpc/delete_my_account", {}).then(function (r) {
+        state.delBusy = false;
+        if (r.error) { state.delErr = "Could not delete the account. Please try again."; return render(); }
+        delete stash[u.id];
+        state.users = state.users.filter(function (x) { return x.id !== u.id; });
+        try { window.localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(Object.keys(stash).map(function (k) { return stash[k]; }))); } catch (e) { /* ignore */ }
+        CP_AUTH.signOut();
+        sync.last = ""; sync.skills = {}; sync.mods = {}; sync.progressReady = false;
+        state.userId = null; state.delAsk = false; state.acctMsg = ""; state.authTab = "login"; state.onb = null; state.ch = null;
+        state.authNotice = null; state.authError = "";
+        stopLive(); live.rows = null; live.boardKey = "";
+        tutor.turns = []; tutor.quote = ""; tutor.open = false;
+        state.authInfo = "Your account and everything saved for it were deleted.";
+        render();
+      });
+    },
+
     "google-cancel": function () {
       if (REAL) {
         CP_AUTH.signOut();
@@ -3219,7 +3624,9 @@
         var cur = me();
         CP_AUTH.signOut();
         if (cur) { stash[cur.id] = cur; state.users = state.users.filter(function (x) { return x.id !== cur.id; }); }
-        sync.last = "";
+        sync.last = ""; sync.skills = {}; sync.mods = {}; sync.progressReady = false;
+        state.users = state.users.filter(function (x) { return !x.remote; });
+        live.rows = null; live.boardKey = "";
       }
       state.userId = null; state.authTab = "login"; state.exam = null; state.mexam = null; state.mresult = null; state.quiz = null; state.googlePending = null;
       state.preview = null; state.adminSkill = null; state.adminEdit = null;
@@ -3231,6 +3638,24 @@
     },
 
     nav: function (el) { state.adminEdit = null; state.adminLesson = null; go(el.dataset.nav); },
+
+    // The logo always goes to the student's home: the roadmap, or the role picker until one is chosen.
+    home: function () {
+      var u = me();
+      state.roleMenu = false;
+      if (!u) { state.authNotice = null; state.authError = ""; return render(); }
+      state.adminEdit = null; state.adminLesson = null;
+      if (state.preview) { state.preview = null; state.exam = null; state.quiz = null; state.result = null; }
+      go(u.role === "admin" ? "a-content" : (u.roleId ? "roadmap" : "roles"));
+    },
+
+    "role-menu": function () { state.roleMenu = !state.roleMenu; render(); },
+
+    "role-switch": function (el) {
+      state.roleMenu = false;
+      switchRoadmap(me(), el.dataset.role);
+      go("roadmap");
+    },
 
     theme: function () {
       var root = document.documentElement;
@@ -3350,6 +3775,7 @@
       o.rec = window.CP_ONBOARD.recommend(ROLES, o.detect || { skills: {}, roles: {} }, o.score);
       o.planned = window.CP_ONBOARD.plannedLead(ROLES, o.score);
       o.by = "rules";
+      saveMatches(o);
       // Marked busy before the first paint, so the page says the model is working
       // rather than showing the fallback numbers as if they were final.
       o.busy = !!(tutor.ready && !tutor.denied);
@@ -3752,6 +4178,7 @@
           };
         });
         o.by = "model";
+        saveMatches(o);
         var u = me();
         if (u && u.placement) u.placement.rankedBy = "model";
         render();
@@ -3863,9 +4290,18 @@
 
   document.addEventListener("click", function (ev) {
     var el = ev.target.closest("[data-action]");
+    if (state.roleMenu && !ev.target.closest(".role-switch")) {
+      state.roleMenu = false;
+      if (!el) return render();
+    }
     if (!el) return;
+    if (el.tagName === "A" && (ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.button)) return;   // open in a new tab as usual
     var fn = actions[el.dataset.action];
     if (fn) { ev.preventDefault(); fn(el); }
+  });
+
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key === "Escape" && state.roleMenu) { state.roleMenu = false; render(); }
   });
 
   document.addEventListener("change", function (ev) {
@@ -4230,16 +4666,8 @@
     if (!panel.hidden) {
       var u = actor();
       var s = state.route.skill && u ? skill(u.roleId, state.route.skill) : null;
-      document.getElementById("tutor-sub").textContent =
-        s ? s.name : (u && role(u.roleId) ? role(u.roleId).name + " roadmap" : "");
+      document.getElementById("tutor-sub").textContent = s ? s.name : "";
       document.getElementById("tutor-foot").hidden = blocked;
-      var note = document.getElementById("tutor-note");
-      if (note) {
-        note.textContent = (tutor.mode === "claude"
-          ? "Answers come from Claude. "
-          : "Answers come from the AI model this deployment is configured with. ") +
-          "Select any text in the lesson to ask about it.";
-      }
       tutorLog();
       renderQuote();
     }

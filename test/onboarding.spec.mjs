@@ -269,6 +269,17 @@ await step("the last answer goes straight to a recommendation with a score for e
   if (!pcts.every(p => /^\d{1,3}%$/.test(p))) throw new Error("match is not a percentage: " + pcts.join(","));
 });
 
+await step("the role menu shows the same match scores the recommendation gave", async () => {
+  const byName = await page.$$eval(".rec-card", cs => cs.map(c => [c.querySelector(".rec-name").textContent.trim(), c.querySelector(".rec-score b").textContent.trim()]));
+  await page.click("#sidebar .role-btn"); await page.waitForTimeout(150);
+  const opts = await page.$$eval("#sidebar .role-opt", os => os.map(o => [o.querySelector("b").textContent.trim(), (o.querySelector(".role-opt-end b") || {}).textContent]));
+  for (const [name, pct] of byName) {
+    const hit = opts.find(o => o[0] === name);
+    if (!hit || hit[1] !== pct) throw new Error(name + ": recommendation " + pct + ", menu " + (hit && hit[1]));
+  }
+  await page.keyboard.press("Escape");
+});
+
 await step("five answers are enough to separate the three target roles", async () => {
   // Answer strings come from 22 role-played personas (18 clear, 4 mixed), each scored by the app's own code.
   const rows = [
@@ -434,7 +445,7 @@ await step("picking a roadmap lands on it", async () => {
 
 await step("leaving the flow for the role picker is not a one-way door", async () => {
   // Walk out of the flow to the role picker, then walk back into it.
-  await page.click('[data-action="nav"][data-nav="roles"]');
+  await page.click('#sidebar .role-btn'); await page.click('#sidebar [data-nav="roles"]');
   await page.waitForSelector(".role-grid");
   const back = await page.$('[data-action="onb-resume-flow"]');
   if (!back) throw new Error("no way back into the recommendation from the role picker");
@@ -456,11 +467,11 @@ await step("the profile keeps the conclusion, not the document", async () => {
 /* ---------------- roadmap history ---------------- */
 
 await step("switching roadmaps records the one left behind", async () => {
-  await page.click('[data-action="nav"][data-nav="roles"]');
+  await page.click('#sidebar .role-btn'); await page.click('#sidebar [data-nav="roles"]');
   await page.waitForSelector(".role-grid");
-  await page.click('[data-role="pm"]');
+  await page.click('.role-card[data-role="pm"]');
   await page.waitForSelector(".skill-list");
-  await page.click('[data-action="nav"][data-nav="roles"]');
+  await page.click('#sidebar .role-btn'); await page.click('#sidebar [data-nav="roles"]');
   await page.waitForSelector(".role-grid");
   const t = await text("#view");
   if (!t.includes("Roadmaps you have worked on before")) throw new Error("no history section");
@@ -587,7 +598,7 @@ await step("the figures above the board follow the board", async () => {
 
 await step("the page says the peer activity is simulated", async () => {
   const t = await text("#view");
-  if (!t.includes("generated on a timer")) throw new Error("the simulation is not disclosed");
+  if (!t.includes("simulated")) throw new Error("the simulation is not disclosed");
 });
 
 await step("the ticker stops when nobody is watching the board", async () => {

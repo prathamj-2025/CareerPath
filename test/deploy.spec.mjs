@@ -89,8 +89,8 @@ await step('assistant uses /api/ask and streams the reply', async () => {
   await page.waitForTimeout(250);
 
   if (await page.$eval('#tutor', el => el.hidden)) throw new Error('assistant hidden on the deployed build');
-  const note = await page.textContent('#tutor-note');
-  if (/Claude/.test(note)) throw new Error('note still credits Claude on a self-hosted build');
+  if (await page.$('#tutor-note')) throw new Error('the assistant still carries a note about which model answers');
+  if ((await page.textContent('#tutor')).includes('roadmap')) throw new Error('the assistant still names the roadmap');
 
   const posted = page.waitForRequest(r => r.url().endsWith('/api/ask') && r.method() === 'POST');
   await page.fill('#tutor-input', 'Why distinct users and not rows?');

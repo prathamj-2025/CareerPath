@@ -11,10 +11,12 @@
     "dev": "vercel dev",
     "serve": "node test/devserver.mjs",
     "mock-provider": "node test/fakeopenai.mjs",
-    "test": "node test/app.spec.mjs && node test/onboarding.spec.mjs && node test/assistant.spec.mjs && node test/deploy.spec.mjs && node test/google.spec.mjs && node test/persist.spec.mjs && node test/resume-check.spec.mjs && node test/resume-files.spec.mjs && node test/pmcourse.spec.mjs && node test/pjmcourse.spec.mjs && node test/modules.spec.mjs && node test/retired.spec.mjs && node test/accounts.spec.mjs",
+    "test": "node test/app.spec.mjs && node test/onboarding.spec.mjs && node test/assistant.spec.mjs && node test/deploy.spec.mjs && node test/google.spec.mjs && node test/persist.spec.mjs && node test/resume-check.spec.mjs && node test/resume-files.spec.mjs && node test/pmcourse.spec.mjs && node test/pjmcourse.spec.mjs && node test/modules.spec.mjs && node test/retired.spec.mjs && node test/sql.spec.mjs && node test/accounts.spec.mjs && node test/progress.spec.mjs && node test/community.spec.mjs && node test/live.spec.mjs && node test/site.spec.mjs",
     "shots": "node test/shot-new.mjs && node test/shot-layout.mjs"
   },
   "devDependencies": {
-    "playwright": "^1.47.0"
+    "@electric-sql/pglite": "^0.5.11",
+    "playwright": "^1.47.0",
+    "ws": "^8.22.0"
   }
 }

@@ -86,6 +86,102 @@
     return p;
   }
 
+
+  /* ---------- Realtime ----------
+     A small client for Supabase Realtime (the Phoenix channel protocol over one WebSocket), so there is
+     still no library to load. It listens to "broadcast" messages on private channels. The database sends
+     an empty "changed" message when a leaderboard moves, and the page reacts by reloading its own board.
+     One socket is shared by every channel. It sends a heartbeat, keeps the access token fresh, and
+     reconnects with a growing pause. After every reconnect it reports "live" again so the page can
+     reload and catch anything it missed while it was offline. */
+  var rt = { ws: null, ready: false, ref: 0, chans: {}, beat: null, retry: null, tries: 0, lastBeat: 0, closing: false };
+
+  function rtSend(m) {
+    if (!rt.ws || rt.ws.readyState !== 1) return;
+    m.ref = String(++rt.ref);
+    try { rt.ws.send(JSON.stringify(m)); } catch (e) { /* the close handler reconnects */ }
+  }
+  function rtJoin(ch) {
+    token().then(function (t) {
+      if (!t || !rt.ready || !rt.chans[ch.topic]) return;
+      ch.joined = false;
+      rtSend({ topic: "realtime:" + ch.topic, event: "phx_join",
+        payload: { config: { broadcast: { ack: false, self: false }, presence: { key: "" }, postgres_changes: [], private: true }, access_token: t } });
+      ch.token = t;
+    });
+  }
+  function rtState(state) {
+    Object.keys(rt.chans).forEach(function (k) {
+      rt.chans[k].subs.forEach(function (s) { if (s.state) { try { s.state(state); } catch (e) {} } });
+    });
+  }
+  function rtOpen() {
+    if (rt.ws || rt.closing || !cfg || typeof WebSocket === "undefined" || !Object.keys(rt.chans).length) return;
+    var url = cfg.url.replace(/^http/, "ws") + "/realtime/v1/websocket?apikey=" + encodeURIComponent(cfg.key) + "&vsn=1.0.0";
+    var ws;
+    try { ws = new WebSocket(url); } catch (e) { rtLater(); return; }
+    rt.ws = ws; rt.ready = false;
+    ws.onopen = function () {
+      rt.ready = true; rt.tries = 0; rt.lastBeat = Date.now();
+      Object.keys(rt.chans).forEach(function (k) { rtJoin(rt.chans[k]); });
+      window.clearInterval(rt.beat);
+      rt.beat = window.setInterval(rtBeat, 25000);
+    };
+    ws.onmessage = function (ev) {
+      var m; try { m = JSON.parse(ev.data); } catch (e) { return; }
+      rt.lastBeat = Date.now();
+      if (!m || typeof m.topic !== "string") return;
+      var ch = rt.chans[m.topic.replace(/^realtime:/, "")];
+      if (!ch) return;
+      if (m.event === "phx_reply" && m.payload && m.ref !== null && m.payload.response !== undefined && !ch.joined) {
+        if (m.payload.status === "ok") {
+          ch.joined = true; ch.tries = 0;
+          ch.subs.forEach(function (s) { if (s.state) { try { s.state("live"); } catch (e) {} } });
+        } else {
+          // Refused (Realtime is off, or the token was not accepted yet): say "down" and try again with a growing pause.
+          ch.subs.forEach(function (s) { if (s.state) { try { s.state("down"); } catch (e) {} } });
+          window.clearTimeout(ch.again);
+          ch.again = window.setTimeout(function () { if (rt.chans[ch.topic] === ch && rt.ready) rtJoin(ch); },
+            [2000, 5000, 10000, 15000][Math.min(ch.tries++, 3)]);
+        }
+      } else if (m.event === "broadcast" || m.event === "changed") {
+        ch.subs.forEach(function (s) { try { s.cb(); } catch (e) {} });
+      } else if (m.event === "phx_error" || m.event === "phx_close") {
+        ch.joined = false; rtJoin(ch);
+      }
+    };
+    ws.onclose = function () {
+      window.clearInterval(rt.beat); rt.ws = null; rt.ready = false;
+      Object.keys(rt.chans).forEach(function (k) { rt.chans[k].joined = false; });
+      rtState("down");
+      if (!rt.closing && Object.keys(rt.chans).length) rtLater();
+    };
+    ws.onerror = function () { try { ws.close(); } catch (e) {} };
+  }
+  function rtLater() {
+    if (rt.retry) return;
+    var wait = [1000, 2000, 5000, 10000, 15000][Math.min(rt.tries++, 4)];
+    rt.retry = window.setTimeout(function () { rt.retry = null; rtOpen(); }, wait);
+  }
+  function rtBeat() {
+    if (!rt.ws) return;
+    if (Date.now() - rt.lastBeat > 70000) { try { rt.ws.close(); } catch (e) {} return; }   // the line went quiet: start over
+    rtSend({ topic: "phoenix", event: "heartbeat", payload: {} });
+    token().then(function (t) {       // a refreshed access token has to be handed to every open channel
+      if (!t) return;
+      Object.keys(rt.chans).forEach(function (k) {
+        var ch = rt.chans[k];
+        if (ch.joined && ch.token !== t) { ch.token = t; rtSend({ topic: "realtime:" + ch.topic, event: "access_token", payload: { access_token: t } }); }
+      });
+    });
+  }
+  function rtStop() {
+    rt.closing = true; window.clearInterval(rt.beat); window.clearTimeout(rt.retry); rt.retry = null;
+    if (rt.ws) { try { rt.ws.close(); } catch (e) {} }
+    Object.keys(rt.chans).forEach(function (k) { window.clearTimeout(rt.chans[k].again); });
+    rt.ws = null; rt.ready = false; rt.chans = {}; rt.tries = 0;
+  }
+
   var CP_AUTH = window.CP_AUTH = {
     enabled: false,
     googleOAuth: false,
@@ -171,6 +267,7 @@
     },
 
     signOut: function () {
+      rtStop();
       var t = session && session.access;
       keep(null);
       if (t) call("/auth/v1/logout", { method: "POST", token: t });          // best effort
@@ -187,6 +284,42 @@
         });
       });
     },
+
+    /* Generic call to a table with the student's token. Used for progress rows. */
+    rest: function (method, path, body, prefer) {
+      return token().then(function (t) {
+        if (!t) return { error: { code: "expired", text: "Please sign in again." } };
+        var h = prefer ? { prefer: prefer } : null;
+        return call("/rest/v1/" + path, { method: method, token: t, body: body, headers: h }).then(function (r) {
+          return r.ok ? { ok: true, body: r.body } : { error: explain(r), status: r.status };
+        });
+      });
+    },
+
+    /* Listen to a private broadcast channel, for example "board:usc:pm". cb() runs on every "changed" message;
+       state("live" | "down") reports the connection. Returns a function that stops listening. */
+    listen: function (topic, cb, state) {
+      if (!cfg || !session) return function () {};
+      rt.closing = false;
+      var ch = rt.chans[topic];
+      var sub = { cb: cb, state: state };
+      if (!ch) { ch = rt.chans[topic] = { topic: topic, subs: [], joined: false, token: null, tries: 0, again: null }; }
+      ch.subs.push(sub);
+      if (!rt.ws) rtOpen(); else if (rt.ready && ch.subs.length === 1) rtJoin(ch);
+      else if (ch.joined && state) { try { state("live"); } catch (e) {} }
+      return function () {
+        var c = rt.chans[topic]; if (!c) return;
+        c.subs = c.subs.filter(function (x) { return x !== sub; });
+        if (!c.subs.length) {
+          rtSend({ topic: "realtime:" + topic, event: "phx_leave", payload: {} });
+          window.clearTimeout(c.again);
+          delete rt.chans[topic];
+        }
+        if (!Object.keys(rt.chans).length) rtStop();
+      };
+    },
+
+    userId: function () { return session && session.user ? session.user.id : null; },
 
     saveProfile: function (patch) {
       return token().then(function (t) {

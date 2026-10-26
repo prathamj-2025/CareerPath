@@ -275,8 +275,8 @@ await step('without the artifact runtime it falls back to /api/ask', async () =>
   await p3.click('[data-action="login"]');
   await p3.waitForTimeout(300);
   if (await p3.$eval('#tutor', el => el.hidden)) throw new Error('assistant hidden on a self-hosted build');
-  const note = await p3.textContent('#tutor-note');
-  if (/Claude/.test(note)) throw new Error('note credits Claude without the runtime: ' + note);
+  if (await p3.$('#tutor-note')) throw new Error('the assistant still carries a note about which model answers');
+  if ((await p3.textContent('#tutor')).includes('roadmap')) throw new Error('the assistant still names the roadmap');
 
   const posted = p3.waitForRequest(r => r.url().endsWith('/api/ask'));
   await p3.fill('#tutor-input', 'ping');

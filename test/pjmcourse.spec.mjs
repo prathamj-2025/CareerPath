@@ -58,8 +58,8 @@ await step('every skill on the roadmap appears in exactly one main module', asyn
 
 await step('a student on the Project Manager roadmap sees 5 main modules', async () => {
   await page.click('[data-action="login"]'); await page.waitForTimeout(400);
-  await page.click('[data-nav="roles"]'); await page.waitForSelector('[data-role="pjm"]');
-  await page.click('[data-role="pjm"]'); await page.waitForTimeout(300);
+  await page.click('#sidebar .role-btn'); await page.click('#sidebar [data-nav="roles"]'); await page.waitForSelector('.role-card[data-role="pjm"]');
+  await page.click('.role-card[data-role="pjm"]'); await page.waitForTimeout(300);
   if ((await page.$$('.rm-row')).length !== 5) throw new Error('rows ' + (await page.$$('.rm-row')).length);
   if (!(await page.textContent('.rm-num')).includes('of 4 certificates')) throw new Error('count');
 });

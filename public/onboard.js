@@ -2,8 +2,8 @@
    build a placement test from those claims, and rank the roadmaps.
 
    Everything here runs on the viewer's own machine. The resume is never uploaded
-   anywhere, which is worth saying out loud in the UI, and is also the only option
-   available while the prototype has no backend.
+   anywhere, which is worth saying out loud in the UI. Only a short summary (file name, length,
+   detected skills and titles) is saved with the profile.
 
    PDF and DOCX are both containers holding deflate-compressed streams, and every
    modern browser can inflate deflate natively through DecompressionStream, so the
