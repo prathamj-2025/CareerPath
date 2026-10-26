@@ -79,11 +79,15 @@ function callAsk(rules, messages) {
     handler({ method: 'POST', body: { rules, messages } }, res).catch((e) => resolve({ status: 500, text: '', raw: String(e) }));
   });
 }
-async function ask(rules, messages) {
-  for (let i = 0; i < 5; i++) {
-    const r = await callAsk(rules, messages);
+const VERBOSE = !!arg('verbose', false) || true;
+const withTimeout = (p, ms) => Promise.race([p, new Promise((res) => setTimeout(() => res({ status: 0, text: '', raw: 'no reply after ' + ms / 1000 + ' seconds' }), ms))]);
+async function ask(rules, messages, label) {
+  for (let i = 0; i < 4; i++) {
+    const t0 = Date.now();
+    const r = await withTimeout(callAsk(rules, messages), 90000);
+    if (VERBOSE) console.log('    ' + (label || 'call') + ' try ' + (i + 1) + ': ' + (r.status || 'timeout') + ' in ' + Math.round((Date.now() - t0) / 1000) + 's' + (r.text ? ', ' + words(r.text) + ' words' : '') + (r.status !== 200 && r.raw ? ' :: ' + r.raw.slice(0, 220) : ''));
     if (r.status === 200 && r.text) return r;
-    if (r.status === 429 || r.status >= 500 || (r.status === 200 && !r.text)) { await new Promise((s) => setTimeout(s, 2500 * (i + 1))); continue; }
+    if (r.status === 0 || r.status === 429 || r.status >= 500 || (r.status === 200 && !r.text)) { await new Promise((s) => setTimeout(s, 4000 * (i + 1))); continue; }
     return r;
   }
   return { status: 0, text: '', raw: 'gave up after retries' };
@@ -116,7 +120,7 @@ const JUDGE_RULES =
 
 async function judge(c, a, ref) {
   const prompt = 'Student question:\n' + c.q + '\n\nWhat a good reply does:\n' + c.hint + '\n\nReference material (may be partial):\n' + ref.slice(0, 6500) + '\n\nAssistant reply:\n' + a;
-  const r = await ask(JUDGE_RULES, [{ role: 'user', content: prompt }]);
+  const r = await ask(JUDGE_RULES, [{ role: 'user', content: prompt }], 'grader #' + c.id);
   const m = r.text.match(/\{[\s\S]*\}/);
   try { const j = JSON.parse(m ? m[0] : r.text); return { score: Number(j.score) || 0, problem: String(j.problem || '') }; }
   catch (e) { return { score: 0, problem: 'grader reply was not readable: ' + r.text.slice(0, 120) }; }
@@ -134,7 +138,8 @@ async function worker() {
     const i = next++; if (i >= cases.length) return;
     const c = cases[i];
     const { rules, ref } = rulesFor(c);
-    const r = await ask(rules, [{ role: 'user', content: c.q }]);
+    console.log('  #' + c.id + ' ' + c.q.slice(0, 60).replace(/\n/g, ' '));
+    const r = await ask(rules, [{ role: 'user', content: c.q }], 'answer #' + c.id);
     if ([401, 403, 404].includes(r.status)) { console.error('\nStopped: the provider refused the request (' + r.status + '). ' + r.raw.slice(0, 400)); process.exit(1); }
     const answer = r.text || '';
     const flags = r.status === 200 ? autoChecks(c, answer) : ['request failed (' + r.status + '): ' + r.raw.slice(0, 200)];
@@ -142,7 +147,7 @@ async function worker() {
     if (!NOJUDGE && answer) j = await judge(c, answer, ref);
     const pass = flags.length === 0 && (NOJUDGE || j.score >= 4);
     results.push({ id: c.id, cat: c.cat, role: c.role, skill: c.skill, q: c.q, hint: c.hint, answer, flags, score: j.score, problem: j.problem, pass });
-    done++; if (done % 10 === 0 || done === cases.length) console.log('  ' + done + ' / ' + cases.length);
+    done++; console.log('  done ' + done + ' / ' + cases.length + (pass ? '' : '  (needs work)'));
   }
 }
 await Promise.all(Array.from({ length: CONC }, worker));

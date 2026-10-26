@@ -282,29 +282,73 @@
     return CHALLENGES.filter(function (c) { return c.roleId === roleId; })
       .sort(function (a, b) { return b.week - a.week; });
   }
-  function words(text) {
-    return String(text || "").trim().split(/\s+/).filter(Boolean).length;
-  }
+  var CH = window.CP_CHALLENGE;   // scoring and feedback wording live in challenge.js, shared with the server
+  function words(text) { return CH.words(text); }
   // Weeks are numbered from the start of the programme, not the calendar.
   function nextWeek() {
     return CHALLENGES.reduce(function (a, c) { return Math.max(a, c.week); }, 0) + 1;
   }
 
-  /* Rule-based scoring. Each criterion is a pattern describing what a good answer
-     has to raise. This reports whether an idea was raised, not how well it was
-     argued, and the UI says so. */
-  function scoreChallenge(c, text) {
-    var n = words(text);
-    var met = c.rubric.map(function (r) {
-      var re;
-      try { re = new RegExp(r.re, "i"); } catch (e) { re = null; }
-      return !!re && re.test(text);
+  /* Rule-based scoring (challenge.js). Real accounts are scored on the server (api/grade-challenge.js);
+     this copy scores demo accounts and rebuilds the per-criterion ticks for a saved answer. */
+  function scoreChallenge(c, text) { return CH.score(c, text); }
+
+  /* Real accounts: send the answer to the server, which checks the student, scores it with the fixed rubric,
+     writes the review and saves it. This page only shows what comes back. */
+  function submitToServer(user, c, text) {
+    state.ch = { cid: c.cid, busy: true, err: "", draft: text };
+    render();
+    var fail = function (msg) {
+      if (me() !== user) return;
+      state.ch = { cid: c.cid, err: msg, draft: text };
+      render();
+    };
+    CP_AUTH.token().then(function (t) {
+      if (!t) return fail("Your session expired. Sign in again. Your answer is still here.");
+      return fetch("/api/grade-challenge", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: "Bearer " + t },
+        body: JSON.stringify({ cid: c.cid, answer: text })
+      }).then(function (r) {
+        return r.json().catch(function () { return null; }).then(function (b) {
+          if (me() !== user) return;
+          if (!r.ok || !b || !b.submission) {
+            var code = b && b.error && b.error.code;
+            return fail(code === "not_configured" ? "Challenge scoring is not switched on yet. Please contact support." :
+              code === "wrong_roadmap" ? "Your roadmap choice is still saving, or this challenge is for another roadmap. Wait a moment and try again; your answer is still here." :
+              (b && b.error && b.error.message) || "Your answer could not be scored. Try again; it is still here.");
+          }
+          var x = b.submission;
+          user.challenges[c.cid] = { text: b.submission.answer || text, pct: x.pct, met: x.met, hit: x.hit, of: x.of, words: x.words, short: x.short,
+            when: serverDate(x.when), feedback: x.feedback || "", source: x.source || "rules" };
+          if (!b.already && x.points) user.points += x.points;
+          state.ch = { cid: c.cid };
+          render();
+          if (live.chOff) pollChBoard();
+        });
+      });
+    }).catch(function () { fail("Could not reach the server. Your answer is still here, so try again."); });
+  }
+  function serverDate(iso) {
+    var d = iso ? new Date(iso + "T00:00:00") : new Date();
+    return isNaN(d) ? today() : d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+  }
+
+  /* Real accounts: the saved submissions come back from the database on sign-in. */
+  function loadChallenges(u, tries) {
+    CP_AUTH.rest("GET", "challenge_submissions?select=*&user_id=eq." + encodeURIComponent(u.id)).then(function (r) {
+      if (state.userId !== u.id && state.finishUser !== u.id) return;
+      if (r.error) { if ((tries || 0) < 4) setTimeout(function () { loadChallenges(u, (tries || 0) + 1); }, 8000); return; }
+      (r.body || []).forEach(function (row) {
+        var c = chById(row.challenge_id);
+        if (!c) return;
+        var res = CH.score(c, row.answer);
+        u.challenges[c.cid] = { text: row.answer, pct: row.score, met: res.met, hit: row.hits, of: c.rubric.length, words: row.words,
+          short: row.words < c.minWords, when: serverDate(String(row.created_at || "").slice(0, 10)), feedback: row.feedback || "",
+          source: row.feedback && row.feedback.indexOf("No written review is available") !== 0 ? "ai" : "rules" };
+      });
+      render();
     });
-    var hit = met.filter(Boolean).length;
-    var pct = Math.round(hit / c.rubric.length * 100);
-    var short = n < c.minWords;
-    if (short) pct = Math.min(pct, 40);
-    return { pct: pct, met: met, hit: hit, of: c.rubric.length, words: n, short: short };
   }
 
   function chSubmissions(cid) {
@@ -355,17 +399,22 @@
      timer and the page says so in plain words rather than implying the numbers are real. */
 
   var live = { timer: null, flash: {}, feed: [], chFeed: [], rows: null, boardKey: "",
-    off: null, topic: "", rtLive: false, rtTimer: null, rtDirty: false, ticks: 0 };
+    off: null, topic: "", rtLive: false, rtTimer: null, rtDirty: false, ticks: 0,
+    chRows: null, chKey: "", chOff: null, chTopic: "", chLive: false, chTimer: null, chDirty: false };
   var LIVE_ROUTES = ["roadmap", "leaderboard", "challenge"];
 
   function startLive() {
-    if (REAL) { pollBoard(); listenBoard(); }
+    if (REAL) {
+      pollBoard(); listenBoard();
+      if (state.route.name === "challenge") { pollChBoard(); listenCh(); } else stopListeningCh();
+    }
     if (live.timer) return;
     // Real mode: the push from the database is the main path. This timer is the safety net, so it runs every
     // 30 seconds while the live connection is down and only every two minutes while it is up.
     live.timer = window.setInterval(REAL ? function () {
       if (live.rtLive && (++live.ticks % 4)) return;
       pollBoard();
+      if (state.route.name === "challenge" && !(live.chLive && (live.ticks % 4))) pollChBoard();
     } : liveTick, REAL ? 30000 : 4200);
   }
 
@@ -388,7 +437,51 @@
       if (was !== live.rtLive) paintPill();
     });
   }
+  /* The weekly challenge board is its own channel, "challenge:<id>", open to every college. */
+  function listenCh() {
+    var user = me(); var c = user && user.roleId ? liveChallenge(user.roleId) : null;
+    if (!c || !window.CP_AUTH || !CP_AUTH.listen) return;
+    var topic = "challenge:" + c.cid;
+    if (live.chTopic === topic && live.chOff) return;
+    stopListeningCh();
+    live.chTopic = topic;
+    live.chOff = CP_AUTH.listen(topic, chBoardChanged, function (st) {
+      var was = live.chLive;
+      live.chLive = st === "live";
+      if (live.chLive && !was) pollChBoard();
+      if (was !== live.chLive) paintPill();
+    });
+  }
+  function stopListeningCh() {
+    if (live.chOff) { live.chOff(); live.chOff = null; }
+    live.chTopic = ""; live.chLive = false;
+    if (live.chTimer) { window.clearTimeout(live.chTimer); live.chTimer = null; }
+    live.chDirty = false;
+  }
+  function chBoardChanged() {
+    if (live.chTimer) { live.chDirty = true; return; }
+    pollChBoard();
+    live.chTimer = window.setTimeout(function () {
+      live.chTimer = null;
+      if (live.chDirty) { live.chDirty = false; chBoardChanged(); }
+    }, 700);
+  }
+  function pollChBoard() {
+    var user = me();
+    var c = user && user.role === "student" && user.roleId ? liveChallenge(user.roleId) : null;
+    if (!REAL || !c || state.preview) return;
+    CP_AUTH.rest("POST", "rpc/challenge_board", { p_challenge: c.cid }).then(function (r) {
+      if (me() !== user || r.error) return;
+      live.chRows = (r.body || []).map(function (x) {
+        return { id: x.user_id, name: x.display_name, school: x.school, score: x.score, rank: x.rank, me: !!x.is_me };
+      });
+      live.chKey = c.cid;
+      paintLive();
+    });
+  }
+
   function stopListening() {
+    stopListeningCh();
     if (live.off) { live.off(); live.off = null; }
     live.topic = ""; live.rtLive = false;
     if (live.rtTimer) { window.clearTimeout(live.rtTimer); live.rtTimer = null; }
@@ -404,13 +497,13 @@
     }, 700);
   }
   /* "Live" is shown only while the push connection is actually up. */
-  function livePill() {
-    var on = !REAL || live.rtLive;
-    return '<span class="live-pill' + (on ? "" : " off") + '" data-live="pill"><i></i>' + (on ? "Live" : "Refreshing") + "</span>";
+  function livePill(kind) {
+    var on = !REAL || (kind === "ch" ? live.chLive : live.rtLive);
+    return '<span class="live-pill' + (on ? "" : " off") + '" data-live="pill"' + (kind ? ' data-kind="' + kind + '"' : "") + "><i></i>" + (on ? "Live" : "Refreshing") + "</span>";
   }
   function paintPill() {
     var pills = document.querySelectorAll('[data-live="pill"]');
-    for (var i = 0; i < pills.length; i++) pills[i].outerHTML = livePill();
+    for (var i = 0; i < pills.length; i++) pills[i].outerHTML = livePill(pills[i].dataset.kind || "");
   }
 
   /* Real accounts: the board is read from the database every half minute. Peers appear by short name only. */
@@ -820,11 +913,11 @@
            the leaderboards need. Ask for them before going on. */
         state.finishUser = u.id; state.userId = null;
         state.googlePending = { name: u.name, email: u.email, picture: u.picture };
-        loadProgress(u);
+        loadProgress(u); loadChallenges(u);
         return render();
       }
       state.userId = u.id; state.authError = ""; state.authNotice = null;
-      if (u.role === "student") loadProgress(u);
+      if (u.role === "student") { loadProgress(u); loadChallenges(u); }
       var fresh = u.role === "student" && !u.roleId && !u.resume && !u.placement && !u.roleHistory.length;
       if (u.role === "admin") { loadAdminData(); return go("a-content"); }
       if (fresh) { state.onb = { step: 1 }; return go("onb-resume"); }
@@ -1743,7 +1836,7 @@
             '<h3 style="font-size:14px">Reviewer feedback</h3><span class="pill">' +
             (sub.source === "ai" ? "AI" : "Rule-based") + "</span></div>" +
             '<div class="prose tiny">' + tmd(sub.feedback) + "</div></div>"
-          : '<div class="row" style="margin-top:12px">' +
+          : REAL ? "" : '<div class="row" style="margin-top:12px">' +
             '<button class="btn sm" data-action="ch-feedback"' + (st && st.busy ? " disabled" : "") + ">" +
             (st && st.busy ? "Asking the reviewer&hellip;" : "Get written feedback") + "</button>" +
             (st && st.err ? '<span class="err tiny">' + esc(st.err) + "</span>" : "") + "</div>") +
@@ -1752,9 +1845,10 @@
     } else {
       answerBlock = '<div class="field"><label for="ch-text">Your answer</label>' +
           '<textarea id="ch-text" class="ex-input" rows="10" data-ch="1" placeholder="Write your answer here. Minimum ' +
-            c.minWords + ' words."></textarea></div>' +
+            c.minWords + ' words."' + (st && st.busy ? " readonly" : "") + ">" + esc(st && st.draft || "") + "</textarea></div>" +
         '<div class="row" style="margin-top:12px">' +
-          '<button class="btn primary" data-action="ch-submit" data-cid="' + c.cid + '">Submit answer</button>' +
+          '<button class="btn primary" data-action="ch-submit" data-cid="' + c.cid + '"' + (st && st.busy ? " disabled" : "") + ">" +
+            (st && st.busy ? "Scoring your answer&hellip;" : "Submit answer") + "</button>" +
           '<span class="tiny muted">One submission per challenge. Points are awarded once.</span>' +
         "</div>" +
         (st && st.err ? '<p class="err tiny" style="margin-top:10px">' + esc(st.err) + "</p>" : "");
@@ -1784,7 +1878,7 @@
   function challengeAside(user, c) {
     return '<aside class="rail">' +
       '<div class="side-card">' +
-        '<div class="side-head"><span>Challenge leaderboard</span>' + (REAL ? "" : '<span class="live-pill"><i></i>Live</span>') + '</div>' +
+        '<div class="side-head"><span>Challenge leaderboard</span>' + (REAL ? livePill("ch") : '<span class="live-pill"><i></i>Live</span>') + '</div>' +
         '<div class="side-board" data-live="chboard" data-cid="' + c.cid + '">' + chBoardHTML(user, c) + "</div>" +
         '<div class="feed" data-live="chfeed">' + chFeedHTML() + "</div>" +
         '<p class="tiny muted" style="margin:0">' + "Open to students from every college, on this roadmap. Challenge points are " +
@@ -1793,7 +1887,22 @@
     "</aside>";
   }
 
+  /* Real accounts: every college together, read through challenge_board (top 50 plus the student). */
+  function chBoardReal(user, c) {
+    if (live.chKey !== c.cid || !live.chRows) return '<p class="tiny muted" style="padding:0 14px">Loading the board&hellip;</p>';
+    if (!live.chRows.length) return '<p class="tiny muted" style="padding:0 14px">No one has submitted yet. Be the first this week.</p>';
+    return '<table class="grid"><thead><tr><th></th><th>Student</th><th>Score</th></tr></thead><tbody>' +
+      live.chRows.map(function (row) {
+        return '<tr class="' + (row.me ? "lb-you" : "") + '">' +
+          '<td><span class="rank ' + (row.rank <= 3 ? "top" : "") + '">' + row.rank + "</span></td>" +
+          "<td>" + esc(row.name) + (row.me ? ' <span class="pill accent">You</span>' : "") +
+            (row.school ? '<span class="tiny muted" style="display:block">' + esc(row.school) + "</span>" : "") + "</td>" +
+          '<td class="mono">' + row.score + "%</td></tr>";
+      }).join("") + "</tbody></table>";
+  }
+
   function chBoardHTML(user, c) {
+    if (REAL) return chBoardReal(user, c);
     var rows = chSubmissions(c.cid);
     if (!rows.length) return '<p class="tiny muted" style="padding:0 14px">No one has submitted yet. Be the first this week.</p>';
     return '<table class="grid"><thead><tr><th></th><th>Student</th><th>Score</th></tr></thead><tbody>' +
@@ -1809,6 +1918,7 @@
   }
 
   function chFeedHTML() {
+    if (REAL) return "";
     if (!live.chFeed.length) return '<span class="tiny muted">Waiting for the next submission.</span>';
     return live.chFeed.map(function (e, i) {
       return '<div class="feed-row' + (i === 0 ? " new" : "") + '"><span class="feed-dot"></span>' +
@@ -3550,7 +3660,7 @@
       u.gradYear = val("pf-year") || u.gradYear;
       var box = document.getElementById("pf-board"); u.showOnBoard = box ? box.checked : true;
       state.acctMsg = "Saved.";
-      live.rows = null; live.boardKey = "";
+      live.rows = null; live.boardKey = ""; live.chRows = null; live.chKey = "";
       render();   // saving to the database happens right after, as with every other change
     },
     "delete-ask": function () { state.delAsk = true; state.delErr = ""; render(); },
@@ -3568,7 +3678,7 @@
         sync.last = ""; sync.skills = {}; sync.mods = {}; sync.progressReady = false;
         state.userId = null; state.delAsk = false; state.acctMsg = ""; state.authTab = "login"; state.onb = null; state.ch = null;
         state.authNotice = null; state.authError = "";
-        stopLive(); live.rows = null; live.boardKey = "";
+        stopLive(); live.rows = null; live.boardKey = ""; live.chRows = null; live.chKey = "";
         tutor.turns = []; tutor.quote = ""; tutor.open = false;
         state.authInfo = "Your account and everything saved for it were deleted.";
         render();
@@ -3629,7 +3739,7 @@
         if (cur) { stash[cur.id] = cur; state.users = state.users.filter(function (x) { return x.id !== cur.id; }); }
         sync.last = ""; sync.skills = {}; sync.mods = {}; sync.progressReady = false;
         state.users = state.users.filter(function (x) { return !x.remote; });
-        live.rows = null; live.boardKey = "";
+        live.rows = null; live.boardKey = ""; live.chRows = null; live.chKey = "";
       }
       state.userId = null; state.authTab = "login"; state.exam = null; state.mexam = null; state.mresult = null; state.quiz = null; state.googlePending = null;
       state.preview = null; state.adminSkill = null; state.adminEdit = null;
@@ -3804,17 +3914,20 @@
       var user = me();
       var c = chById(el.dataset.cid);
       if (!c || user.challenges[c.cid]) return;
+      if (state.ch && state.ch.busy) return;
       var box = document.getElementById("ch-text");
       var text = box ? box.value.trim() : "";
       if (!text) {
         state.ch = { cid: c.cid, err: "Write an answer before submitting." };
         return render();
       }
+      // Real accounts are scored on the server, so the score on the leaderboard cannot be set from this page.
+      if (REAL && !state.preview) return submitToServer(user, c, text);
       var res = scoreChallenge(c, text);
       user.challenges[c.cid] = { text: text, pct: res.pct, met: res.met, hit: res.hit, of: res.of,
         words: res.words, short: res.short, when: today(), feedback: "", source: "" };
       // Points once per challenge, and never enough to outweigh a verified star.
-      user.points += 30 + Math.round(res.pct / 2);
+      user.points += CH.points(res.pct);
       state.ch = { cid: c.cid };
       render();
       askChallengeFeedback(c, user);
@@ -4211,15 +4324,6 @@
       });
   }
 
-  var CH_RULES =
-    "You are reviewing a student's answer to a weekly practice challenge on CareerPath, a platform where " +
-    "students learn the skills a specific job role needs and prove them through assessment.\n\n" +
-    "You are NOT setting the score. The score is already fixed by the rubric and you will be told it. " +
-    "Your job is to explain the answer's quality in a way the student can act on.\n\n" +
-    "Write three or four sentences. Say what the answer did well, name the single most important thing " +
-    "missing or weakest, and give one concrete suggestion. Plain language, no headings, no bullet lists, " +
-    "no em dashes. Do not rewrite the answer for them, and do not repeat the rubric back verbatim.\n\n";
-
   function askChallengeFeedback(c, user) {
     var sub = user.challenges[c.cid];
     if (!sub || sub.feedback) return;
@@ -4238,19 +4342,9 @@
     state.ch = { cid: c.cid, busy: true, err: "" };
     render();
 
-    var missing = c.rubric.filter(function (r, i) { return !sub.met[i]; })
-      .map(function (r) { return r.label; });
+    var convo = [{ role: "user", content: CH.feedbackPrompt(c, sub, sub.text) }];
 
-    var convo = [{ role: "user", content:
-      "Challenge: " + c.title + "\n\nBrief given to the student:\n" + c.brief +
-      "\n\nRubric:\n" + c.rubric.map(function (r, i) {
-        return (i + 1) + ". " + r.label + " [" + (sub.met[i] ? "met" : "not met") + "]";
-      }).join("\n") +
-      "\n\nScore already awarded: " + sub.pct + "% (" + sub.hit + " of " + sub.of + " rubric points)" +
-      (missing.length ? "\nNot met: " + missing.join("; ") : "\nEvery rubric point was met.") +
-      "\n\nThe student's answer:\n" + sub.text.slice(0, 4000) }];
-
-    askModel({ rules: CH_RULES, convo: convo, signal: null, onText: null })
+    askModel({ rules: CH.feedbackRules, convo: convo, signal: null, onText: null })
       .then(function (res) {
         sub.feedback = res.text;
         sub.source = "ai";

@@ -117,10 +117,11 @@ browser-only demo (set `CP_DEMO=1` to force that).
 - The school leaderboard is read from the database (`leaderboard()` function): same school and roadmap, short
   names only, and a student can hide themselves on the Profile page. Students can also delete their account.
 - Admins read every student from the database. Those copies stay in memory and are never stored in the browser.
+- Weekly challenge answers are already scored on the server (`api/grade-challenge.js`, see `supabase/README.md`).
 - Known gap: until exams are graded on the server, a student could change their own stars and points from the
   browser. The rules stop anyone touching another student's data. Server-side grading closes the gap.
 - Tests: `test/sql.spec.mjs` runs the migration files on an in-memory Postgres and checks the security rules.
-  `accounts`, `progress` and `community` specs run against `test/fakesupabase.mjs`, a small stand-in server.
+  `accounts`, `progress`, `community` and `challenge` specs run against `test/fakesupabase.mjs`, a small stand-in server.
 
 ### Sign-in for the demo
 
@@ -147,6 +148,7 @@ Both appear as clickable cards on the sign-in screen.
    | `AI_API_KEY`  | your Gemini key from aistudio.google.com               |
    | `AI_BASE_URL` | `https://generativelanguage.googleapis.com/v1beta/openai` |
    | `AI_MODEL`    | a model id from AI Studio, e.g. `gemini-3.8-flash`     |
+   | `AI_REASONING_EFFORT` | `low` (recommended for Gemini 3.x thinking models: faster, and the thinking cannot use up the reply) |
 
    For **OpenAI**:
 
@@ -192,6 +194,7 @@ or `model`. Each should produce a different, actionable message in the assistant
 
 ```
 api/ask.js             Serverless function. Holds the API key, streams the reply back.
+api/grade-challenge.js Serverless function. Scores and saves a weekly challenge answer (secret key, server only).
 public/index.html      Markup and all styling.
 public/app.js          The whole application: routing, scoring, admin, assistant.
 public/data.js         Product Manager track.

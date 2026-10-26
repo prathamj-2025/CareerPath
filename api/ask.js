@@ -11,6 +11,8 @@
  *   AI_BASE_URL   optional. Defaults to https://api.openai.com/v1
  *                 Gemini: https://generativelanguage.googleapis.com/v1beta/openai
  *   AI_MODEL      optional. Defaults to gpt-4o-mini
+ *   AI_MAX_TOKENS optional. Reply limit, default 2500 (thinking models count their thinking against it).
+ *   AI_REASONING_EFFORT optional. For thinking models, for example low. Leave unset for other models.
  *                 Gemini: a model id from aistudio.google.com, e.g. gemini-3.8-flash
  *
  * OPENAI_API_KEY, OPENAI_BASE_URL and OPENAI_MODEL still work as fallbacks, so an
@@ -80,7 +82,10 @@ export default async function handler(req, res) {
         messages: messages,
         stream: true,
         temperature: 0.3,
-        max_tokens: 700
+        // Models that think before answering spend part of this allowance on the thinking, so it is generous.
+        max_tokens: Number(process.env.AI_MAX_TOKENS) || 2500,
+        // Optional. Set AI_REASONING_EFFORT=low to make a thinking model answer faster and more reliably.
+        ...(process.env.AI_REASONING_EFFORT ? { reasoning_effort: process.env.AI_REASONING_EFFORT } : {})
       })
     });
   } catch (e) {

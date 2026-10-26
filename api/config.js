@@ -11,9 +11,9 @@
  * CareerPath mailbox exists; no redeploy of the pages is needed.
  * CP_DEMO=1 switches the real accounts off and returns to the browser-only demo (used by tests).
  */
-const DEFAULT_URL = "https://vgqmpyqbzmdmvgyvmytq.supabase.co";
+import { DEFAULT_URL, DEFAULT_KEY } from "./_env.js";
+
 const DEFAULT_SUPPORT = "careerpath531@gmail.com";
-const DEFAULT_KEY = "sb_publishable_MtVoEWvkc7xqhqui_o_S6Q_gWmXiNIt";
 
 export default function handler(req, res) {
   res.setHeader("cache-control", "no-store");

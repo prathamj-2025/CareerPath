@@ -14,6 +14,8 @@ const uuid = () => '00000000-0000-4000-8000-' + String(++n).padStart(12, '0');
 const ALLOWED = new Set(['name', 'school', 'major', 'grad_year', 'picture_url', 'roadmap_id', 'roadmap_history', 'onboarding', 'points', 'show_on_leaderboard']);
 const progress = new Map();   // 'user|skill' -> row
 const modules = new Map();    // 'user|track' -> row
+const subs = new Map();       // 'user|challenge' -> challenge_submissions row (written only with the service key)
+const SECRET = 'sb_secret_test';
 const log = [];               // every write, so tests can see what the site sent
 
 // ---- Realtime (Phoenix channels over a WebSocket), as Supabase serves it ----
@@ -94,7 +96,7 @@ const server = http.createServer(async (req, res) => {
   if (p === '/__admin') { const u = users.get(url.searchParams.get('email')); profiles.get(u.id).role = 'admin'; return send(200, {}); }
   if (p === '/__expire') { tokens.clear(); return send(200, {}); }   // access tokens die, refresh tokens live
   if (p === '/__profile') { const u = users.get(url.searchParams.get('email')); return send(200, profiles.get(u.id) || null); }
-  if (p === '/__reset') { rt.joins = []; rt.fanouts = []; rt.tokenUpdates = 0; rt.refuse = false; for (const c of sockets) c.ws.terminate(); users.clear(); profiles.clear(); tokens.clear(); refreshes.clear(); progress.clear(); modules.clear(); log.length = 0; return send(200, {}); }
+  if (p === '/__reset') { rt.joins = []; rt.fanouts = []; rt.tokenUpdates = 0; rt.refuse = false; for (const c of sockets) c.ws.terminate(); users.clear(); profiles.clear(); tokens.clear(); refreshes.clear(); progress.clear(); modules.clear(); subs.clear(); log.length = 0; return send(200, {}); }
   if (p === '/__progress') { const u = users.get(url.searchParams.get('email')); return send(200, { skills: [...progress.values()].filter(r => r.user_id === u.id), modules: [...modules.values()].filter(r => r.user_id === u.id) }); }
   if (p === '/__seed') {   // put saved progress on the server before the student signs in (as if from another device)
     const u = users.get(url.searchParams.get('email')); const b = body;
@@ -103,6 +105,7 @@ const server = http.createServer(async (req, res) => {
     if (b.points != null) profiles.get(u.id).points = b.points;
     return send(200, {});
   }
+  if (p === '/__subs') return send(200, [...subs.values()]);
   if (p === '/__log') return send(200, log);
   if (p === '/__rt') {
     const by = {}; for (const c of sockets) { const em = c.uid && profiles.get(c.uid) && profiles.get(c.uid).email; by[em || 'unjoined'] = (by[em || 'unjoined'] || []).concat([...c.chans]); }
@@ -180,6 +183,33 @@ const server = http.createServer(async (req, res) => {
       });
       return send(201);
     }
+  }
+
+  // ---- weekly challenge submissions: students read their own; only the server (service key) writes ----
+  if (p === '/rest/v1/challenge_submissions') {
+    if (req.method === 'POST') {
+      if (req.headers.apikey !== SECRET) return send(401, { code: '42501', message: 'permission denied for table challenge_submissions' });
+      const r = body; const key = r.user_id + '|' + r.challenge_id;
+      if (subs.has(key)) return send(201, []);                                   // on conflict do nothing
+      if (!profiles.has(r.user_id) || r.score < 0 || r.score > 100 || !r.answer) return send(400, { code: '23514', message: 'check constraint' });
+      const row = { id: subs.size + 1, created_at: new Date().toISOString(), ...r };
+      subs.set(key, row); log.push({ table: 'challenge_submissions', rows: 1 });
+      fanout('challenge:' + r.challenge_id);                                     // challenge_submissions_board_insert trigger
+      return send(201, [row]);
+    }
+    const id = who(req); if (!id) return send(401, { message: 'JWT expired', code: 'PGRST301' });
+    const me = profiles.get(id);
+    const eq = k => (url.searchParams.get(k) || '').replace(/^eq\./, '');
+    return send(200, [...subs.values()].filter(r => (me.role === 'admin' || r.user_id === id) && (!eq('user_id') || r.user_id === eq('user_id')) && (!eq('challenge_id') || r.challenge_id === eq('challenge_id'))));
+  }
+  if (p === '/rest/v1/rpc/challenge_board') {
+    const id = who(req); if (!id) return send(401, { message: 'JWT expired', code: 'PGRST301' });
+    const short = n => { const w = String(n || '').trim().split(/\s+/); return w.length < 2 ? (w[0] || 'Student') : w[0] + ' ' + w[w.length - 1][0].toUpperCase() + '.'; };
+    const rows = [...subs.values()].filter(r => r.challenge_id === body.p_challenge)
+      .map(r => ({ r, p: profiles.get(r.user_id) })).filter(x => x.p && x.p.role === 'student' && (x.p.show_on_leaderboard !== false || x.r.user_id === id))
+      .sort((a, b) => b.r.score - a.r.score || a.r.created_at.localeCompare(b.r.created_at))
+      .map((x, i) => ({ user_id: x.r.user_id, display_name: short(x.p.name), school: x.p.school, score: x.r.score, hits: x.r.hits, submitted_at: x.r.created_at, rank: i + 1, is_me: x.r.user_id === id }));
+    return send(200, rows.filter(r => r.rank <= 50 || r.is_me));
   }
 
   // ---- functions (rpc) ----

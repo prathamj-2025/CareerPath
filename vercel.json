@@ -1,0 +1,5 @@
+{
+  "functions": {
+    "api/grade-challenge.js": { "includeFiles": "public/{data6,challenge}.js" }
+  }
+}

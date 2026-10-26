@@ -14,6 +14,21 @@ One shared Supabase project. Database changes live here as numbered SQL files in
 
 Run them in order, one at a time, in the SQL editor.
 
+## Weekly challenge scoring (server side)
+
+Challenge answers are scored by `api/grade-challenge.js`, not by the page, so a score cannot be faked from the
+browser. The function saves the row with the Supabase secret key, because students have no permission to write
+to `challenge_submissions`. One setting is needed:
+
+1. In Supabase open Project Settings, then API Keys. Copy the **secret** key (starts with `sb_secret_`; on older
+   projects it is the `service_role` key).
+2. In Vercel open the project, Settings, Environment Variables. Add `SUPABASE_SERVICE_ROLE_KEY` with that value,
+   type Secret, environment Production. Redeploy.
+
+Never put this key in the repo, the website or a chat. Without it the challenge page tells the student that
+scoring is not switched on, and nothing is saved. Written feedback uses the same `AI_API_KEY` as the study
+assistant; if the model is down the answer is still scored and saved with a plain note instead of a review.
+
 Rules for everyone working here
 - Every new table turns on row level security and ships its policies in the same file.
 - Reference `public.profiles(id)` for the student. Use `public.is_admin()` for admin-only rules.

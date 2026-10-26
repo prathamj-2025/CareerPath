@@ -48,6 +48,12 @@ http.createServer(async (req, res) => {
   const seen = JSON.stringify({ roles: body.messages.map(m => m.role), model: body.model });
   const sent = JSON.stringify(body.messages || []);
 
+  if (body.stream === false) {                       // non-streaming callers (the challenge reviewer on the server)
+    res.setHeader('content-type', 'application/json');
+    const asked = /Score already awarded: (\d+)%/.exec(sent);
+    res.end(JSON.stringify({ choices: [{ message: { content: 'REVIEW: you scored ' + (asked ? asked[1] : '?') + '% on the rubric. Add a clear first step next time.' } }] }));
+    return;
+  }
   res.setHeader('content-type', 'text/event-stream');
 
   // The roadmap ranking asks for JSON, so answer in the shape the page parses.

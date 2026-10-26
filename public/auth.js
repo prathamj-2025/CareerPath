@@ -319,6 +319,8 @@
       };
     },
 
+    token: function () { return token(); },
+
     userId: function () { return session && session.user ? session.user.id : null; },
 
     saveProfile: function (patch) {

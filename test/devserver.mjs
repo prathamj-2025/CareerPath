@@ -8,7 +8,8 @@ import path from 'node:path';
 import handler from '../api/ask.js';
 import configHandler from '../api/config.js';
 import googleAuthHandler from '../api/google-auth.js';
-const API = { '/api/ask': handler, '/api/config': configHandler, '/api/google-auth': googleAuthHandler };
+import gradeHandler from '../api/grade-challenge.js';
+const API = { '/api/ask': handler, '/api/config': configHandler, '/api/google-auth': googleAuthHandler, '/api/grade-challenge': gradeHandler };
 
 const PORT = Number(process.env.PORT || 3111);
 const ROOT = path.join(import.meta.dirname, '..', 'public');
