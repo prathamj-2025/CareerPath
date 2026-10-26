@@ -8,7 +8,7 @@
 <meta name="color-scheme" content="light dark">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2314532D'/%3E%3Cg fill='none' stroke='white' stroke-width='2.1' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M16 7 28 13 16 19 4 13Z'/%3E%3Cpath d='M9 16.5v5.2c0 2.2 3.1 4 7 4s7-1.8 7-4v-5.2'/%3E%3Cpath d='M28 13v7'/%3E%3C/g%3E%3C/svg%3E">
 <script>try{var t=localStorage.getItem("cp-theme");if(t==="dark"||t==="light")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <style>
   :root {
     color-scheme: light dark;
@@ -1204,6 +1204,59 @@
   .g-btn { display: flex; justify-content: center; min-height: 44px; }
   .or-div { display: flex; align-items: center; gap: 10px; margin-top: 14px; color: var(--ink-2); font-size: 12px; font-weight: 600; }
   .or-div::before, .or-div::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+
+  /* ---------------- type scale ----------------
+     One scale for the whole app, so the level of a piece of text can be read from its size:
+     page title > section heading > sub heading > body > small. Body copy is regular weight; only headings are bold. */
+  :root { --fs-h1: 32px; --fs-h2: 21px; --fs-h3: 17px; --fs-body: 15px; --fs-small: 13px; --fs-label: 11.5px; }
+  body { font-weight: 400; font-size: var(--fs-body); }
+  .page-head h1 { font-size: var(--fs-h1); font-weight: 800; }
+  .page-head .sub { font-size: 16px; font-weight: 400; }
+  /* section headings: the title of a card or block */
+  .card > h3, .card h3:first-child, .q-card > h3, .rev h3, .ex-card h3, .proj h3, .prose h3, .scn h3, .side-board h3 {
+    font-size: var(--fs-h2); font-weight: 800; letter-spacing: -.02em; line-height: 1.25;
+  }
+  .card > .eyebrow + h3 { margin-top: 4px; }
+  /* sub headings: item titles, questions, step prompts, inner headings */
+  .prose h4, .ex-prompt, .skill-name, .rm-row .skill-name, .fork-card h3, .role-card h3, .proj-std b, .explain b {
+    font-size: var(--fs-h3); font-weight: 700; letter-spacing: -.01em; line-height: 1.35;
+  }
+  .ex-prompt { margin-bottom: 12px; }
+  .ex-prompt b { font-weight: 800; color: var(--accent); }
+  /* content inside them */
+  .prose, .prose p, .prose li, .prose td { font-size: 15.5px; font-weight: 400; line-height: 1.72; }
+  .prose strong, .prose b { font-weight: 700; }
+  .prose th { font-size: 14px; }
+  .card p, .why, .hint, .check-panel, .crit, .scn-setup, .ex-schema, .rm-def { font-weight: 400; }
+  .card p.muted, .tiny, .skill-lens, .rm-def { font-size: var(--fs-small); }
+  .why, .hint, .check-panel, .crit, .ex-input, .scn-setup { font-size: 14px; }
+  .scn-setup { font-size: 15px; }
+  .opt, .opt span { font-weight: 400; }
+  .opt .key { font-weight: 700; }
+  .keypt, .prose .keypt { font-weight: 500; }
+  .eyebrow, .page-head .eyebrow { font-size: var(--fs-label); font-weight: 700; }
+  .pill, .btn { font-weight: 600; }
+  @media (max-width: 860px) {
+    :root { --fs-h1: 26px; --fs-h2: 19px; --fs-h3: 16px; }
+    .page-head h1 { font-size: var(--fs-h1); }
+  }
+
+  /* practical project */
+  .proj-head { display: grid; gap: 4px; margin-bottom: 14px; }
+  .proj-brief { font-size: 14.5px; line-height: 1.6; margin: 2px 0 0; }
+  .proj-std { background: var(--surface-2); border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; }
+  .proj-std ul { margin: 6px 0 0; padding-left: 18px; font-size: 14px; color: var(--ink-2); display: grid; gap: 3px; }
+  .proj-input { min-height: 220px; }
+  .proj-sum { margin: 8px 0 10px; font-size: 14.5px; line-height: 1.6; color: var(--ink); }
+  .proj-sent { margin-top: 12px; font-size: 14px; }
+  .proj-sent summary { cursor: pointer; font-weight: 600; color: var(--ink-2); }
+  .proj-pre { white-space: pre-wrap; font-family: var(--sans); font-size: 14px; line-height: 1.6; background: var(--surface-2); border-radius: 8px; padding: 12px 14px; margin: 8px 0 0; }
+
+  /* chatbot disclaimer */
+  #tutor-disclaimer { margin: 0; padding: 7px 13px 10px; background: var(--surface); text-align: center; font-size: 11.5px; line-height: 1.4; color: var(--ink-3); }
+  #tutor-disclaimer a { color: inherit; text-decoration: none; }
+  #tutor-disclaimer a:first-child { font-weight: 600; }
+  #tutor-disclaimer a:hover, #tutor-disclaimer a:focus-visible { text-decoration: underline; }
 </style>
 </head>
 <body>
@@ -1247,6 +1300,7 @@
           </span>
         </div>
       </form>
+      <p id="tutor-disclaimer"><a href="/" target="_blank" rel="noopener">CareerPath.ai</a><a href="https://support.anthropic.com/en/articles/8525154-claude-is-providing-incorrect-or-misleading-responses-what-s-going-on" target="_blank" rel="noopener"> is AI and can make mistakes.</a></p>
     </div>
   </section>
 </div>
@@ -1271,6 +1325,7 @@
 <script src="lessons-ba.js"></script>
 <script src="lessons-pjm.js"></script>
 <script src="challenge.js"></script>
+<script src="project.js"></script>
 <script src="tutor.js"></script>
 <script src="auth.js"></script>
 <script src="onboard.js"></script>

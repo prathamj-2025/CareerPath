@@ -7,7 +7,7 @@
     "- Free to use. Three roadmaps: Product Manager, Project Manager, Business Analyst (the Business Analyst roadmap is still being expanded).\n" +
     "- A student picks a target role, or answers five short questions (optionally with a resume) to get a match score for each roadmap. The score is advice, not a rule. Switch roadmaps any time from the role menu at the top. Stars stay with the roadmap they were earned on and do not transfer.\n" +
     "- A roadmap has main modules, each with sub-modules (skills). Each sub-module has short lessons, scenarios to practise with hints, a quiz, and a graded assessment. The numbering is a suggested order; any sub-module can be opened at any time.\n" +
-    "- Stars come only from the graded assessment, by best score: 50% = 1 star, 65% = 2, 75% = 3 (job-ready), 85% = 4, 95% plus a submitted project = 5.\n" +
+    "- Stars come only from the graded assessment, by best score: 50% = 1 star, 65% = 2, 75% = 3 (job-ready), 85% = 4, 95% plus an accepted practical project = 5 (the student writes the project on CareerPath and the AI reviews it against a hiring-manager standard; a score of 70 or more accepts it).\n" +
     "- A certificate is earned per main module: every required sub-module at 3 stars (job-ready), then pass the module exam with 75% or more.\n" +
     "- Points drive the leaderboards. There are two: the course leaderboard (same school and same roadmap) and the weekly challenge leaderboard (all colleges). Others see only first name and last initial (the challenge board also shows school). A student can hide from both in Profile and keep their progress.\n" +
     "- The weekly challenge is a short written task scored against a rubric; the score is fixed by the rubric and written feedback explains it.\n" +

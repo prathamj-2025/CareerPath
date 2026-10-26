@@ -159,6 +159,9 @@ await step('SQL practice is attempt-first with schema, hints and answer', async 
   await page.waitForTimeout(150);
   if ((await page.$$('.ex:first-of-type .hint')).length !== 2) throw new Error('second hint did not appear');
 
+  if (await page.$('.ex [data-action="practice-answer"]')) throw new Error('answer offered before the student checked an attempt');
+  await page.click('.ex [data-action="practice-check"]');
+  await page.waitForTimeout(150);
   await page.click('.ex [data-action="practice-answer"]');
   await page.waitForTimeout(150);
   const sol = await page.textContent('.ex-solution pre');

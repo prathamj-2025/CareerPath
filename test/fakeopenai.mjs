@@ -76,6 +76,20 @@ http.createServer(async (req, res) => {
       why: "Your answers and your resume line up with this roadmap more than the others."
     }));
     pieces = ['{"ranking":', JSON.stringify(ranking), "}"];
+  } else if (/project reviewer on CareerPath/.test(sent)) {
+    // Scores the submission by markers the test puts in it, so the stand-in responds to its input.
+    const m = /SUBMISSION\\n([\s\S]*?)\\nSUBMISSION>>>/.exec(sent);
+    const text = m ? m[1] : '';
+    if (/BADJSON/.test(text)) pieces = ['I think this is fine, maybe a 90.'];
+    else {
+      const score = /GOODPROJECT/.test(text) ? 82 : /IGNORE/.test(text) ? 15 : 55;
+      pieces = [JSON.stringify({ score, summary: score >= 70 ? 'Specific and well reasoned. The recommendation is clear.' : 'The idea is right but it stays generic. Add numbers and a decision.',
+        criteria: [{ label: 'Follows the brief', ok: score >= 70, note: 'Covers the parts the brief asked for.' }, { label: 'Specific evidence', ok: score >= 70, note: 'Uses concrete detail.' },
+          { label: 'Clear recommendation', ok: score >= 80, note: 'States a decision.' }, { label: 'Readable structure', ok: true, note: 'Easy to scan.' }],
+        next: ['Add a number that supports your main claim.'] })];
+    }
+  } else if (/You give hints on CareerPath/.test(sent)) {
+    pieces = ['Ask yourself who the ', 'user is before the metric. HINTED'];
   } else {
     pieces = ['A funnel counts people, ', 'so use COUNT(DISTINCT user_id). ', 'FORWARDED=' + seen];
   }

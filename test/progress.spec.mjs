@@ -124,6 +124,51 @@ await step('a module exam result is saved', async () => {
   await page.context().close();
 });
 
+await step('a project submission is saved inside history, loads on another device, and stays out of the attempt list', async () => {
+  // Needs the real-mode server started with the fake model too (AI_API_KEY=test-key AI_BASE_URL=http://localhost:3112).
+  await j('/__seed?email=sam@usc.edu', { skills: [{ skill_id: 'discovery-pm', stars: 4, best: 90, attempts: 2, project: false, lessons_done: [0],
+    history: [{ pct: 80, stars: 3, when: 'Sep 1, 2026' }, { pct: 90, stars: 4, when: 'Sep 2, 2026' }] }] });
+  const page = await fresh();
+  await login(page, 'sam@usc.edu');
+  await page.waitForTimeout(1500);
+  await page.click('[data-action="open-track"][data-track="pm-fundamentals"]');
+  await page.waitForTimeout(150);
+  await page.click('.skill-row:nth-child(3)');
+  await page.waitForSelector('textarea[data-proj]');
+  const words = (m) => m + ' ' + Array.from({ length: 90 }, (_, i) => 'w' + i).join(' ');
+  await page.fill('textarea[data-proj]', words('WEAK'));
+  await page.click('[data-action="project-submit"]');
+  await page.waitForSelector('text=Not accepted yet');
+  await page.waitForTimeout(2500);
+  let row = (await j('/__progress?email=sam@usc.edu')).skills.find(r => r.skill_id === 'discovery-pm');
+  need(row.project === false, 'project flag set by a fail');
+  need(row.history.length === 3 && row.history[2].kind === 'project' && row.history[2].score === 55 && row.history[2].accepted === false, 'project entry not saved: ' + JSON.stringify(row.history).slice(0, 300));
+  need(row.history.slice(0, 2).every(h => !h.kind), 'attempts changed');
+  await page.context().close();
+
+  const other = await fresh();
+  await login(other, 'sam@usc.edu');
+  await other.waitForTimeout(1500);
+  await other.click('[data-action="open-track"][data-track="pm-fundamentals"]');
+  await other.waitForTimeout(150);
+  await other.click('.skill-row:nth-child(3)');
+  await other.waitForSelector('textarea[data-proj]');
+  need((await other.inputValue('textarea[data-proj]')).startsWith('WEAK'), 'draft not restored on the other device');
+  need(/55 \/ 100/.test(await other.locator('.proj').innerText()), 'review not restored');
+  await other.fill('textarea[data-proj]', words('GOODPROJECT'));
+  await other.click('[data-action="project-submit"]');
+  await other.waitForSelector('.proj .pill.ok');
+  await other.waitForTimeout(2500);
+  row = (await j('/__progress?email=sam@usc.edu')).skills.find(r => r.skill_id === 'discovery-pm');
+  need(row.project === true && row.history.length === 3 && row.history[2].accepted === true && row.history[2].score === 82, 'accepted project not saved: ' + JSON.stringify(row.history).slice(0, 300));
+  await other.click('[data-nav="history"]');
+  await other.waitForTimeout(300);
+  const rows = await other.locator('table.grid tbody tr').count();
+  need(rows === 2, 'attempt list should show 2 scored attempts, got ' + rows);
+  need(other.errs.length === 0, other.errs.join(' | '));
+  await other.context().close();
+});
+
 await browser.close();
 console.log(failed ? failed + ' failed' : 'all passed');
 process.exit(failed ? 1 : 0);

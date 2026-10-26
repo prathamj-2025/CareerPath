@@ -114,7 +114,7 @@ await step('written review appears when an AI reviewer is reachable', async () =
 await step('the last lesson shows the deliverable and the module quiz, no old practice block', async () => {
   await page.click('.lesson-nav button:last-child'); await page.waitForTimeout(250);
   const t = await page.textContent('#view');
-  if (!t.includes('Practical deliverable')) throw new Error('no deliverable');
+  if (!t.includes('Practical project') || !(await page.$('textarea[data-proj]'))) throw new Error('no project box on the last lesson');
   if (!t.includes('Module quiz')) throw new Error('no quiz');
   if (t.includes('Practice exercises')) throw new Error('old practice block still shown');
 });

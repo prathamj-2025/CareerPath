@@ -34,6 +34,7 @@
     booting: false,       // restoring a saved session at start-up
     lessonIdx: 0,
     practiceState: {},    // key -> { hints revealed, answer shown, learner's attempt }
+    projDraft: {},        // skillId -> { text, busy, err, hints } for the practical project
     quiz: null,
     exam: null,
     result: null,
@@ -73,7 +74,7 @@
 
   function prog(user, skillId) {
     if (!user.progress[skillId]) {
-      user.progress[skillId] = { stars: 0, best: 0, attempts: 0, project: false, lessonsDone: [], history: [] };
+      user.progress[skillId] = { stars: 0, best: 0, attempts: 0, project: false, projectSub: null, lessonsDone: [], history: [] };
     }
     return user.progress[skillId];
   }
@@ -756,15 +757,26 @@
 
   /* Local progress shapes <-> database rows. */
   function skillRow(p) {
+    /* The project submission rides inside history as one entry of its own kind, so the table needs no new column. */
+    var hist = (p.history || []).slice(-50);
+    if (p.projectSub) hist.push(Object.assign({ kind: "project" }, p.projectSub));
     return { stars: p.stars || 0, best: p.best || 0, attempts: p.attempts || 0, project: !!p.project,
-      lessons_done: (p.lessonsDone || []).slice(0, 200), history: (p.history || []).slice(-60) };
+      lessons_done: (p.lessonsDone || []).slice(0, 200), history: hist };
+  }
+  /* Saved history -> the scored attempts, plus the project submission kept apart from them. */
+  function splitHistory(raw) {
+    var list = Array.isArray(raw) ? raw : [], sub = null, hist = [];
+    list.forEach(function (h) {
+      if (h && h.kind === "project") { sub = Object.assign({}, h); delete sub.kind; } else hist.push(h);
+    });
+    return { history: hist, sub: sub };
   }
   function modRow(m) {
     return { best: m.best || 0, attempts: m.attempts || 0, passed: !!m.passed, passed_on: m.passedOn || "",
       history: (m.history || []).slice(-60) };
   }
   /* A skill the student only opened has nothing worth saving. */
-  function blankSkill(p) { return !p.attempts && !p.stars && !p.project && !(p.lessonsDone && p.lessonsDone.length); }
+  function blankSkill(p) { return !p.attempts && !p.stars && !p.project && !p.projectSub && !(p.lessonsDone && p.lessonsDone.length); }
 
   function pendingRows(u) {
     var sk = [], md = [];
@@ -859,14 +871,17 @@
       return out.sort(function (x, y) { return x - y; });
     }
     (skillRows || []).forEach(function (r) {
-      var srv = { stars: r.stars, best: r.best, attempts: r.attempts, project: r.project,
-        lessonsDone: (r.lessons_done || []).slice(), history: r.history || [] };
+      var sp = splitHistory(r.history);
+      var srv = { stars: r.stars, best: r.best, attempts: r.attempts, project: r.project, projectSub: sp.sub,
+        lessonsDone: (r.lessons_done || []).slice(), history: sp.history };
       sync.skills[r.skill_id] = JSON.stringify(skillRow(srv));
       var loc = u.progress[r.skill_id];
       var win = (!loc || blankSkill(loc) || loc.attempts <= srv.attempts) ? srv : loc;
       var merged = Object.assign({}, win);
       merged.lessonsDone = union(srv.lessonsDone, loc && loc.lessonsDone);
       merged.project = !!(srv.project || (loc && loc.project));
+      merged.projectSub = (loc && loc.projectSub && (!srv.projectSub || (loc.projectSub.tries || 0) > (srv.projectSub.tries || 0)))
+        ? loc.projectSub : srv.projectSub;
       u.progress[r.skill_id] = merged;
     });
     (modRows || []).forEach(function (r) {
@@ -957,8 +972,9 @@
       });
       rs[1].body.forEach(function (r) {
         var u = byId[r.user_id]; if (!u) return;
-        u.progress[r.skill_id] = { stars: r.stars, best: r.best, attempts: r.attempts, project: r.project,
-          lessonsDone: r.lessons_done || [], history: r.history || [] };
+        var sp = splitHistory(r.history);
+        u.progress[r.skill_id] = { stars: r.stars, best: r.best, attempts: r.attempts, project: r.project, projectSub: sp.sub,
+          lessonsDone: r.lessons_done || [], history: sp.history };
       });
       rs[2].body.forEach(function (r) {
         var u = byId[r.user_id]; if (!u) return;
@@ -1316,7 +1332,7 @@
   function googleFinishForm() {
     var g = state.googlePending;
     return '<div class="stack" style="gap:12px">' +
-      '<div><h3 style="font-size:18px">Finish your profile</h3>' +
+      '<div><h3>Finish your profile</h3>' +
         '<p class="tiny muted" style="margin-top:4px">Signed in with Google as <b>' + esc(g.email) + "</b>. Three quick details and you&rsquo;re in.</p></div>" +
       '<div class="field"><label for="gf-name">Full name</label><input id="gf-name" value="' + esc(g.name) + '"></div>' +
       '<div class="auth-grid">' +
@@ -1569,7 +1585,7 @@
 
       body = '<div class="card">' +
         '<div class="row" style="justify-content:space-between;margin-bottom:12px">' +
-          "<div><h3 style=\"font-size:15px\">What we read</h3>" +
+          "<div><h3>What we read</h3>" +
           '<p class="tiny muted">' + esc(o.name) + " &middot; " + o.chars + " characters" +
             (o.kind && o.kind !== "text" ? " &middot; " + esc(o.kind.toUpperCase()) : "") + "</p></div>" +
           '<button class="btn sm ghost" data-action="onb-redo">Use a different file</button>' +
@@ -1709,7 +1725,7 @@
           '<p class="sub">These are scored against each roadmap, and the model reads them alongside your resume. ' +
           "Nothing here touches a star, a certificate or the leaderboard.</p></div>" +
         '<div class="onb-steps">' + onbSteps(2) + "</div>" +
-        '<div class="card"><h3 style="font-size:15px;margin-bottom:12px">What you picked</h3>' +
+        '<div class="card"><h3 style="margin-bottom:12px">What you picked</h3>' +
           '<div class="stack" style="gap:11px">' + items.map(function (it, i) {
             var opt = it.opts[o.answers[i]];
             return '<div class="picked"><span class="tiny muted">' + esc(it.q) + "</span>" +
@@ -1833,14 +1849,14 @@
         "</div>" +
         (sub.feedback
           ? '<div class="card" style="margin-top:12px"><div class="row" style="justify-content:space-between;margin-bottom:8px">' +
-            '<h3 style="font-size:14px">Reviewer feedback</h3><span class="pill">' +
+            '<h3>Reviewer feedback</h3><span class="pill">' +
             (sub.source === "ai" ? "AI" : "Rule-based") + "</span></div>" +
             '<div class="prose tiny">' + tmd(sub.feedback) + "</div></div>"
           : REAL ? "" : '<div class="row" style="margin-top:12px">' +
             '<button class="btn sm" data-action="ch-feedback"' + (st && st.busy ? " disabled" : "") + ">" +
             (st && st.busy ? "Asking the reviewer&hellip;" : "Get written feedback") + "</button>" +
             (st && st.err ? '<span class="err tiny">' + esc(st.err) + "</span>" : "") + "</div>") +
-        '<div class="card" style="margin-top:12px"><h3 style="font-size:14px;margin-bottom:8px">Your answer</h3>' +
+        '<div class="card" style="margin-top:12px"><h3 style="margin-bottom:8px">Your answer</h3>' +
           '<p class="tiny muted" style="white-space:pre-wrap">' + esc(sub.text) + "</p></div>";
     } else {
       answerBlock = '<div class="field"><label for="ch-text">Your answer</label>' +
@@ -1859,9 +1875,9 @@
 
       '<div class="roadmap-cols"><div>' +
         '<div class="card" style="margin-bottom:16px">' +
-          '<h3 style="font-size:14px;margin-bottom:8px">The brief</h3>' +
+          '<h3 style="margin-bottom:8px">The brief</h3>' +
           "<p>" + esc(c.brief) + "</p>" +
-          '<h3 style="font-size:14px;margin:16px 0 8px">What it is scored on</h3>' +
+          '<h3 style="margin:16px 0 8px">What it is scored on</h3>' +
           '<ul class="crits">' + c.rubric.map(function (rb) {
             return '<li class="crit unmet"><span class="mark">&#9675;</span><span>' + esc(rb.label) + "</span></li>";
           }).join("") + "</ul>" +
@@ -1968,7 +1984,7 @@
   function historyOfRoadmaps(user) {
     if (!user.roleHistory.length) return "";
     return '<div class="card" style="margin-top:18px">' +
-      '<h3 style="font-size:15px;margin-bottom:4px">Roadmaps you have worked on before</h3>' +
+      '<h3 style="margin-bottom:4px">Roadmaps you have worked on before</h3>' +
       '<p class="tiny muted" style="margin-bottom:12px">Nothing here was deleted when you switched. Pick one again and ' +
       "your stars on it are exactly where you left them.</p>" +
       '<div class="scroll-x"><table class="grid"><thead><tr><th>Roadmap</th><th>Stars</th><th>Verified</th><th>Left</th><th></th></tr></thead><tbody>' +
@@ -2112,7 +2128,7 @@
     var steps = "";
     if (t.cert) {
       var need = st.req.length - st.ready.length;
-      steps = '<div class="card" style="margin-bottom:18px"><h3 style="font-size:15px;margin-bottom:10px">How you earn the certificate</h3>' +
+      steps = '<div class="card" style="margin-bottom:18px"><h3 style="margin-bottom:10px">How you earn the certificate</h3>' +
         '<ol class="mx-steps">' +
           "<li" + (need === 0 ? ' class="ok"' : "") + "><b>Reach 3 stars in every required sub-module.</b> " +
             (need === 0 ? "Done: " + st.ready.length + " of " + st.req.length + "." : st.ready.length + " of " + st.req.length + " done, " + need + " to go.") + "</li>" +
@@ -2135,7 +2151,7 @@
     var dataCard = "";
     if (t.data) {
       var files = ["users", "artists", "tracks", "listens", "events", "subscriptions", "experiment_assignments", "support_tickets"];
-      dataCard = '<div class="card" style="margin-bottom:18px"><h3 style="font-size:15px;margin-bottom:6px">Practice dataset: TuneBox</h3>' +
+      dataCard = '<div class="card" style="margin-bottom:18px"><h3 style="margin-bottom:6px">Practice dataset: TuneBox</h3>' +
         '<p class="tiny muted" style="margin-bottom:10px">Every query and code example in these lessons was run on this synthetic music-app data (3,000 users, about 75,000 listens). ' +
         "Download the CSV files, load them into SQLite or pandas, and run the examples yourself. The numbers are illustrative, not real-world benchmarks.</p>" +
         '<div class="row" style="gap:6px">' + files.map(function (f) {
@@ -2225,14 +2241,14 @@
         summaryCell("Pass mark", passMark() + "<small>%</small>") +
         summaryCell("Attempt", String(st.exam.attempts)) +
       "</div>" +
-      '<div class="stack"><div class="card"><h3 style="font-size:15px;margin-bottom:12px">Performance by sub-module</h3>' +
+      '<div class="stack"><div class="card"><h3 style="margin-bottom:12px">Performance by sub-module</h3>' +
         '<div class="scroll-x"><table class="grid"><thead><tr><th>Sub-module</th><th>Correct</th><th>Result</th></tr></thead><tbody>' +
         Object.keys(by).map(function (k) {
           var b = by[k], ratio = b.right / b.total;
           return "<tr><td>" + esc(b.name) + '</td><td class="mono">' + b.right + " / " + b.total + "</td><td>" +
             (ratio >= 0.75 ? '<span class="pill ok">Strong</span>' : ratio < 0.4 ? '<span class="pill bad">Weak</span>' : '<span class="pill warn">Partial</span>') + "</td></tr>";
         }).join("") + "</tbody></table></div></div>" +
-      (weak.length ? '<div class="card"><h3 style="font-size:15px;margin-bottom:4px">Review these ' + weak.length + "</h3>" +
+      (weak.length ? '<div class="card"><h3 style="margin-bottom:4px">Review these ' + weak.length + "</h3>" +
         '<p class="tiny muted" style="margin-bottom:13px">Each one you missed, with the reasoning.</p><div class="stack" style="gap:16px">' +
         res.items.map(function (q, i) {
           if (res.answers[i] === q.a) return "";
@@ -2242,7 +2258,7 @@
               return '<div class="opt" data-state="' + sx + '"><span class="key">' + "ABCD"[j] + "</span><span>" + esc(o) + "</span></div>";
             }).join("") + '</div><div class="why"><b>Why:</b> ' + esc(q.why) + "</div></div>";
         }).join("") + "</div></div>"
-        : '<div class="card"><h3 style="font-size:15px">Every question correct.</h3></div>') +
+        : '<div class="card"><h3>Every question correct.</h3></div>') +
       "</div>" +
       '<div class="row" style="margin-top:20px">' +
         (state.preview ? '<button class="btn primary" data-action="exit-preview">Exit preview</button>'
@@ -2431,7 +2447,7 @@
       '<div class="stack">' +
         '<div class="card">' +
           '<div class="row" style="justify-content:space-between;margin-bottom:10px">' +
-            '<h3 style="font-size:15px">Lessons</h3><span class="pill">' + lessonsDone + " / " + s.lessons.length + " read</span></div>" +
+            '<h3>Lessons</h3><span class="pill">' + lessonsDone + " / " + s.lessons.length + " read</span></div>" +
           '<div class="bar" style="margin-bottom:12px"><span style="width:' + Math.round(lessonsDone / s.lessons.length * 100) + '%"></span></div>' +
           '<div class="stack" style="gap:8px">' +
             s.lessons.map(function (l, i) {
@@ -2443,14 +2459,9 @@
             }).join("") +
           "</div></div>" +
 
-        '<div class="card"><h3 style="font-size:15px;margin-bottom:6px">Practical project</h3>' +
-          '<p class="tiny muted" style="margin-bottom:10px"><b style="color:var(--ink)">' + esc(s.project.title) + "</b> &mdash; " + esc(s.project.brief) + "</p>" +
-          (p.project ? '<span class="pill ok">Submitted &middot; +150 points</span>'
-            : '<div class="row"><button class="btn sm" data-action="submit-project" data-skill="' + s.id + '">Mark project submitted</button>' +
-              '<span class="tiny muted">Required for the fifth star.</span></div>') +
-        "</div>" +
+        projectBlock(s) +
 
-        '<div class="card"><h3 style="font-size:15px;margin-bottom:10px">Assessment</h3>' +
+        '<div class="card"><h3 style="margin-bottom:10px">Assessment</h3>' +
           '<div class="row" style="gap:16px">' +
             '<span class="tiny muted"><b class="mono" style="color:var(--ink)">' + s.assessment.length + "</b> questions</span>" +
             '<span class="tiny muted">Difficulty <b class="mono" style="color:var(--ink)">L1&ndash;L5</b></span>' +
@@ -2486,7 +2497,7 @@
       "</div>" +
       '<div class="card prose" style="margin-bottom:18px">' + paras(lesson.body) + "</div>" +
       scenarioBlock(s, i, lesson) + revisionBlock(lesson) +
-      (last ? deliverableBlock(s) + (s.practice && s.practice.length ? practiceBlock(s) : "") + quizBlock(s) : "") +
+      (last ? (s.practice && s.practice.length ? practiceBlock(s) : "") + deliverableBlock(s) + quizBlock(s) : "") +
       '<div class="row" style="margin-top:20px;justify-content:space-between">' +
         '<button class="btn" data-action="lesson" data-i="' + Math.max(0, i - 1) + '"' + (i === 0 ? " disabled" : "") + ">&larr; Previous</button>" +
         (last ? '<button class="btn primary" data-action="start-exam" data-skill="' + s.id + '">Go to assessment &rarr;</button>'
@@ -2573,7 +2584,7 @@
 
   function practiceBlock(s) {
     return '<div class="card" style="margin-bottom:18px">' +
-      '<h3 style="font-size:15px;margin-bottom:4px">Practice exercises</h3>' +
+      '<h3 style="margin-bottom:4px">Practice exercises</h3>' +
       '<p class="tiny muted" style="margin-bottom:14px">Write your own answer, check it, and take a hint if you are stuck. Practice is for learning only and never affects your stars.</p>' +
       '<div class="stack" style="gap:14px">' +
       s.practice.map(function (ex, i) {
@@ -2606,8 +2617,9 @@
               ? '<button class="btn sm" data-action="practice-hint" data-key="' + key + '">' +
                 (st.hints === 0 ? "Show a hint" : "Next hint") + " (" + more + " left)</button>"
               : (hints.length ? '<span class="tiny muted">All hints shown</span>' : "")) +
-            '<button class="btn sm" data-action="practice-answer" data-key="' + key + '">' +
-              (st.shown ? "Hide answer" : "Show answer") + "</button>" +
+            (st.tries > 0
+              ? '<button class="btn sm" data-action="practice-answer" data-key="' + key + '">' + (st.shown ? "Hide answer" : "Show answer") + "</button>"
+              : '<span class="tiny muted">The model answer unlocks after you check your own attempt.</span>') +
             (st.tries > 1 ? '<span class="tiny muted mono">attempt ' + st.tries + "</span>" : "") +
           "</div>" +
 
@@ -2620,7 +2632,7 @@
               }).join("") + "</div>"
             : "") +
 
-          (st.shown
+          (st.shown && st.tries > 0
             ? '<div style="margin-top:12px">' +
               (ex.solution ? '<div class="ex-solution"><span class="fl">Model answer</span><pre>' + esc(ex.solution) + "</pre></div>" : "") +
               '<div class="why">' + esc(ex.answer).split("\n\n").map(function (p) { return "<p>" + p + "</p>"; }).join("") + "</div>" +
@@ -2645,11 +2657,12 @@
     var st = pstate(key);
     var q = sc.mcq, w = sc.written;
     var picked = typeof st.pick === "number";
+    var attempted = !!(st.checked && !st.checked.empty);
     var canReview = st.checked && !st.checked.empty && !st.checked.none && tutor.ready && !tutor.denied;
 
     return '<div class="card scn" style="margin-bottom:18px">' +
       '<div class="row" style="justify-content:space-between;margin-bottom:8px">' +
-        '<h3 style="font-size:15px">Practice scenario</h3><span class="pill accent">Does not affect your stars</span></div>' +
+        '<h3>Practice scenario</h3><span class="pill accent">Does not affect your stars</span></div>' +
       '<p class="scn-setup">' + esc(sc.setup) + "</p>" +
 
       '<p class="ex-prompt" style="margin-top:14px"><b>Step 1.</b> ' + esc(q.q) + "</p>" +
@@ -2662,18 +2675,24 @@
       (picked ? '<div class="why ' + (st.pick === q.a ? "right" : "wrong") + '"><b>' + (st.pick === q.a ? "Right." : "Not quite.") + "</b> " + esc(q.why) + "</div>" : "") +
 
       '<p class="ex-prompt" style="margin-top:16px"><b>Step 2.</b> ' + esc(w.prompt) + "</p>" +
-      '<textarea class="ex-input" data-practice="' + esc(key) + '" rows="5" placeholder="Write your answer here before you check it" spellcheck="true">' +
+      '<textarea class="ex-input" data-practice="' + esc(key) + '" rows="5" placeholder="Write your answer the way you would say it in an interview. Check it when you are done." spellcheck="true">' +
         esc(st.text) + "</textarea>" +
       '<div class="row" style="margin-top:10px">' +
         '<button class="btn sm primary" data-action="scn-check" data-key="' + esc(key) + '">' + (st.checked ? "Check again" : "Check my answer") + "</button>" +
         (canReview ? '<button class="btn sm" data-action="scn-review" data-key="' + esc(key) + '"' + (st.reviewBusy ? " disabled" : "") + ">" +
           (st.reviewBusy ? "Reviewing..." : st.review ? "Review again" : "Get a written review") + "</button>" : "") +
-        '<button class="btn sm" data-action="scn-show" data-key="' + esc(key) + '">' + (st.shown ? "Hide the stronger answer" : "Show the stronger answer") + "</button>" +
+        ((st.hintList || []).length < 3
+          ? '<button class="btn sm" data-action="scn-hint" data-key="' + esc(key) + '"' + (st.hintBusy ? " disabled" : "") + ">" +
+            (st.hintBusy ? "Thinking..." : (st.hintList || []).length ? "Another hint" : "Get a hint") + "</button>" : "") +
+        (attempted
+          ? '<button class="btn sm" data-action="scn-show" data-key="' + esc(key) + '">' + (st.shown ? "Hide the stronger answer" : "Show the stronger answer") + "</button>"
+          : '<span class="tiny muted">The stronger answer unlocks after you check your own.</span>') +
       "</div>" +
+      (st.hintList || []).map(function (h, j) { return '<div class="hint" style="margin-top:10px"><b>Hint ' + (j + 1) + "</b> " + esc(h) + "</div>"; }).join("") +
       (st.checked ? checkPanel(st.checked) : "") +
       (st.review ? '<div class="hint" style="margin-top:11px"><b>Review</b> ' + esc(st.review) + "</div>" : "") +
       (st.reviewErr ? '<div class="check-panel warn" style="margin-top:11px"><b>No review this time.</b><p class="tiny" style="margin-top:4px">' + esc(st.reviewErr) + "</p></div>" : "") +
-      (st.shown ? '<div style="margin-top:12px"><div class="ex-solution"><span class="fl">A stronger answer</span>' +
+      (st.shown && attempted ? '<div style="margin-top:12px"><div class="ex-solution"><span class="fl">A stronger answer</span>' +
         '<div class="why" style="margin-top:6px"><p>' + esc(w.improved) + "</p></div></div>" +
         '<p class="scn-lesson">' + esc(w.lesson) + "</p></div>" : "") +
     "</div>";
@@ -2690,12 +2709,73 @@
       paras(md) + "</div>";
   }
 
-  function deliverableBlock(s) {
-    if (!s.project) return "";
-    return '<div class="card" style="margin-bottom:18px"><div class="eyebrow">Practical deliverable</div>' +
-      '<h3 style="font-size:15px;margin:4px 0 6px">' + esc(s.project.title) + "</h3>" +
-      '<p class="tiny muted">' + esc(s.project.brief) + "</p></div>";
+  /* ---------------- practical project ----------------
+     The student writes the project here and the AI reviews it against what a hiring manager would accept.
+     Nothing is ticked by the student. A score of PRJ.PASS or more accepts it; below that the review says what to fix. */
+  var PRJ = window.CP_PROJECT;
+
+  function projDraft(skillId) {
+    if (!state.projDraft[skillId]) state.projDraft[skillId] = { text: null, busy: false, err: "", hints: [], hintBusy: false };
+    return state.projDraft[skillId];
   }
+
+  function projectReview(sub) {
+    return '<div class="check-panel ' + (sub.accepted ? "ok" : "warn") + '" style="margin-top:12px">' +
+      '<div class="row" style="justify-content:space-between;gap:10px">' +
+        "<b>" + (sub.accepted ? "Accepted" : "Not accepted yet") + "</b>" +
+        '<span class="mono tiny">Score ' + sub.score + " / 100 &middot; needs " + PRJ.PASS + "</span></div>" +
+      '<p class="proj-sum">' + esc(sub.summary) + "</p>" +
+      '<ul class="crits">' + (sub.criteria || []).map(function (c) {
+        return '<li class="crit ' + (c.ok ? "met" : "unmet") + '"><span class="mark">' + (c.ok ? "&#10003;" : "&#8213;") +
+          "</span><span><b>" + esc(c.label) + ".</b> " + esc(c.note) + "</span></li>";
+      }).join("") + "</ul>" +
+      ((sub.next || []).length
+        ? '<p class="tiny check-note"><b>' + (sub.accepted ? "To make it stronger:" : "Fix first:") + "</b> " + (sub.next || []).map(esc).join(" ") + "</p>"
+        : "") +
+    "</div>";
+  }
+
+  function projectBlock(s) {
+    if (!s.project) return "";
+    var u = actor(), p = prog(u, s.id), d = projDraft(s.id), sub = p.projectSub;
+    var text = d.text != null ? d.text : (sub && !p.project ? sub.text : "");
+    var n = PRJ.words(text);
+    var canAsk = tutor.ready && !tutor.denied;
+    var head = '<div class="proj-head"><div class="eyebrow">Practical project</div>' +
+      '<h3>' + esc(s.project.title) + "</h3>" +
+      '<p class="muted proj-brief">' + esc(s.project.brief) + "</p></div>";
+
+    if (p.project) {
+      return '<div class="card proj" data-proj-card="' + esc(s.id) + '">' + head +
+        '<div class="row" style="margin-top:12px"><span class="pill ok">Accepted' + (sub ? " &middot; score " + sub.score : "") + "</span>" +
+        '<span class="tiny muted">Counts toward the fifth star.</span></div>' +
+        (sub && sub.summary ? projectReview(sub) : "") +
+        (sub && sub.text ? '<details class="proj-sent"><summary>Your submission</summary><pre class="proj-pre">' + esc(sub.text) + "</pre></details>" : "") +
+      "</div>";
+    }
+
+    return '<div class="card proj" data-proj-card="' + esc(s.id) + '">' + head +
+      '<div class="proj-std"><b>What reviewers look for</b><ul>' + PRJ.STANDARD.map(function (x) { return "<li>" + esc(x) + "</li>"; }).join("") + "</ul></div>" +
+      '<textarea class="ex-input proj-input" data-proj="' + esc(s.id) + '" rows="12" spellcheck="true" ' +
+        'placeholder="Write your project here, in your own words. Aim for a clear, specific answer a reviewer could use in about two minutes."' +
+        (state.preview ? " disabled" : "") + ">" + esc(text) + "</textarea>" +
+      '<div class="row" style="margin-top:10px;justify-content:space-between">' +
+        '<span class="tiny muted mono" data-proj-count>' + n + " words &middot; at least " + PRJ.MIN_WORDS + " to submit</span>" +
+        '<div class="row" style="gap:8px">' +
+          (canAsk ? '<button class="btn sm" data-action="project-hint" data-skill="' + esc(s.id) + '"' + (d.hintBusy || d.busy || state.preview ? " disabled" : "") + ">" +
+            (d.hintBusy ? "Thinking..." : d.hints.length ? "Another hint" : "Get a hint") + "</button>" : "") +
+          '<button class="btn sm primary" data-action="project-submit" data-skill="' + esc(s.id) + '"' + (d.busy || state.preview ? " disabled" : "") + ">" +
+            (d.busy ? "Reviewing..." : sub ? "Submit again" : "Submit for review") + "</button>" +
+        "</div></div>" +
+      (state.preview ? '<p class="tiny muted" style="margin-top:8px">Preview only. Students write and submit here; nothing is recorded in preview.</p>' : "") +
+      (!canAsk && !state.preview ? '<p class="tiny muted" style="margin-top:8px">The reviewer is not available on this deployment, so projects cannot be submitted right now.</p>' : "") +
+      d.hints.map(function (h, j) { return '<div class="hint" style="margin-top:10px"><b>Hint ' + (j + 1) + "</b> " + esc(h) + "</div>"; }).join("") +
+      (d.err ? '<div class="check-panel warn" style="margin-top:12px"><b>Not submitted.</b><p class="tiny" style="margin-top:4px">' + esc(d.err) + "</p></div>" : "") +
+      (sub && sub.summary ? projectReview(sub) : "") +
+    "</div>";
+  }
+
+  function deliverableBlock(s) { return projectBlock(s); }
 
   var SCN_RULES =
     "You are reviewing a student's written answer to a practice scenario in a course on CareerPath. The role is given with the scenario. " +
@@ -2707,13 +2787,13 @@
   function quizBlock(s) {
     var q = state.quiz;
     if (!q || q.skillId !== s.id) {
-      return '<div class="card"><h3 style="font-size:15px;margin-bottom:4px">Module quiz</h3>' +
+      return '<div class="card"><h3 style="margin-bottom:4px">Module quiz</h3>' +
         '<p class="tiny muted" style="margin-bottom:12px">' + s.quiz.length + " questions. Checks the module before you attempt the graded assessment.</p>" +
         '<button class="btn" data-action="start-quiz" data-skill="' + s.id + '">Start module quiz</button></div>';
     }
     if (q.done) {
       var right = q.answers.filter(function (a, i) { return a === s.quiz[i].a; }).length;
-      return '<div class="card"><h3 style="font-size:15px;margin-bottom:10px">Module quiz &mdash; ' + right + " of " + s.quiz.length + " correct</h3>" +
+      return '<div class="card"><h3 style="margin-bottom:10px">Module quiz &mdash; ' + right + " of " + s.quiz.length + " correct</h3>" +
         '<div class="stack" style="gap:14px">' +
           s.quiz.map(function (item, i) {
             return "<div><p style=\"font-weight:500;margin-bottom:8px\">" + (i + 1) + ". " + esc(item.q) + "</p>" +
@@ -2777,7 +2857,7 @@
       '<div class="card" style="margin-bottom:18px;text-align:center">' +
         '<div style="font-size:30px;line-height:1">' + starHTML(res.award.stars, "30px") + "</div>" +
         '<p style="margin-top:8px;font-weight:500">' + res.award.label + "</p>" +
-        (res.award.capped ? '<p class="tiny" style="color:var(--warn);margin-top:6px">Scored at mastery level. The fifth star unlocks when the practical project is submitted.</p>' : "") +
+        (res.award.capped ? '<p class="tiny" style="color:var(--warn);margin-top:6px">Scored at mastery level. The fifth star unlocks when your practical project is accepted.</p>' : "") +
       "</div>" +
 
       '<div class="summary-row">' +
@@ -2788,7 +2868,7 @@
       "</div>" +
 
       '<div class="stack"><div class="card">' +
-          '<h3 style="font-size:15px;margin-bottom:12px">Performance by difficulty</h3>' +
+          '<h3 style="margin-bottom:12px">Performance by difficulty</h3>' +
           '<div class="scroll-x"><table class="grid"><thead><tr><th>Level</th><th>Correct</th><th>Result</th></tr></thead><tbody>' +
             Object.keys(byLevel).sort().map(function (k) {
               var b = byLevel[k];
@@ -2797,7 +2877,7 @@
                 "</td></tr>";
             }).join("") + "</tbody></table></div></div>" +
 
-        (weak.length ? '<div class="card"><h3 style="font-size:15px;margin-bottom:4px">Review these ' + weak.length + "</h3>" +
+        (weak.length ? '<div class="card"><h3 style="margin-bottom:4px">Review these ' + weak.length + "</h3>" +
           '<p class="tiny muted" style="margin-bottom:13px">Each one you missed, with the reasoning.</p>' +
           '<div class="stack" style="gap:16px">' +
             s.assessment.map(function (q, i) {
@@ -2810,7 +2890,7 @@
                 '<div class="row" style="margin-top:9px"><button class="tutor-inline" data-action="tutor-explain" data-i="' + i + '">Ask the assistant why</button></div>' +
                 "</div>";
             }).join("") + "</div></div>"
-          : '<div class="card"><h3 style="font-size:15px">Every question correct.</h3><p class="tiny muted" style="margin-top:5px">Nothing to review on this attempt.</p></div>') +
+          : '<div class="card"><h3>Every question correct.</h3><p class="tiny muted" style="margin-top:5px">Nothing to review on this attempt.</p></div>') +
       "</div>" +
 
       '<div class="row" style="margin-top:20px">' +
@@ -2932,7 +3012,7 @@
           summaryCell("Drafts pending", String(allDrafts().length)) +
           summaryCell("Students", String(state.users.filter(function (u) { return u.role === "student"; }).length)) +
         "</div>" +
-        '<div class="card"><h3 style="font-size:15px;margin-bottom:8px">What this account can do</h3>' +
+        '<div class="card"><h3 style="margin-bottom:8px">What this account can do</h3>' +
         '<p class="tiny muted">Edit lessons and publish them directly. Propose question changes as drafts, which require a publish step and retain the previous version. Preview any content exactly as a student sees it. This account has no roadmap, takes no assessments, and does not appear on any leaderboard.</p></div>';
     }
     var r = role(user.roleId);
@@ -2950,7 +3030,7 @@
         ? '<div class="card" style="margin-bottom:14px"><span class="fl">Skills proven</span><div class="row" style="gap:8px;margin-top:6px">' +
           proven.map(function (sk) { return '<span class="chip-ok">&#10003; ' + esc(sk.name) + "</span>"; }).join("") + "</div></div>"
         : "") +
-      '<div class="card"><h3 style="font-size:15px;margin-bottom:8px">Target role</h3>' +
+      '<div class="card"><h3 style="margin-bottom:8px">Target role</h3>' +
         '<p class="tiny muted" style="margin-bottom:12px">Changing role gives you a different roadmap. Stars stay attached to the role they were earned in, because the assessments differ.</p>' +
         '<button class="btn" data-action="nav" data-nav="roles">Change target role</button></div>' +
       onboardingCard(user) +
@@ -2965,7 +3045,7 @@
 
   /* Real accounts only: edit the details the leaderboards depend on, and choose whether to appear on them. */
   function accountCard(user) {
-    return '<div class="card" style="margin-top:14px"><h3 style="font-size:15px;margin-bottom:8px">Your details</h3>' +
+    return '<div class="card" style="margin-top:14px"><h3 style="margin-bottom:8px">Your details</h3>' +
       '<div class="stack acct-stack" style="gap:12px">' +
         '<div class="field"><label for="pf-name">Full name</label><input id="pf-name" maxlength="80" value="' + esc(user.name) + '"></div>' +
         '<div class="field"><label>Email</label><input value="' + esc(user.email) + '" disabled></div>' +
@@ -2984,7 +3064,7 @@
 
   function deleteCard() {
     var ask = state.delAsk;
-    return '<div class="card" style="margin-top:14px"><h3 style="font-size:15px;margin-bottom:8px">Delete my account</h3>' +
+    return '<div class="card" style="margin-top:14px"><h3 style="margin-bottom:8px">Delete my account</h3>' +
       '<p class="tiny muted" style="margin-bottom:12px">This removes your sign-in, profile, progress, stars, points and exam results from CareerPath. It cannot be undone.</p>' +
       (ask
         ? '<p class="err" style="margin-bottom:10px" role="alert">Are you sure? Everything saved for this account will be deleted.</p>' +
@@ -2997,7 +3077,7 @@
 
   function onboardingCard(user) {
     if (!user.resume && !user.placement) {
-      return '<div class="card" style="margin-top:14px"><h3 style="font-size:15px;margin-bottom:8px">Resume and placement</h3>' +
+      return '<div class="card" style="margin-top:14px"><h3 style="margin-bottom:8px">Resume and placement</h3>' +
         '<p class="tiny muted" style="margin-bottom:12px">You have not uploaded a resume. Upload one, then either pick your target role or answer ' +
         "five short questions and get a match score for each roadmap.</p>" +
         '<button class="btn" data-action="onb-open">Upload a resume</button></div>';
@@ -3005,7 +3085,7 @@
     var rr = user.resume, pl = user.placement;
     return '<div class="card" style="margin-top:14px">' +
       '<div class="row" style="justify-content:space-between;margin-bottom:10px">' +
-        '<h3 style="font-size:15px">Resume and placement</h3>' +
+        '<h3>Resume and placement</h3>' +
         '<button class="btn sm ghost" data-action="onb-open">Redo</button></div>' +
       (rr
         ? '<p class="tiny muted" style="margin-bottom:10px"><b style="color:var(--ink)">' + esc(rr.name) + "</b> read on " +
@@ -3114,7 +3194,7 @@
     var f = q ? { q: q.q, opts: q.opts, a: q.a, lvl: q.lvl, why: q.why }
               : { q: "", opts: ["", "", "", ""], a: 0, lvl: 1, why: "" };
     return '<div style="border:1px solid var(--accent);border-radius:9px;padding:15px;margin-bottom:12px">' +
-      '<h3 style="font-size:14px;margin-bottom:4px">' + (q ? "Edit question " + esc(q.qid) + " (currently v" + q.v + ")" : "New question") + "</h3>" +
+      '<h3 style="margin-bottom:4px">' + (q ? "Edit question " + esc(q.qid) + " (currently v" + q.v + ")" : "New question") + "</h3>" +
       '<p class="tiny muted" style="margin-bottom:13px">' + (q
         ? "Saving creates a draft. The live question stays at v" + q.v + " until the draft is published."
         : "Saving creates a draft. The question goes live once the draft is published.") + "</p>" +
@@ -3201,7 +3281,7 @@
 
     return '<div class="card">' +
       '<div class="row" style="justify-content:space-between;margin-bottom:12px;gap:12px">' +
-        "<div><h3 style=\"font-size:15px\">" + esc(s.name) + "</h3>" +
+        "<div><h3>" + esc(s.name) + "</h3>" +
           '<p class="ver" style="margin-top:3px">' + esc(r.name) + " &middot; " + esc(d.qid) +
             (q ? " &middot; live v" + q.v + " &rarr; v" + (q.v + 1) : " &middot; new question") + " &middot; drafted " + esc(d.created) + "</p></div>" +
         '<div class="row" style="gap:6px;flex-wrap:nowrap">' +
@@ -3331,7 +3411,7 @@
 
         '<div class="card">' +
           '<div class="row" style="justify-content:space-between;margin-bottom:12px;gap:10px">' +
-            '<h3 style="font-size:15px">Roadmap progress</h3>' +
+            '<h3>Roadmap progress</h3>' +
             '<span class="pill">' + lessonsRead + " / " + lessonsTotal + " modules read</span></div>" +
           '<div class="scroll-x"><table class="grid">' +
             "<thead><tr><th>Skill</th><th>Status</th><th>Stars</th><th>Best</th><th>Attempts</th><th>Modules read</th><th>Project</th></tr></thead><tbody>" +
@@ -3344,7 +3424,7 @@
                 '<td class="mono">' + (x.p.attempts ? x.p.best + "%" : "&mdash;") + "</td>" +
                 '<td class="mono">' + (x.p.attempts || "&mdash;") + "</td>" +
                 '<td class="mono">' + x.p.lessonsDone.length + " / " + x.s.lessons.length + "</td>" +
-                "<td>" + (x.p.project ? '<span class="pill ok">Submitted</span>' : '<span class="tiny muted">&mdash;</span>') + "</td></tr>";
+                "<td>" + (x.p.project ? '<span class="pill ok">Accepted' + (x.p.projectSub ? " &middot; " + x.p.projectSub.score : "") + "</span>" : x.p.projectSub ? '<span class="pill warn">Revising &middot; ' + x.p.projectSub.score + "</span>" : '<span class="tiny muted">&mdash;</span>') + "</td></tr>";
             }).join("") +
           "</tbody></table></div>" +
           (studying.length
@@ -3354,7 +3434,7 @@
         "</div>" +
 
         '<div class="card">' +
-          '<h3 style="font-size:15px;margin-bottom:12px">Assessment history</h3>' +
+          '<h3 style="margin-bottom:12px">Assessment history</h3>' +
           (hist.length === 0
             ? '<p class="tiny muted">No scored attempts yet.</p>'
             : '<div class="scroll-x"><table class="grid">' +
@@ -3368,7 +3448,7 @@
         "</div>" +
 
         '<div class="card">' +
-          '<h3 style="font-size:15px;margin-bottom:12px">Certificates issued</h3>' +
+          '<h3 style="margin-bottom:12px">Certificates issued</h3>' +
           (certsFor(u).length === 0
             ? '<p class="tiny muted">None yet.' + (role(u.roleId) && role(u.roleId).tracks ? " A certificate is issued for a main module after its module exam." : " A certificate is issued at " + STAR + STAR + STAR + " or above.") + "</p>"
             : '<div class="scroll-x"><table class="grid">' +
@@ -3419,7 +3499,7 @@
       (state.adminCh === "new" ? chEditor(null) : "") +
       '<div class="stack">' + byRole.map(function (x) {
         return '<div class="card"><div class="row" style="justify-content:space-between;margin-bottom:10px">' +
-          '<h3 style="font-size:15px">' + esc(x.r.name) + "</h3>" +
+          '<h3>' + esc(x.r.name) + "</h3>" +
           '<span class="tiny muted">' + x.list.length + " challenge" + (x.list.length === 1 ? "" : "s") + "</span></div>" +
           (x.list.length === 0 ? '<p class="tiny muted">Nothing written for this roadmap yet.</p>' :
             '<div class="stack" style="gap:10px">' + x.list.map(function (c) {
@@ -3464,7 +3544,7 @@
   function chEditor(c) {
     var isNew = !c;
     return '<div class="card" style="border-color:var(--accent);margin-bottom:12px">' +
-      '<h3 style="font-size:15px;margin-bottom:12px">' + (isNew ? "New challenge" : "Edit challenge") + "</h3>" +
+      '<h3 style="margin-bottom:12px">' + (isNew ? "New challenge" : "Edit challenge") + "</h3>" +
       '<div class="stack" style="gap:11px">' +
         '<div class="auth-grid">' +
           '<div class="field"><label for="ac-role">Roadmap</label><select id="ac-role"' + (isNew ? "" : " disabled") + ">" +
@@ -3744,6 +3824,7 @@
       state.userId = null; state.authTab = "login"; state.exam = null; state.mexam = null; state.mresult = null; state.quiz = null; state.googlePending = null;
       state.preview = null; state.adminSkill = null; state.adminEdit = null;
       state.onb = null; state.ch = null; state.adminCh = null; state.adminChReview = null;
+      state.practiceState = {}; state.projDraft = {};   // drafts belong to the person who wrote them
       live.feed = []; live.chFeed = []; live.flash = {};
       stopLive();
       tutor.turns = []; tutor.quote = ""; tutor.open = false;   // don't leak one student's chat to the next
@@ -4054,8 +4135,31 @@
 
     "scn-show": function (el) {
       var st = pstate(el.dataset.key);
+      if (!st.checked || st.checked.empty) return;     // the stronger answer is for after an honest attempt
       st.shown = !st.shown;
       render();
+    },
+
+    "scn-hint": function (el) {
+      var key = el.dataset.key, st = pstate(key);
+      if (st.hintBusy) return;
+      var parts = key.split("|L");
+      var s = skill(actor().roleId, parts[0]);
+      var lesson = s.lessons[+parts[1]], sc = lesson.scenario;
+      var box = document.querySelector('[data-practice="' + key + '"]');
+      if (box) st.text = box.value;
+      st.hintList = st.hintList || [];
+      var fallback = [
+        "Start from the decision the question asks for, then give the reason. Re-read the lesson \"" + lesson.title + "\" for the idea this question tests.",
+        "Make it specific. A number, a named person or team, or a trade-off you are accepting is what separates a strong answer from a generic one.",
+        "Write your own attempt now, even a rough one, then check it. The check shows how many of the " + sc.written.points.length + " key ideas you covered."
+      ];
+      if (!tutor.ready || tutor.denied) { st.hintList.push(fallback[Math.min(st.hintList.length, 2)]); return render(); }
+      st.hintBusy = true; render();
+      askModel({ rules: PRJ.hintRules, signal: null, onText: null, convo: [{ role: "user", content:
+        PRJ.hintPrompt((role(actor().roleId) || {}).name, lesson.title, sc.setup + "\n" + sc.written.prompt, st.text, st.hintList) }] })
+        .then(function (res) { st.hintBusy = false; st.hintList.push(String(res.text || "").replace(/\u2014/g, "-").trim().slice(0, 500) || fallback[Math.min(st.hintList.length, 2)]); render(); })
+        .catch(function () { st.hintBusy = false; st.hintList.push(fallback[Math.min(st.hintList.length, 2)]); render(); });
     },
 
     "scn-review": function (el) {
@@ -4108,14 +4212,60 @@
       finishExam(subject, s, e);
     },
 
-    "submit-project": function (el) {
-      var u = actor();
-      var p = prog(u, el.dataset.skill);
-      if (p.project) return;
-      p.project = true;
-      if (!state.preview) u.points += 150;
-      if (p.best >= 95 && p.stars < 5) { if (!state.preview) u.points += 100; p.stars = 5; }
+    "project-submit": function (el) {
+      var u = actor(), sid = el.dataset.skill, s = skill(u.roleId, sid), p = prog(u, sid), d = projDraft(sid);
+      var box = document.querySelector('[data-proj="' + sid + '"]');
+      if (box) d.text = box.value;
+      if (d.busy || p.project || state.preview) return;
+      var n = PRJ.words(d.text);
+      if (n < PRJ.MIN_WORDS) {
+        d.err = "Write at least " + PRJ.MIN_WORDS + " words before submitting. You have " + n + ". The reviewer needs enough to judge.";
+        return render();
+      }
+      if (!tutor.ready || tutor.denied) {
+        d.err = "The reviewer is not available right now, so the project was not submitted. Your text is still here; try again in a moment.";
+        return render();
+      }
+      d.busy = true; d.err = "";
       render();
+      var sent = d.text;
+      var convo = [{ role: "user", content: PRJ.prompt((role(u.roleId) || {}).name, s.name, s.project, sent) }];
+      askModel({ rules: PRJ.rules(todayLong()), convo: convo, signal: null, onText: null })
+        .then(function (res) {
+          d.busy = false;
+          var r = PRJ.read(res.text);
+          if (!r) {
+            d.err = "The review came back in a form the page could not read, so nothing was recorded. Try submitting again.";
+            return render();
+          }
+          var accepted = r.score >= PRJ.PASS;
+          p.projectSub = { score: r.score, accepted: accepted, text: sent.slice(0, PRJ.KEEP_CHARS), summary: r.summary,
+            criteria: r.criteria, next: r.next, when: today(), tries: ((p.projectSub && p.projectSub.tries) || 0) + 1 };
+          if (accepted && !p.project) {
+            p.project = true;
+            u.points += 150;
+            if (p.best >= 95 && p.stars < 5) { u.points += 100; p.stars = 5; }
+          }
+          render();
+        })
+        .catch(function (e) {
+          d.busy = false;
+          d.err = tutorErrCopy((e && e.code) || "upstream_error", e && e.message) + " Your text is still here.";
+          render();
+        });
+    },
+
+    "project-hint": function (el) {
+      var u = actor(), sid = el.dataset.skill, s = skill(u.roleId, sid), d = projDraft(sid);
+      var box = document.querySelector('[data-proj="' + sid + '"]');
+      if (box) d.text = box.value;
+      if (d.hintBusy || !tutor.ready || tutor.denied) return;
+      d.hintBusy = true;
+      render();
+      askModel({ rules: PRJ.hintRules, signal: null, onText: null, convo: [{ role: "user", content:
+        PRJ.hintPrompt((role(u.roleId) || {}).name, s.name + " project: " + s.project.title, s.project.brief, d.text, d.hints) }] })
+        .then(function (res) { d.hintBusy = false; d.hints.push(String(res.text || "").replace(/—/g, "-").trim().slice(0, 500)); render(); })
+        .catch(function (e) { d.hintBusy = false; d.err = tutorErrCopy((e && e.code) || "upstream_error", e && e.message); render(); });
     },
 
     "open-cert": function (el) { go("cert", { skill: el.dataset.skill }); },
@@ -4458,6 +4608,11 @@
   document.addEventListener("input", function (ev) {
     var t = ev.target;
     if (t && t.dataset && t.dataset.practice) { pstate(t.dataset.practice).text = t.value; }
+    if (t && t.dataset && t.dataset.proj) {
+      projDraft(t.dataset.proj).text = t.value;
+      var c = document.querySelector("[data-proj-count]");
+      if (c) c.innerHTML = PRJ.words(t.value) + " words &middot; at least " + PRJ.MIN_WORDS + " to submit";
+    }
   });
 
   document.addEventListener("input", function (ev) {
