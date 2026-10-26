@@ -13,3 +13,4 @@ shot-*.png
 
 # visual regression output
 shots/
+ai-eval-out/

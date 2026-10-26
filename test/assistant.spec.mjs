@@ -102,9 +102,14 @@ await step('asking sends role and module context', async () => {
   if (!Array.isArray(turns)) throw new Error('input should be turns');
   if (turns[0].role !== 'user') throw new Error('first turn must be user');
   const rules = turns[0].content;
-  for (const needle of ['Product Manager', 'Product Management Foundations', 'What is a Product', 'Never hand over the answer']) {
+  const year = String(new Date().getFullYear());
+  for (const needle of ['Product Manager', 'Product Management Foundations', 'What is a Product', 'Never hand over the answer',
+    "Today's date is", year, 'How CareerPath works', '75% = 3 (job-ready)', 'careerpath531@gmail.com', 'Roadmap: Product Manager', 'sub-modules job-ready',
+    'Main module 1', 'Study planning', 'interview questions']) {
     if (!rules.includes(needle)) throw new Error('context missing: ' + needle);
   }
+  if (rules.includes('\u2014')) throw new Error('instructions contain an em dash');
+  if (rules.length > 29000) throw new Error('instructions too long for the server cap: ' + rules.length);
   if (turns[turns.length - 1].content !== 'What is a funnel?') throw new Error('question not last turn');
   if (calls[0].opts.cache !== false) throw new Error('chat must not be cached');
 });

@@ -2588,7 +2588,7 @@
   }
 
   var SCN_RULES =
-    "You are reviewing a student's written answer to a practice scenario in a Product Management course on CareerPath. " +
+    "You are reviewing a student's written answer to a practice scenario in a course on CareerPath. The role is given with the scenario. " +
     "The score is only a coverage check and is already fixed. Your job is to explain the answer's quality so the student can improve it.\n\n" +
     "Write three or four sentences. Say what the answer did well, name the single most important thing missing or weakest, " +
     "and give one concrete suggestion. Plain language, no headings, no bullet lists, no em dashes. " +
@@ -2856,7 +2856,7 @@
   /* Real accounts only: edit the details the leaderboards depend on, and choose whether to appear on them. */
   function accountCard(user) {
     return '<div class="card" style="margin-top:14px"><h3 style="font-size:15px;margin-bottom:8px">Your details</h3>' +
-      '<div class="stack" style="gap:12px;max-width:420px">' +
+      '<div class="stack acct-stack" style="gap:12px">' +
         '<div class="field"><label for="pf-name">Full name</label><input id="pf-name" maxlength="80" value="' + esc(user.name) + '"></div>' +
         '<div class="field"><label>Email</label><input value="' + esc(user.email) + '" disabled></div>' +
         '<div class="auth-grid">' +
@@ -3664,7 +3664,9 @@
       var root = document.documentElement;
       var cur = root.getAttribute("data-theme");
       var systemDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-      root.setAttribute("data-theme", cur ? (cur === "dark" ? "light" : "dark") : (systemDark ? "light" : "dark"));
+      var next = cur ? (cur === "dark" ? "light" : "dark") : (systemDark ? "light" : "dark");
+      root.setAttribute("data-theme", next);
+      try { localStorage.setItem("cp-theme", next); } catch (e) {}   // the website pages read this too
       render();
     },
 
@@ -3957,6 +3959,7 @@
           return (k + 1) + ". " + c.label + " [" + (c.ok ? "found" : "not found") + "]";
         }).join("\n") +
         "\n\nThe student's answer:\n" + String(st.text || "").slice(0, 3000) }];
+      convo[0].content = "Target role: " + ((role(actor().roleId) || {}).name || "not set") + "\n" + convo[0].content;
       askModel({ rules: SCN_RULES, convo: convo, signal: null, onText: null })
         .then(function (res) { st.review = res.text; st.reviewBusy = false; render(); })
         .catch(function (e) {
@@ -4415,52 +4418,55 @@
   }
   function isDocked() { return tutorVisible() && tutor.docked && DOCK_MQ.matches; }
 
-  var TUTOR_RULES =
-    "You are the CareerPath study assistant. CareerPath is a platform where students learn the skills " +
-    "for a specific target job role and prove them through assessment.\n\n" +
-    "How to answer:\n" +
-    "- Teach for the student's target role. The same skill means different things in different roles: " +
-    "SQL for a Product Manager is funnels, retention and experiment readouts, while SQL for a Financial " +
-    "Analyst is ledger periods and reconciliation. Answer through their role's lens.\n" +
-    "- Be short. Two or three sentences unless they ask for more. Plain language. Explain a term the first " +
-    "time you use it.\n" +
-    "- Use the module text below when it covers the question. If it does not, say so in a few words and " +
-    "answer from general knowledge.\n" +
-    "- If they paste or select text and ask about it, explain that specific thing rather than the topic in general.\n" +
-    "- Never write an em dash.\n\n" +
-    "Limits:\n" +
-    "- Only help with the skill they are studying, the course material, or how to use CareerPath. If asked " +
-    "about anything else, say that in one line and offer to help with the module instead.\n" +
-    "- Never hand over the answer to a scored assessment question. If a student asks what to pick, teach the " +
-    "idea being tested and let them decide.\n\n" +
-    "Current context:\n";
+  var TUTOR = window.CP_TUTOR;   // standing instructions and context wording live in tutor.js
+
+  function todayLong() {
+    return new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+  }
+
+  /* The student's own roadmap and progress, so "what should I do next" gets a real answer. */
+  function roadmapSummary(u, r) {
+    if (!r) return "";
+    var lines = [];
+    var done = r.skills.filter(function (x) { return prog(u, x.id).stars >= JOB_READY; }).length;
+    lines.push("Roadmap: " + r.name + ", " + done + " of " + r.skills.length + " sub-modules job-ready (3 stars or more).");
+    var list = function (arr) {
+      return arr.map(function (x) {
+        var st = prog(u, x.id).stars;
+        return x.name + " (" + (st ? st + "\u2605" : "not started") + ")";
+      }).join("; ");
+    };
+    if (r.tracks && r.tracks.length) {
+      r.tracks.forEach(function (t, i) {
+        var ts = trackStatus(u, r, t);
+        lines.push("Main module " + (i + 1) + ", " + t.name + (t.cert ? (ts.certified ? " [certificate earned]" : ts.eligible ? " [ready for the module exam]" : "") : "") +
+          ": " + list(skillsOfTrack(r, t, false)));
+      });
+    } else {
+      lines.push("Sub-modules: " + list(r.skills));
+    }
+    return lines.join("\n").slice(0, 5000);
+  }
 
   function tutorContext() {
     var u = actor();
-    if (!u) return "The student has not signed in.";
-    var out = [];
+    if (!u) return TUTOR.context({ signedIn: false });
     var r = role(u.roleId);
-    if (r) out.push("Target role: " + r.name + " (" + r.tagline + ")");
     var n = state.route.name;
     var s = state.route.skill ? skill(u.roleId, state.route.skill) : null;
-
+    var info = { signedIn: true, roleName: r && r.name, roleTagline: r && r.tagline, roadmap: r ? roadmapSummary(u, r) : "",
+                 onRoadmap: n === "roadmap" || n === "roles" };
     if (s) {
-      out.push("Skill: " + s.name);
-      out.push("This skill's focus for this role: " + s.lens);
       var p = prog(u, s.id);
-      out.push("Their level so far: " + (p.stars ? p.stars + " of 5 stars, " + LEVELS[p.stars].label : "not yet assessed"));
+      info.skillName = s.name; info.lens = s.lens;
+      info.level = p.stars ? p.stars + " of 5 stars, " + LEVELS[p.stars].label : "not yet assessed";
       if (n === "learn") {
         var l = s.lessons[Math.min(state.lessonIdx, s.lessons.length - 1)];
-        out.push("Module they are reading: " + l.title);
-        out.push("Module text:\n" + l.body.slice(0, 9000));
+        info.lessonTitle = l.title; info.lessonBody = l.body;
       }
-      if (n === "result" && state.result) {
-        out.push("They just scored " + state.result.pct + "% and were awarded " + state.result.award.label + ".");
-      }
-    } else if (n === "roadmap" || n === "roles") {
-      out.push("They are looking at their roadmap, not a specific skill.");
+      if (n === "result" && state.result) info.result = { pct: state.result.pct, label: state.result.award.label };
     }
-    return out.join("\n");
+    return TUTOR.context(info);
   }
 
   function tutorBlocked() { return ["assess", "challenge", "mexam"].indexOf(state.route.name) > -1; }
@@ -4724,7 +4730,7 @@
 
     tutor.ctl = new AbortController();
     askModel({
-      rules: TUTOR_RULES + tutorContext(),
+      rules: TUTOR.rules(todayLong()) + tutorContext(),
       convo: convo,
       signal: tutor.ctl.signal,
       onText: function (u) { slot.content = u.text; tutorLog(); }

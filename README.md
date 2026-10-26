@@ -279,3 +279,19 @@ viewer's machine, and the test suite asserts the page makes no network request w
 Only the conclusion is kept (the skills found). When the model writes the ranking, the resume text
 is included in that one request, because keyword hits alone cannot show experience, and then it is
 dropped. The sign-in and upload screens say so.
+
+## Testing the study assistant
+
+`tools/ai-eval.mjs` sends 123 realistic student questions (concepts for all three roadmaps, how the site works,
+study plans, career questions, off-topic and trick questions, things it should not know) through the same
+instructions and lesson text the site uses, then scores each answer with automatic checks and a second AI pass.
+Run it on your own computer so the key stays there:
+
+```
+AI_API_KEY=your-key AI_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai AI_MODEL=your-model \
+  npm run ai-eval
+```
+
+Options: `-- --only concept`, `-- --limit 20`, `-- --no-judge`. The report is written to `ai-eval-out/report.md`.
+To improve an answer, change the instructions or the product facts in `public/tutor.js` and run it again.
+The cases live in `tools/ai-eval-cases.mjs`; add a case whenever a real student question goes badly.

@@ -90,6 +90,7 @@ await step('profile details save to the database and the leaderboard opt-out hid
   });
   let L = await lay();
   need(L.sameRow && L.w < 30, 'checkbox and label are not on one row: ' + JSON.stringify(L));
+  need(L.lines === 1, 'help text should sit on one line on a desktop screen: ' + JSON.stringify(L));
   await tia.setViewportSize({ width: 380, height: 800 }); await tia.waitForTimeout(150);
   L = await lay();
   need(L.sameRow && L.w < 30, 'narrow: checkbox and label are not on one row: ' + JSON.stringify(L));

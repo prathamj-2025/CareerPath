@@ -20,6 +20,7 @@
 const MAX_TOTAL_CHARS = 60000;   // roughly the model's input budget for this use
 const MAX_TURNS = 12;
 const MAX_TURN_CHARS = 20000;
+const MAX_RULES_CHARS = 30000;   // standing instructions plus the student's context
 
 function fail(res, status, code, message) {
   res.status(status).json({ error: { code: code, message: message } });
@@ -56,7 +57,7 @@ export default async function handler(req, res) {
 
   const messages = [];
   if (body.rules) {
-    messages.push({ role: "system", content: String(body.rules).slice(0, MAX_TURN_CHARS) });
+    messages.push({ role: "system", content: String(body.rules).slice(0, MAX_RULES_CHARS) });
   }
   for (const t of turns) messages.push(t);
 

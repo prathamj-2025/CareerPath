@@ -188,6 +188,29 @@ await step('on a real deployment the sign-in page links to every website page', 
   await p.close();
 });
 
+await step('the website pages follow the theme chosen in the app, even when the system is light', async () => {
+  const ctx = await browser.newContext({ colorScheme: 'light' });
+  const p = await ctx.newPage();
+  await p.goto(DEMO + '/');
+  await p.evaluate(() => localStorage.setItem('cp-theme', 'dark'));
+  const lum = async () => p.evaluate(() => { const m = getComputedStyle(document.body).backgroundColor.match(/\d+/g).map(Number); return (m[0] + m[1] + m[2]) / 3; });
+  for (const f of ['about.html', 'faq.html', 'privacy.html']) {
+    await p.goto(DEMO + '/' + f);
+    need(await lum() < 60, f + ' is not dark: ' + await lum());
+  }
+  await p.evaluate(() => localStorage.setItem('cp-theme', 'light'));
+  await p.goto(DEMO + '/about.html');
+  need(await lum() > 200, 'light choice not applied');
+  // the app toggle saves the choice
+  await p.goto(DEMO + '/'); await p.evaluate(() => localStorage.removeItem('cp-theme'));
+  await p.goto(DEMO + '/'); await p.click('[data-action="login"]'); await p.waitForSelector('.skill-list');
+  await p.click('[data-action="theme"]');
+  need(await p.evaluate(() => localStorage.getItem('cp-theme')) === 'dark', 'toggle did not save');
+  await p.goto(DEMO + '/contact.html');
+  need(await lum() < 60, 'contact not dark after the app toggle');
+  await ctx.close();
+});
+
 await browser.close();
 console.log(failed ? failed + ' FAILED' : 'all steps passed');
 process.exit(failed ? 1 : 0);

@@ -28,6 +28,8 @@ function page({ file, title, desc, h1, lead, body }) {
 <title>${title} | CareerPath</title>
 <meta name="description" content="${desc}">
 <link rel="icon" href="${ICON}">
+<script>try{var t=localStorage.getItem("cp-theme");if(t==="dark"||t==="light")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
 <link rel="stylesheet" href="site.css">
 </head>
 <body>
@@ -89,7 +91,7 @@ page({
     <li><b>Pick a role.</b> Choose Product Manager, Project Manager or Business Analyst, or answer five short questions and get a match score for each.</li>
     <li><b>Learn the skills.</b> Each roadmap is split into main modules and sub-modules with short lessons, worked scenarios and practice with hints.</li>
     <li><b>Prove it.</b> Take the assessment to earn one to five stars. Pass a module exam to earn that module's certificate.</li>
-    <li><b>Keep going.</b> Join the weekly challenge, climb your school's leaderboard, and ask the study assistant when something is unclear.</li>
+    <li><b>Keep going.</b> Join the weekly challenge, climb the leaderboards, and ask the study assistant when something is unclear.</li>
   </ol>
 
   <h2>What makes it different</h2>
