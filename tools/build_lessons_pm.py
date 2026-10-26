@@ -47,7 +47,8 @@ out=['/* Product Manager course: 5 main modules, 28 sub-modules, 217 lessons, bu
 out.append('window.CP_PM_META = ['+',\n'.join(J(meta[i]) for i in order)+'];')
 out.append('window.CP_PM_COURSE = {\n'+',\n'.join(f'"{i}":'+J(course[i]) for i in order)+'\n};')
 out.append('window.CP_PM_TRACKS = '+json.dumps(TRACKS,indent=1)+';')
-tail=tail.replace('pm.skills = window.CP_PM_META.map(','pm.tracks = window.CP_PM_TRACKS;\n  pm.skills = window.CP_PM_META.map(')
+if 'pm.tracks = window.CP_PM_TRACKS' not in tail:
+    tail=tail.replace('pm.skills = window.CP_PM_META.map(','pm.tracks = window.CP_PM_TRACKS;\n  pm.skills = window.CP_PM_META.map(')
 open(ROOT,'w',encoding='utf-8').write('\n'.join(out)+'\n'+tail)
 n=sum(len(course[i]['lessons']) for i in order)
 print(n,len(open(ROOT).read()))

@@ -11,7 +11,7 @@
     "dev": "vercel dev",
     "serve": "node test/devserver.mjs",
     "mock-provider": "node test/fakeopenai.mjs",
-    "test": "node test/app.spec.mjs && node test/onboarding.spec.mjs && node test/assistant.spec.mjs && node test/deploy.spec.mjs && node test/google.spec.mjs && node test/persist.spec.mjs && node test/pmcourse.spec.mjs && node test/modules.spec.mjs",
+    "test": "node test/app.spec.mjs && node test/onboarding.spec.mjs && node test/assistant.spec.mjs && node test/deploy.spec.mjs && node test/google.spec.mjs && node test/persist.spec.mjs && node test/resume-check.spec.mjs && node test/resume-files.spec.mjs && node test/pmcourse.spec.mjs && node test/pjmcourse.spec.mjs && node test/modules.spec.mjs && node test/retired.spec.mjs && node test/accounts.spec.mjs",
     "shots": "node test/shot-new.mjs && node test/shot-layout.mjs"
   },
   "devDependencies": {

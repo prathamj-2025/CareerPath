@@ -29,8 +29,8 @@ await step('the static site loads with every asset', async () => {
     skills: (window.CP_ROLES || []).reduce((a, r) => a + r.skills.length, 0),
     checks: (window.CP_ROLES || []).every(r => r.skills.every(s => s.practice.every(p => p.check)))
   }));
-  if (loaded.roles !== 4) throw new Error('roles = ' + loaded.roles);
-  if (loaded.skills !== 43) throw new Error('skills = ' + loaded.skills);
+  if (loaded.roles !== 3) throw new Error('roles = ' + loaded.roles);
+  if (loaded.skills !== 61) throw new Error('skills = ' + loaded.skills);
   if (!loaded.checks) throw new Error('practice checks missing: a data file did not load');
   const title = await page.title();
   if (title !== 'CareerPath') throw new Error('title = ' + title);

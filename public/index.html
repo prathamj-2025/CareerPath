@@ -543,6 +543,24 @@
   .feed-inline .feed-row:not(.new) { display: none; }
 
   /* ---------- onboarding ---------- */
+  /* The fork after the resume: two equal choices, neither a detour from the other. */
+  .fork { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  .fork-card {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 8px; text-align: left;
+    background: var(--surface); border: 2px solid var(--line-strong); border-radius: var(--radius-lg);
+    padding: 22px; cursor: pointer; font: inherit; color: var(--ink);
+    transition: border-color .15s ease, background .15s ease, transform .15s ease;
+  }
+  .fork-card:hover { border-color: var(--accent); background: var(--accent-soft); }
+  .fork-card:active { transform: translateY(2px); }
+  .fork-card h3 { font-size: 19px; }
+  .fork-card p { font-size: 14px; color: var(--ink-2); max-width: 42ch; }
+  .fork-ico {
+    width: 38px; height: 38px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center;
+    background: var(--accent); color: var(--accent-ink); font-weight: 700; font-size: 18px; font-family: var(--sans);
+  }
+  .fork-go { margin-top: auto; padding-top: 8px; font-weight: 700; color: var(--accent); font-size: 14px; }
+  @media (max-width: 640px) { .fork { grid-template-columns: 1fr; } }
   .onb-steps { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
   .onb-step {
     display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--ink-3);
@@ -1172,14 +1190,13 @@
 
 <script src="data.js"></script>
 <script src="data2.js"></script>
-<script src="data3.js"></script>
 <script src="data4.js"></script>
 <script src="data5.js"></script>
 <script src="data6.js"></script>
 <script src="lessons-pm.js"></script>
 <script src="lessons-ba.js"></script>
-<script src="lessons-da.js"></script>
-<script src="lessons-fa.js"></script>
+<script src="lessons-pjm.js"></script>
+<script src="auth.js"></script>
 <script src="onboard.js"></script>
 <script src="app.js"></script>
 </body>

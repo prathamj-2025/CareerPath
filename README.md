@@ -8,33 +8,35 @@ Built as the team prototype for MOR 531 at USC.
 
 ## What it does
 
-**Four role tracks**, 21 skills. The same named skill is taught and assessed differently
-per role: SQL for a Product Manager covers funnels, retention and experiment readouts,
-while SQL for a Financial Analyst covers ledger periods and trial balance tie-outs. That
-difference is the product thesis.
+**Three roadmaps**: Product Manager, Business Analyst and Project Manager. The same named skill is
+taught and assessed differently per role, which is the product thesis. (Data Analyst and Financial Analyst
+were removed; students who were on them keep their stars in their roadmap history and are asked to pick again.)
 
-**Onboarding.** Upload a resume and CareerPath reads it in the browser, works out which of
-the 21 skills it actually claims, asks eight plain questions with no right answer, and ranks
-the four roadmaps with the reason for each. Every step is skippable and the ranking is advice,
-not a gate. The file is parsed on the viewer's own machine and never uploaded anywhere.
+**Onboarding.** Upload a resume and CareerPath reads it in the browser. The text is first checked to be a
+resume at all (section headings, contact details, date ranges, bullets that start with a verb, degrees, minus
+the markers of job descriptions, papers, invoices, contracts and cover letters); anything else (including an I-20, visa, passport page, bank or tax statement, transcript, offer letter) is turned away
+with "does not look like a resume, please upload your resume". PDFs are read with pdf.js in the browser (embedded-font PDFs defeated the
+small built-in reader); a file with no text at all (a scan or photo) gets its own message. Then the student chooses "I know my target role"
+(straight to the three roadmaps) or "Help me choose" (five plain questions with no right answer, read together
+with the resume, giving a match % for every roadmap with a reason). There is no skip button: the choice is the
+way forward, and a quiet "I don't have a resume yet" link covers people with nothing to upload. The ranking is
+advice, not a gate. The file is parsed on the viewer's own machine and never uploaded anywhere.
 
-The ten questions are a mix. Six ask how the person prefers to work and have no right answer;
-four have a best answer and say so. None of them needs prior knowledge, because asking a
-stranger to write SQL before they have picked a roadmap filters out exactly the people the
-recommendation is for. No question shows which roadmap an option favours: a visible label turns
-the test into a form where people pick the role they already had in mind.
-
-The ranking itself is a model call. It gets the resume matches, every answer, and which of the
-applied questions were right, and returns a match percentage and a reason per roadmap. The
-model's reply is parsed strictly and discarded if it does not fit, and a fixed set of weights
-ranks the roadmaps instead. The page says which of the two produced the numbers.
+The ranking itself is a model call. It gets the resume matches and every answer, and returns a match percentage
+and a reason per roadmap. The model's reply is parsed strictly and discarded if it does not fit, and a fixed set
+of weights ranks the roadmaps instead. The page says which of the two produced the numbers.
 
 **Student side.** Choose a target role, work through course modules, attempt
 practice exercises with progressive hints and an answer check, take a 10-question
 assessment graded L1 to L5, earn one to five stars, and compete on a leaderboard limited to
 your own school and target role. The leaderboard updates on screen as other students finish,
-with no reload. Business Analyst, Data Analyst and Finance Analyst issue a certificate per
-skill at three stars or above.
+with no reload. Business Analyst issues a certificate per skill at three stars or above.
+
+**Project Manager course.** 5 main modules, 28 sub-modules, 200 lessons, built the same way as the Product
+Manager course: Project Management Fundamentals, Planning Risk and Control, Agile and Hybrid Delivery,
+Leadership and Stakeholder Management (four certificates), and Interview-Ready Project Manager (practice only).
+Every calculation in it (critical path, PERT, earned value, EMV, velocity, cycle time, capacity, weighted scores)
+was computed in code, and every module went through an independent accuracy review before it was added.
 
 **Product Manager course.** 5 main modules, 28 sub-modules, 217 lessons. Stars are earned per
 sub-module (3 stars = job-ready, 75% on its assessment). A certificate belongs to a main module:
@@ -74,6 +76,23 @@ Open http://localhost:3000.
 
 The site itself is static and needs no build step. The only server-side piece is
 `api/ask.js`, which the study assistant calls.
+
+### Real accounts (Supabase)
+
+On a deployment that can reach `/api/config`, the site uses real accounts: email and password with
+email confirmation, password reset, and a `profiles` row per student in Supabase. The demo logins and
+seeded demo students are not created in this mode. The Claude artifact copy and local tests stay in the
+browser-only demo (set `CP_DEMO=1` to force that).
+
+- Database files are in `supabase/migrations/` and are run in order in the Supabase SQL editor.
+- The Project URL and publishable key are public by design (see `api/config.js`). Never put the
+  service role or secret key in the repo or the website.
+- In Supabase, Authentication, URL Configuration: set the Site URL to the deployed address and add it
+  to the Redirect URLs, or confirmation and reset emails will point at the wrong place.
+- Name, school, major, graduation year, role, roadmap, roadmaps left behind and the resume and
+  placement summaries are saved to the profile. Progress and scores are still kept in the browser
+  until the progress step moves them too.
+- Tests: `test/accounts.spec.mjs` runs against `test/fakesupabase.mjs`, a small stand-in server.
 
 ### Sign-in for the demo
 
@@ -148,14 +167,15 @@ api/ask.js             Serverless function. Holds the API key, streams the reply
 public/index.html      Markup and all styling.
 public/app.js          The whole application: routing, scoring, admin, assistant.
 public/data.js         Product Manager track.
-public/data2.js        Business Analyst and Data Analyst tracks.
-public/data3.js        Financial Analyst track.
+public/data2.js        Business Analyst track.
+public/lessons-pjm.js Project Manager course (built by tools/build_lessons_pjm.py).
 public/data4.js        Practice exercises: prompts, schemas, hints, model answers.
 public/data5.js        Answer-checking rules for practice exercises.
-public/data6.js        Resume vocabulary and the weekly challenge library.
-public/onboard.js      Resume parsing, skill detection, placement, recommendation.
+public/data6.js        Resume vocabulary, the five guided questions and the weekly challenge library.
+public/onboard.js      Resume parsing, resume check, skill detection, guided questions, recommendation.
+public/vendor/         pdf.js 3.11.174 (Apache-2.0), loaded the first time a PDF is chosen so real-world PDFs can be read.
 test/app.spec.mjs      Student and admin flows.
-test/onboarding.spec.mjs Resume, placement, recommendation, challenge, live board, history.
+test/onboarding.spec.mjs Resume, fork, guided questions, recommendation, challenge, live board, history.
 test/assistant.spec.mjs  Assistant, both backends, and the assessment lock.
 test/deploy.spec.mjs   The deployed build: assets, encoding, /api/ask streaming.
 test/devserver.mjs     Local stand-in for Vercel's routing.
@@ -218,10 +238,15 @@ number.
 earned on it, and can be resumed exactly where it stopped. Stars still do not transfer,
 because the same skill is a different exam on a different roadmap.
 
-**The placement questions have no right answer and no score.** A score there would imply the
-product had judged the person before teaching them anything, and it would be the wrong signal
-anyway: what roadmap suits you is a question about what you want to do, not what you can
-already do. The skills half of the ranking comes from the resume.
+**After the resume, the student chooses: "I know my target role" or "Help me choose".** The first goes
+straight to the roadmap list, with resume coverage shown on each card. The second asks five questions
+(`CP_GUIDED` in `data6.js`), three options each, none with a right answer, and ends on a match score for each
+roadmap. There is no skip control anywhere in the flow. The score is the answers alone, or 60% answers and 40%
+resume when a resume was read, and never reaches 100. Checked with 22 role-played personas (all matched; the test suite re-scores them) and with 20,000 simulated
+people whose other answers are random: when 3 of 5 answers follow the person's role the top roadmap is right
+99.8% of the time, and 81% of the time at 2 of 5 (the right roadmap is in the top two 99% of the time).
+Weak spot: the options are fairly easy to read, so someone who already knows the roles can pick theirs directly.
+The score reports fit with what the person said, not ability.
 
 **The resume is read in the browser and not stored.** Parsing and the skill search happen on the
 viewer's machine, and the test suite asserts the page makes no network request while reading it.

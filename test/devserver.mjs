@@ -1,5 +1,7 @@
 /* Local harness that mimics Vercel: serves public/ and routes /api/* to the matching file in api/.
    Only used for testing in this container. `vercel dev` does the same thing properly. */
+// Tests run the browser-only demo unless a spec asks for real accounts (CP_DEMO=0).
+process.env.CP_DEMO = process.env.CP_DEMO ?? '1';
 import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';

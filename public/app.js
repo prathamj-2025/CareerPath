@@ -15,6 +15,7 @@
                 "Industrial Engineering", "Economics", "Data Science", "Information Systems"];
 
   var STAR = "&#9733;";
+  var REAL = false;   // true when real accounts (Supabase) are switched on for this deployment
 
   /* ---------------- state ---------------- */
 
@@ -24,6 +25,10 @@
     route: { name: "roadmap" },
     authTab: "login",
     authError: "",
+    authBusy: false,      // a sign-in or sign-up request is in flight
+    authNotice: null,     // { kind: "verify" | "reset-sent", email, info } shown instead of the forms
+    authDraft: {},        // what was typed in the sign-up form, kept when an error re-draws it
+    booting: false,       // restoring a saved session at start-up
     lessonIdx: 0,
     practiceState: {},    // key -> { hints revealed, answer shown, learner's attempt }
     quiz: null,
@@ -496,13 +501,40 @@
   var ACCOUNTS_KEY = "cp-accounts";
   var BUILT_IN = {};   // emails of the demo accounts, which are rebuilt on every load
 
+  /* With real accounts, other people who used this browser must never show up on this student's
+     leaderboard or in the admin list. Their saved copies wait in the stash (by account id) and only
+     the signed-in student's copy is brought into state.users. */
+  var stash = {};
+
   function saveAccounts() {
+    syncProfile();
     try {
       var mine = state.users.filter(function (u) {
         return u.role === "student" && !u.seeded && !BUILT_IN[String(u.email).toLowerCase()];
       });
+      if (REAL) {
+        mine.forEach(function (u) { stash[u.id] = u; });
+        mine = Object.keys(stash).map(function (k) { return stash[k]; });
+      }
       window.localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(mine));
     } catch (e) { /* storage unavailable: the app still works for this visit */ }
+  }
+
+  /* Data Analyst and Financial Analyst are no longer offered. A student who was on one is
+     moved to the roadmap picker; the stars they earned stay in their history. */
+  var RETIRED = { da: "Data Analyst", fa: "Financial Analyst" };
+  function retireRoadmap(u) {
+    if (!u.roleId || role(u.roleId) || !RETIRED[u.roleId]) return;
+    var suffix = "-" + u.roleId, stars = 0, verified = 0, of = 0;
+    Object.keys(u.progress || {}).forEach(function (k) {
+      if (k.slice(-suffix.length) !== suffix) return;
+      var st = (u.progress[k] && u.progress[k].stars) || 0;
+      stars += st; if (st >= 3) verified++;
+    });
+    of = Object.keys(u.progress || {}).filter(function (k) { return k.slice(-suffix.length) === suffix; }).length || 5;
+    u.roleHistory.push({ roleId: u.roleId, name: RETIRED[u.roleId], stars: stars, verified: verified,
+      of: of, left: today(), returns: 0, retired: true });
+    u.roleId = null;
   }
 
   function loadAccounts() {
@@ -519,15 +551,102 @@
         u.challenges = u.challenges || {};
         u.mexams = u.mexams || {};
         u.roleHistory = u.roleHistory || [];
-        state.users.push(u);
+        retireRoadmap(u);
+        if (REAL) stash[u.id] = u; else state.users.push(u);
       });
     } catch (e) { /* damaged or blocked storage: start with the demo accounts only */ }
+  }
+
+  /* ---------------- real accounts (Supabase) ----------------
+     The profile row in the database is the source of truth for name, school, major, graduation year,
+     role, the chosen roadmap, the roadmaps left behind, and the resume and placement summaries.
+     Progress and scores still live in this browser until the progress step moves them too. */
+
+  var sync = { last: "", timer: null, inflight: "" };
+
+  function profilePatch(u) {
+    return {
+      name: u.name, school: u.school || "", major: u.major || "", grad_year: String(u.gradYear || ""),
+      roadmap_id: u.roleId || null,
+      roadmap_history: u.roleHistory || [],
+      onboarding: { resume: u.resume || null, placement: u.placement || null }
+    };
+  }
+
+  function syncProfile() {
+    if (!REAL) return;
+    var u = me();
+    if (!u || u.role !== "student") return;
+    var body = JSON.stringify(profilePatch(u));
+    if (body === sync.last || body === sync.inflight) return;
+    clearTimeout(sync.timer);
+    sync.timer = setTimeout(function () {
+      sync.inflight = body;
+      CP_AUTH.saveProfile(JSON.parse(body)).then(function (r) {
+        sync.inflight = "";
+        if (r.error) { sync.timer = setTimeout(syncProfile, 15000); return; }   // try again shortly
+        sync.last = body;
+      });
+    }, 800);
+  }
+
+  function adoptProfile(p) {
+    var u = state.users.filter(function (x) { return x.id === p.id; })[0];
+    if (!u && stash[p.id]) { u = stash[p.id]; state.users.push(u); }
+    if (!u) {
+      u = newUser({ name: p.name, email: p.email, role: "student", school: p.school, major: p.major, gradYear: p.grad_year });
+      u.id = p.id; u.password = null; state.users.push(u);
+    }
+    u.name = p.name || u.name; u.email = p.email; u.role = p.role === "admin" ? "admin" : "student";
+    u.school = p.school; u.major = p.major; u.gradYear = p.grad_year; u.title = p.title || "";
+    u.picture = p.picture_url || u.picture || null;
+    u.progress = u.progress || {}; u.challenges = u.challenges || {}; u.mexams = u.mexams || {};
+    var ob = p.onboarding || {};
+    var hist = Array.isArray(p.roadmap_history) ? p.roadmap_history : [];
+    if (p.roadmap_id || hist.length || ob.resume || ob.placement) {
+      u.roleId = role(p.roadmap_id) ? p.roadmap_id : null;
+      u.roleHistory = hist; u.resume = ob.resume || null; u.placement = ob.placement || null;
+      retireRoadmap(u);
+      sync.last = JSON.stringify(profilePatch(u));
+    } else {
+      // Nothing saved on the server yet: whatever this browser already holds is sent up on the next save.
+      sync.last = JSON.stringify({ name: u.name, school: u.school || "", major: u.major || "", grad_year: String(u.gradYear || ""),
+        roadmap_id: null, roadmap_history: [], onboarding: { resume: null, placement: null } });
+    }
+    return u;
+  }
+
+  function startSession() {
+    state.booting = true; state.authBusy = true; render();
+    return CP_AUTH.profile().then(function (r) {
+      state.booting = false; state.authBusy = false;
+      if (r.error) {
+        if (r.error.code !== "network") CP_AUTH.signOut();
+        state.authError = r.error.text; return render();
+      }
+      var u = adoptProfile(r.profile);
+      state.userId = u.id; state.authError = ""; state.authNotice = null;
+      var fresh = u.role === "student" && !u.roleId && !u.resume && !u.placement && !u.roleHistory.length;
+      if (u.role === "admin") return go("a-content");
+      if (fresh) { state.onb = { step: 1 }; return go("onb-resume"); }
+      go(u.roleId ? "roadmap" : "roles");
+    });
+  }
+
+  function authFail(r) {
+    state.authBusy = false;
+    if (r.error && r.error.code === "unconfirmed") {
+      state.authNotice = { kind: "verify", email: val("li-email") || (state.authDraft && state.authDraft.email) || "" };
+    } else state.authError = r.error ? r.error.text : "Something went wrong. Please try again.";
+    render();
   }
 
   /* ---------------- seed ---------------- */
 
   function seed() {
-    var student = newUser({
+    var student = null;
+    if (!REAL) {
+    student = newUser({
       name: "Pratham Jain", email: "student@careerpath.com", password: "student", role: "student",
       school: "USC", major: "Engineering Management", gradYear: "2027", roleId: "pm"
     });
@@ -542,13 +661,14 @@
       name: "Dana Whitfield", email: "admin@careerpath.com", password: "admin", role: "admin",
       title: "Content Manager", school: "CareerPath", major: "", gradYear: ""
     }));
+    }
 
     var classmates = [
       ["Priya Chavan", "USC", "pm", 1400, 5, 80], ["Marcus Webb", "USC", "pm", 1100, 4, 60],
       ["Ana Ruiz", "USC", "pm", 900, 4, 100], ["Dev Patel", "USC", "pm", 400, 2, 0],
       ["Sarah Kim", "USC", "pm", 300, 2, 40], ["Tom Alvarez", "USC", "pm", 200, 1, 0],
       ["Jing Liu", "USC", "ba", 1250, 5, 80], ["Noor Hassan", "USC", "ba", 800, 3, 60],
-      ["Ellie Brandt", "USC", "da", 1500, 5, 75], ["Raj Menon", "UCLA", "pm", 1600, 5, 0]
+      ["Ellie Brandt", "USC", "pjm", 1500, 5, 75], ["Raj Menon", "UCLA", "pm", 1600, 5, 0]
     ];
     classmates.forEach(function (c) {
       var u = newUser({ name: c[0], school: c[1],
@@ -574,12 +694,12 @@
 
     // The signed-in student arrives with a resume already read, so the onboarding
     // result is visible on their profile without having to redo it.
-    student.resume = { name: "PrathamJain_Resume.pdf", chars: 2410, kind: "pdf",
-      skills: ["foundations-pm", "metrics-pm", "prd-pm", "experimentation-pm", "sql-ba", "python-da", "viz-da"],
+    if (student) student.resume = { name: "PrathamJain_Resume.pdf", chars: 2410, kind: "pdf",
+      skills: ["foundations-pm", "metrics-pm", "prd-pm", "experimentation-pm", "sql-ba", "agilebasics-pjm", "stakeholders-pjm"],
       roles: { pm: ["product manager"] }, when: "Sep 12, 2026" };
-    student.placement = { answered: 8, total: 8, when: "Sep 12, 2026",
+    if (student) student.placement = { answered: 8, total: 8, when: "Sep 12, 2026",
       perRole: { pm: { weight: 19, points: 6, signal: 1 }, ba: { weight: 9, points: 2, signal: 0.47 },
-                 da: { weight: 7, points: 1, signal: 0.37 }, fa: { weight: 3, points: 0, signal: 0.16 } } };
+                 pjm: { weight: 7, points: 1, signal: 0.37 } } };
   }
 
   /* ---------------- helpers ---------------- */
@@ -729,19 +849,56 @@
           '<button role="tab" aria-selected="' + isSignup + '" data-action="auth-tab" data-tab="signup">Create account</button>' +
           '<button role="tab" aria-selected="' + !isSignup + '" data-action="auth-tab" data-tab="login">Sign in</button>' +
         "</div>" +
-        (state.googlePending ? "" :
+        (REAL ? realGoogle() : state.googlePending ? "" :
           '<div id="g-wrap" class="g-wrap"' + (gsi.ready ? "" : " hidden") + '><div id="g-btn" class="g-btn"></div>' +
             '<div class="or-div"><span>or</span></div></div>') +
-        (state.googlePending ? googleFinishForm() : isSignup ? signupForm() : loginForm()) +
-        (state.authError ? '<p class="err" style="margin-top:12px">' + esc(state.authError) + "</p>" : "") +
-        (isSignup || state.googlePending ? "" : credCards()) +
+        (REAL ? realBody(isSignup) : state.googlePending ? googleFinishForm() : isSignup ? signupForm() : loginForm()) +
+        (state.authError ? '<p class="err" style="margin-top:12px" role="alert">' + esc(state.authError) + "</p>" : "") +
+        (REAL || isSignup || state.googlePending ? "" : credCards()) +
         '<p class="tiny muted" style="margin-top:16px;text-align:center"><a href="privacy.html" target="_blank" rel="noopener">Privacy policy</a></p>' +
       "</div></div>";
-    if (state.googlePending) {
+    if (state.googlePending || (REAL && (state.booting || state.authNotice || state.authTab === "reset" || state.authTab === "forgot"))) {
       var tabs = el.querySelector(".tabs");
       if (tabs) tabs.hidden = true;
     }
-    setupGoogle();
+    if (!REAL) setupGoogle();
+  }
+
+  /* Real-account screens */
+  function realGoogle() {
+    if (!CP_AUTH.googleOAuth || state.booting || state.authNotice || state.authTab === "reset" || state.authTab === "forgot") return "";
+    return '<div class="g-wrap"><a class="btn" style="justify-content:center;width:100%" href="' + esc(CP_AUTH.googleUrl()) + '">Continue with Google</a>' +
+      '<div class="or-div"><span>or</span></div></div>';
+  }
+
+  function realBody(isSignup) {
+    if (state.booting) return '<p class="muted" role="status">Signing you in&hellip;</p>';
+    var n = state.authNotice;
+    if (n) {
+      var sent = n.kind === "reset-sent";
+      return '<div class="stack" style="gap:12px"><h3 style="margin:0">Check your email</h3>' +
+        "<p>" + (sent
+          ? "If an account exists for <b>" + esc(n.email) + "</b>, a reset link is on its way."
+          : "We sent a confirmation link to <b>" + esc(n.email) + "</b>. Open it to finish creating your account.") + "</p>" +
+        '<p class="tiny muted">It can take a minute. Check your spam folder if you do not see it.</p>' +
+        (n.info ? '<p class="tiny" role="status">' + esc(n.info) + "</p>" : "") +
+        (sent ? "" : '<button class="btn" style="justify-content:center"' + (state.authBusy ? " disabled" : "") + ' data-action="resend-confirm">Send the email again</button>') +
+        '<button class="btn ghost sm" style="justify-content:center" data-action="auth-back">Back to sign in</button></div>';
+    }
+    if (state.authTab === "reset") {
+      return '<div class="stack" style="gap:12px"><h3 style="margin:0">Choose a new password</h3>' +
+        '<div class="field"><label for="rs-pass">New password</label><input id="rs-pass" type="password" autocomplete="new-password" placeholder="At least 8 characters"></div>' +
+        '<div class="field"><label for="rs-pass2">Repeat it</label><input id="rs-pass2" type="password" autocomplete="new-password"></div>' +
+        '<button class="btn primary" style="justify-content:center"' + (state.authBusy ? " disabled" : "") + ' data-action="reset-save">Save password</button></div>';
+    }
+    if (state.authTab === "forgot") {
+      return '<div class="stack" style="gap:12px"><h3 style="margin:0">Reset your password</h3>' +
+        '<p class="tiny muted">Enter your email and we will send you a link.</p>' +
+        '<div class="field"><label for="fg-email">Email</label><input id="fg-email" type="email" autocomplete="email"></div>' +
+        '<button class="btn primary" style="justify-content:center"' + (state.authBusy ? " disabled" : "") + ' data-action="forgot-send">Send reset link</button>' +
+        '<button class="btn ghost sm" style="justify-content:center" data-action="auth-back">Back to sign in</button></div>';
+    }
+    return isSignup ? signupForm() : loginForm();
   }
 
   /* ---------------- Sign in with Google ----------------
@@ -840,28 +997,30 @@
   }
 
   function signupForm() {
+    var draft = state.authDraft || {};
     return '<div class="stack" style="gap:12px">' +
-      '<div class="field"><label for="su-name">Full name</label><input id="su-name" placeholder="Alex Rivera"></div>' +
-      '<div class="field"><label for="su-email">Email</label><input id="su-email" type="email" placeholder="alex@usc.edu"></div>' +
-      '<div class="field"><label for="su-pass">Password</label><input id="su-pass" type="password" placeholder="At least 4 characters"></div>' +
+      '<div class="field"><label for="su-name">Full name</label><input id="su-name" placeholder="Alex Rivera" value="' + esc(draft.name) + '"></div>' +
+      '<div class="field"><label for="su-email">Email</label><input id="su-email" type="email" placeholder="alex@usc.edu" value="' + esc(draft.email) + '"></div>' +
+      '<div class="field"><label for="su-pass">Password</label><input id="su-pass" type="password" autocomplete="new-password" placeholder="' + (REAL ? "At least 8 characters" : "At least 4 characters") + '"></div>' +
       '<div class="auth-grid">' +
         '<div class="field"><label for="su-school">School</label><select id="su-school">' +
-          SCHOOLS.map(function (s) { return "<option>" + esc(s) + "</option>"; }).join("") + "</select></div>" +
+          SCHOOLS.map(function (s) { return "<option" + (s === draft.school ? " selected" : "") + ">" + esc(s) + "</option>"; }).join("") + "</select></div>" +
         '<div class="field"><label for="su-year">Graduation</label><select id="su-year">' +
-          ["2026", "2027", "2028", "2029"].map(function (y) { return "<option>" + y + "</option>"; }).join("") + "</select></div>" +
+          ["2026", "2027", "2028", "2029"].map(function (y) { return "<option" + (y === draft.year ? " selected" : "") + ">" + y + "</option>"; }).join("") + "</select></div>" +
       "</div>" +
       '<div class="field"><label for="su-major">Major</label><select id="su-major">' +
-        MAJORS.map(function (m) { return "<option>" + esc(m) + "</option>"; }).join("") + "</select></div>" +
-      '<button class="btn primary" style="margin-top:6px;justify-content:center" data-action="signup">Create student account</button>' +
+        MAJORS.map(function (m) { return "<option" + (m === draft.major ? " selected" : "") + ">" + esc(m) + "</option>"; }).join("") + "</select></div>" +
+      '<button class="btn primary" style="margin-top:6px;justify-content:center"' + (state.authBusy ? " disabled" : "") + ' data-action="signup">Create student account</button>' +
       '<p class="tiny muted">Sign-up creates a student account. Admin accounts are provisioned by the platform team.</p>' +
     "</div>";
   }
 
   function loginForm() {
     return '<div class="stack" style="gap:12px">' +
-      '<div class="field"><label for="li-email">Email</label><input id="li-email" type="email" value="student@careerpath.com"></div>' +
-      '<div class="field"><label for="li-pass">Password</label><input id="li-pass" type="password" value="student"></div>' +
-      '<button class="btn primary" style="margin-top:6px;justify-content:center" data-action="login">Sign in</button>' +
+      '<div class="field"><label for="li-email">Email</label><input id="li-email" type="email" autocomplete="email" value="' + (REAL ? "" : "student@careerpath.com") + '"></div>' +
+      '<div class="field"><label for="li-pass">Password</label><input id="li-pass" type="password" autocomplete="current-password" value="' + (REAL ? "" : "student") + '"></div>' +
+      '<button class="btn primary" style="margin-top:6px;justify-content:center"' + (state.authBusy ? " disabled" : "") + ' data-action="login">Sign in</button>' +
+      (REAL ? '<button class="btn ghost sm" style="justify-content:center" data-action="forgot">Forgot your password?</button>' : "") +
     "</div>";
   }
 
@@ -969,8 +1128,9 @@
 
   /* ---------------- onboarding views ----------------
      Resume, then a placement test built from it, then a ranked recommendation.
-     Every step is skippable. The recommendation is advice: the student can pick
-     any roadmap from the same screen regardless of what it says. */
+     After the resume the student chooses: "I know my target role" or "Help me choose".
+     The recommendation is advice: the student can pick any roadmap from the same screen
+     regardless of what it says. */
 
   function viewOnbResume(user) {
     var o = state.onb || {};
@@ -1035,8 +1195,7 @@
             }).join(", ") + "</p>"
           : "") +
         '<div class="row" style="margin-top:16px">' +
-          '<button class="btn primary" data-action="onb-to-placement">Continue to the questions &rarr;</button>' +
-          '<button class="btn ghost" data-action="onb-skip">Skip and choose a roadmap myself</button>' +
+          '<button class="btn primary" data-action="onb-to-fork">Continue &rarr;</button>' +
         "</div></div>";
     } else {
       body = '<div class="card">' +
@@ -1051,21 +1210,23 @@
             '<div class="row" style="margin-top:10px"><button class="btn primary sm" data-action="onb-paste-save">Use this text</button>' +
             '<button class="btn sm ghost" data-action="onb-paste">Cancel</button></div>'
           : '<div class="row"><button class="btn sm" data-action="onb-paste">Paste text instead</button>' +
-            '<button class="btn sm ghost" data-action="onb-skip">Skip this step</button></div>') +
+            '<button class="btn sm ghost" data-action="onb-to-fork">I don&rsquo;t have a resume yet</button></div>') +
       "</div>" +
       '<div class="explain">' +
         '<div><b>1. Your resume is not stored</b><p>It is read in your browser. When the ranking is ' +
           "written, the text is sent once to the AI provider and then dropped.</p></div>" +
-        '<div><b>2. Ten short questions</b><p>Six about how you like to work, four with a best ' +
-          "answer. About a minute.</p></div>" +
-        '<div><b>3. The roadmaps get ranked</b><p>From your resume and your answers, with a reason ' +
-          "for each. You can still pick any of the four.</p></div>" +
+        '<div><b>2. Tell us where you are headed</b><p>Already know your target role? Pick it. ' +
+          "Not sure? Answer five short questions with no wrong answers and the AI reads them with your resume.</p></div>" +
+        '<div><b>3. Start the coursework</b><p>Either way you land on a roadmap, with a match score ' +
+          "for each one if you asked for help. You can switch later.</p></div>" +
       "</div>";
     }
 
-    return '<div class="page-head"><div class="eyebrow">Step 1 of 3</div><h1>Upload your resume</h1>' +
-        '<p class="sub">CareerPath reads your resume to see what you have already worked with, then asks ten short ' +
-        "questions about how you like to work. You can skip either and pick a roadmap yourself.</p></div>" +
+    return '<div class="page-head"><div class="row" style="justify-content:space-between;align-items:flex-start;gap:12px">' +
+        '<div><div class="eyebrow">Step 1 of 3</div><h1>Upload your resume</h1></div>' +
+        "</div>" +
+        '<p class="sub">CareerPath reads your resume to see what you have already worked with. ' +
+        "It must be a resume: a different kind of document is turned away so the results stay meaningful.</p></div>" +
       '<div class="onb-steps">' + onbSteps(1) + "</div>" + body;
   }
 
@@ -1076,10 +1237,10 @@
     var reachable = function (n) {
       if (n === at) return false;
       if (n === 1) return true;
-      if (n === 2) return !!(o.detect || o.items || at === 3);
+      if (n === 2) return !!(o.mode || o.detect || o.items || at === 3);
       return !!(o.rec && o.rec.length);
     };
-    return ["Resume", "A few questions", "Recommendation"].map(function (l, i) {
+    return ["Resume", "Your target", "Recommendation"].map(function (l, i) {
       var n = i + 1;
       var inner = '<b class="mono">' + (n < at ? "&#10003;" : n) + "</b>" + esc(l);
       var attrs = ' aria-current="' + (n === at) + '" data-done="' + (n < at) + '"';
@@ -1090,37 +1251,62 @@
     }).join("");
   }
 
+  /* The question every new student answers once: do you already know where you are going?
+     Both answers are first-class. Knowing the role goes straight to the roadmap list, and
+     asking for help runs the five questions. Neither is a detour from the other. */
+  function viewOnbFork(user) {
+    var o = state.onb || {};
+    var det = o.detect;
+    var found = 0;
+    if (det) {
+      var seen = {};
+      Object.keys(det.general || {}).forEach(function (g) { det.general[g].forEach(function (t) { seen[t] = 1; }); });
+      Object.keys(det.skills || {}).forEach(function (sid) { det.skills[sid].forEach(function (t) { seen[t] = 1; }); });
+      found = Object.keys(seen).length;
+    }
+    var n = (window.CP_GUIDED || []).length;
+
+    return '<div class="page-head"><div class="eyebrow">Step 2 of 3</div><h1>Do you already know your target role?</h1>' +
+        '<p class="sub">Either answer is fine, and you can change your mind at any point. ' +
+        (found ? "The " + found + " skill words from your resume are used either way." : "You can still add a resume later from your profile.") +
+        "</p></div>" +
+      '<div class="onb-steps">' + onbSteps(2) + "</div>" +
+      '<div class="fork">' +
+        '<button class="fork-card" data-action="onb-know">' +
+          '<span class="fork-ico" aria-hidden="true">&#10003;</span>' +
+          "<h3>I know my target role</h3>" +
+          "<p>See the roadmaps, pick one, and start the coursework.</p>" +
+          '<span class="fork-go">Choose a roadmap &rarr;</span></button>' +
+        '<button class="fork-card" data-action="onb-guided">' +
+          '<span class="fork-ico" aria-hidden="true">?</span>' +
+          "<h3>Help me choose</h3>" +
+          "<p>Answer " + n + " short questions about how you like to work. No answer is wrong. " +
+          "The AI reads them with your resume and gives you a match % for every roadmap.</p>" +
+          '<span class="fork-go">Start the ' + n + " questions &rarr;</span></button>" +
+      "</div>" +
+      "";
+  }
+
   function viewOnbPlacement(user) {
     var o = state.onb;
     var items = o.items || [];
 
     if (!items.length) {
-      return '<div class="page-head"><div class="eyebrow">Step 2 of 3</div><h1>Placement test</h1></div>' +
+      return '<div class="page-head"><div class="eyebrow">Step 2 of 3</div><h1>A few quick questions</h1></div>' +
         '<div class="card"><p class="muted">There are no questions to ask yet.</p>' +
-        '<button class="btn sm primary" style="margin-top:12px" data-action="onb-skip">Choose a roadmap</button></div>';
+        '<button class="btn sm primary" style="margin-top:12px" data-action="onb-know">Choose a roadmap</button></div>';
     }
 
     if (o.idx >= items.length) {
-      var got = items.filter(function (it, i) { return it.kind === "best" && o.answers[i] === it.best; }).length;
-      var bests = items.filter(function (it) { return it.kind === "best"; }).length;
-
       return '<div class="page-head"><div class="eyebrow">Step 2 of 3</div><h1>Answers recorded</h1>' +
-          '<p class="sub">These go to the model along with what your resume mentioned, and it ranks the four ' +
-          "roadmaps for you. Nothing here touches a star, a certificate or the leaderboard.</p></div>" +
+          '<p class="sub">These are scored against each roadmap, and the model reads them alongside your resume. ' +
+          "Nothing here touches a star, a certificate or the leaderboard.</p></div>" +
         '<div class="onb-steps">' + onbSteps(2) + "</div>" +
-        '<div class="card"><div class="row" style="justify-content:space-between;margin-bottom:12px">' +
-          '<h3 style="font-size:15px">What you picked</h3>' +
-          '<span class="tiny muted">' + got + " of " + bests + " best answers</span></div>" +
+        '<div class="card"><h3 style="font-size:15px;margin-bottom:12px">What you picked</h3>' +
           '<div class="stack" style="gap:11px">' + items.map(function (it, i) {
             var opt = it.opts[o.answers[i]];
-            var mark = "";
-            if (it.kind === "best") {
-              mark = o.answers[i] === it.best
-                ? ' <span class="pill ok">Best answer</span>'
-                : ' <span class="pill warn">Best was: ' + esc(it.opts[it.best].t) + "</span>";
-            }
             return '<div class="picked"><span class="tiny muted">' + esc(it.q) + "</span>" +
-              "<b>" + esc(opt ? opt.t : "&mdash;") + mark + "</b></div>";
+              "<b>" + esc(opt ? opt.t : "&mdash;") + "</b></div>";
           }).join("") + "</div></div>" +
         '<div class="row" style="margin-top:18px">' +
           '<button class="btn primary" data-action="onb-to-recommend">See recommended roadmaps &rarr;</button>' +
@@ -1131,13 +1317,10 @@
     var it = items[o.idx];
     return '<div class="page-head"><div class="eyebrow">Step 2 of 3 &middot; question ' + (o.idx + 1) + " of " + items.length + "</div>" +
         "<h1>A few quick questions</h1>" +
-        '<p class="sub">Ten questions, about a minute. Most ask how you like to work and have no right answer. ' +
-        "Four of them do have a best answer, and those say so. Nothing here is scored against you.</p></div>" +
+        '<p class="sub">' + items.length + " questions, about a minute. None has a right answer, so pick what feels most like you. " +
+        "Nothing here is scored against you.</p></div>" +
       '<div class="onb-steps">' + onbSteps(2) + "</div>" +
-      '<div class="progress-head"><span>' +
-        (it.kind === "best"
-          ? '<span class="pill warn">One best answer</span>'
-          : '<span class="pill">No right answer</span>') + "</span>" +
+      '<div class="progress-head"><span><span class="pill">No right answer</span></span>' +
         '<span class="mono tiny">' + (o.idx + 1) + " / " + items.length + "</span></div>" +
       '<div class="bar" style="margin-bottom:18px"><span style="width:' + Math.round(o.idx / items.length * 100) + '%"></span></div>' +
       '<div class="q-card"><p class="q-stem">' + esc(it.q) + "</p>" +
@@ -1146,8 +1329,10 @@
             '<span class="key">' + "ABCD".charAt(i) + "</span><span>" + esc(opt.t) + "</span></button>";
         }).join("") + "</div></div>" +
       '<div class="row" style="margin-top:16px">' +
-        (o.idx > 0 ? '<button class="btn sm" data-action="onb-back">&larr; Back</button>' : "") +
-        '<button class="btn sm ghost" data-action="onb-skip">Skip these</button></div>';
+        (o.idx > 0
+          ? '<button class="btn sm" data-action="onb-back">&larr; Back</button>'
+          : '<button class="btn sm" data-action="onb-to-fork">&larr; Back</button>') +
+      "</div>";
   }
 
   function viewOnbRecommend(user) {
@@ -1158,8 +1343,9 @@
     var byModel = o.by === "model";
 
     return '<div class="page-head"><div class="eyebrow">Step 3 of 3</div><h1>Recommended roadmaps</h1>' +
-        '<p class="sub">Ranked from what your resume mentioned and how you answered. This is advice, not a gate. ' +
-        "Pick any roadmap on this page and you get the full thing.</p></div>" +
+        '<p class="sub">Ranked from ' + (o.detect ? "what your resume mentioned and " : "") + "how you answered. " +
+        "The match is how well each roadmap fits what you told us, not a grade. This is advice, not a gate: " +
+        "pick any roadmap on this page and you get the full thing.</p></div>" +
       '<div class="onb-steps">' + onbSteps(3) + "</div>" +
       '<div class="rank-by">' +
         (o.busy
@@ -1167,7 +1353,7 @@
             '<span class="tiny muted">Showing the rule-based ranking until the model answers.</span>'
           : byModel
             ? '<span class="pill ok">Ranked by the model</span>' +
-              '<span class="tiny muted">It read your resume matches and all ten answers.</span>'
+              '<span class="tiny muted">It read ' + (o.detect ? "your resume matches and " : "") + "all " + (o.items || []).length + " answers.</span>"
             : '<span class="pill">Ranked by the scoring rules</span>' +
               '<span class="tiny muted">' +
               (o.rankErr ? esc(o.rankErr) : "The model was not reachable, so the fixed weights produced this.") +
@@ -1175,15 +1361,21 @@
               (tutor.ready && !tutor.denied
                 ? ' <button class="btn sm" data-action="onb-rerank">Try the model again</button>' : "")) +
       "</div>" +
-      (spread < 12 && !byModel
+      (o.planned
+        ? '<div class="card" style="margin-bottom:16px;border-color:var(--accent)"><p class="tiny">' +
+          "<b>Your answers point most towards " + esc(o.planned.name) + ".</b> That roadmap is planned but not on " +
+          "CareerPath yet. The ones below are the closest fit available today, so treat the scores as " +
+          "second best.</p></div>"
+        : "") +
+      (spread < 12 && !byModel && !o.planned
         ? '<div class="card" style="margin-bottom:16px;border-color:var(--warn)"><p class="tiny">' +
-          "<b>These four are close together.</b> Your resume and your answers did not point clearly at one roadmap, " +
-          "so choose the role you actually want rather than the one at the top.</p></div>"
+          "<b>These roadmaps are close together.</b> Your answers" + (o.detect ? " and resume" : "") +
+          " did not point clearly at one, so choose the role you actually want rather than the one at the top.</p></div>"
         : "") +
       '<div class="stack" style="gap:12px">' + rec.map(function (x, i) {
         return '<div class="rec-card' + (i === 0 ? " lead" : "") + '">' +
           '<div class="rec-head"><div>' +
-            (i === 0 ? '<span class="pill accent">Best match</span> ' : "") +
+            (i === 0 ? '<span class="pill accent">' + (o.planned ? "Closest available" : "Best match") + "</span> " : "") +
             '<span class="rec-name">' + esc(x.name) + "</span>" +
             '<span class="tiny muted" style="display:block;margin-top:2px">' + esc(x.tagline) + "</span>" +
           "</div>" +
@@ -1312,25 +1504,25 @@
 
   function viewRoles(user) {
     var o = state.onb;
-    /* A student who skipped the questions by accident, or changed their mind, needs a
-       way back in from here. Without one, skip is a door that only opens outward. */
+    /* A student who picked "I know my target role" and changed their mind needs a way
+       back to the options, or to the recommendation if they asked for one. */
     var back = null;
     if (o && o.rec) back = { to: "onb-recommend", label: "Back to your recommendations" };
-    else if (o && o.items && o.answers && o.answers.length) back = { to: "onb-placement", label: "Back to the questions" };
-    else if (o && o.detect) back = { to: "onb-placement", label: "Answer the questions instead", fresh: true };
-    else if (o) back = { to: "onb-resume", label: "Back to the resume step" };
+    else if (o) back = { to: "onb-fork", label: "Back to your options" };
 
     return '<div class="page-head">' +
         (back ? '<button class="btn sm ghost" style="margin-bottom:10px" data-action="onb-resume-flow" ' +
                 'data-to="' + back.to + '"' + (back.fresh ? ' data-fresh="1"' : "") +
                 ">&larr; " + esc(back.label) + "</button>" : "") +
-        '<div class="eyebrow">Step 1</div><h1>Choose your target role</h1>' +
+        '<div class="eyebrow">' + (o && o.mode === "know" ? "Step 3 of 3" : "Step 1") + '</div><h1>Choose your target role</h1>' +
         '<p class="sub">Each role has its own roadmap, its own courses, and its own assessments. The same skill is taught and tested differently depending on the role you are preparing for.</p></div>' +
       '<div class="role-grid">' +
         ROLES.map(function (r) {
+          var hits = o && o.detect ? r.skills.filter(function (s) { return !!o.detect.skills[s.id]; }).length : 0;
           return '<button class="role-card" data-action="pick-role" data-role="' + r.id + '">' +
             '<span class="role-ico" aria-hidden="true">' + esc(initials(r.name)) + "</span>" +
             "<h3>" + esc(r.name) + "</h3><p class=\"tag\">" + esc(r.tagline) + "</p>" +
+            (hits ? '<div class="pill ok" style="margin-bottom:8px">Your resume covers ' + hits + " of " + r.skills.length + " skills</div>" : "") +
             '<div class="n">' + (r.tracks ? r.tracks.length + " modules &middot; " + r.skills.length + " sub-modules" : r.skills.length + " skills") + " &middot; " +
               r.skills.reduce(function (a, s) { return a + s.assessment.length; }, 0) + " assessment questions</div></button>";
         }).join("") +
@@ -1339,8 +1531,8 @@
       historyOfRoadmaps(user) +
       ((o && o.rec) ? "" :
         '<div class="card" style="margin-top:18px"><div class="row" style="justify-content:space-between">' +
-        '<p class="tiny muted">Not sure which one? Upload your resume, answer ten short questions, and ' +
-        "CareerPath will rank the four roadmaps for you with a reason for each.</p>" +
+        '<p class="tiny muted">Not sure which one? Answer five short questions with no wrong answers, and ' +
+        "CareerPath will give each roadmap a match score with a reason.</p>" +
         '<button class="btn sm" data-action="onb-open">' +
         (user.resume || user.placement ? "Redo the recommendation" : "Get a recommendation") + "</button></div></div>");
   }
@@ -1357,7 +1549,8 @@
       user.roleHistory.map(function (h) {
         return "<tr><td>" + esc(h.name) + '</td><td class="mono">' + h.stars + "</td>" +
           '<td class="mono">' + h.verified + " / " + h.of + '</td><td class="mono tiny">' + esc(h.left) + "</td>" +
-          '<td><button class="btn sm" data-action="pick-role" data-role="' + h.roleId + '">Resume</button></td></tr>';
+          "<td>" + (h.retired || !role(h.roleId) ? '<span class="tiny muted">No longer offered</span>'
+            : '<button class="btn sm" data-action="pick-role" data-role="' + h.roleId + '">Resume</button>') + "</td></tr>";
       }).join("") + "</tbody></table></div></div>";
   }
 
@@ -2307,8 +2500,8 @@
   function onboardingCard(user) {
     if (!user.resume && !user.placement) {
       return '<div class="card" style="margin-top:14px"><h3 style="font-size:15px;margin-bottom:8px">Resume and placement</h3>' +
-        '<p class="tiny muted" style="margin-bottom:12px">You have not uploaded a resume. Uploading one lets CareerPath ' +
-        "build a placement test from the skills you already claim, and rank the roadmaps against them.</p>" +
+        '<p class="tiny muted" style="margin-bottom:12px">You have not uploaded a resume. Upload one, then either pick your target role or answer ' +
+        "five short questions and get a match score for each roadmap.</p>" +
         '<button class="btn" data-action="onb-open">Upload a resume</button></div>';
     }
     var rr = user.resume, pl = user.placement;
@@ -2848,6 +3041,7 @@
       if (onboarding && !state.onb) n = "onb-resume";
       html =
         n === "onb-resume" ? viewOnbResume(user) :
+        n === "onb-fork" ? viewOnbFork(user) :
         n === "onb-placement" ? viewOnbPlacement(user) :
         n === "onb-recommend" ? viewOnbRecommend(user) :
         n === "roles" ? viewRoles(user) :
@@ -2890,6 +3084,18 @@
 
     signup: function () {
       var name = val("su-name"), email = val("su-email"), pass = val("su-pass");
+      if (REAL) {
+        if (state.authBusy) return;
+        state.authDraft = { name: name, email: email, school: val("su-school"), major: val("su-major"), year: val("su-year") };
+        if (!name || !email || !pass) { state.authError = "Name, email, and password are all required."; return render(); }
+        if (pass.length < 8) { state.authError = "Password must be at least 8 characters."; return render(); }
+        state.authBusy = true; state.authError = ""; render();
+        return CP_AUTH.signUp(email, pass, { name: name, school: val("su-school"), major: val("su-major"), grad_year: val("su-year") }).then(function (r) {
+          if (r.error) return authFail(r);
+          if (r.session) return startSession();
+          state.authBusy = false; state.authNotice = { kind: "verify", email: email }; render();
+        });
+      }
       if (!name || !email || !pass) { state.authError = "Name, email, and password are all required."; return render(); }
       if (pass.length < 4) { state.authError = "Password must be at least 4 characters."; return render(); }
       if (state.users.some(function (u) { return u.email.toLowerCase() === email.toLowerCase(); })) {
@@ -2905,6 +3111,15 @@
 
     login: function () {
       var email = val("li-email"), pass = val("li-pass");
+      if (REAL) {
+        if (state.authBusy) return;
+        if (!email || !pass) { state.authError = "Enter your email and password."; return render(); }
+        state.authBusy = true; state.authError = ""; render();
+        return CP_AUTH.signIn(email, pass).then(function (r) {
+          if (r.error) { state.authDraft = { email: email }; return authFail(r); }
+          return startSession();
+        });
+      }
       var u = state.users.filter(function (x) {
         return x.email.toLowerCase() === email.toLowerCase() && x.password && x.password === pass && !x.seeded;
       })[0];
@@ -2930,7 +3145,49 @@
       render();
     },
 
+    forgot: function () { state.authTab = "forgot"; state.authError = ""; state.authNotice = null; render(); },
+    "auth-back": function () { state.authTab = "login"; state.authError = ""; state.authNotice = null; render(); },
+    "forgot-send": function () {
+      var email = val("fg-email");
+      if (!email) { state.authError = "Enter your email."; return render(); }
+      if (state.authBusy) return;
+      state.authBusy = true; state.authError = ""; render();
+      CP_AUTH.recover(email).then(function (r) {
+        state.authBusy = false;
+        if (r.error && r.error.code !== "email") { state.authError = r.error.text; return render(); }
+        if (r.error) { state.authError = r.error.text; return render(); }
+        state.authNotice = { kind: "reset-sent", email: email }; render();
+      });
+    },
+    "resend-confirm": function () {
+      var n = state.authNotice; if (!n || state.authBusy) return;
+      state.authBusy = true; render();
+      CP_AUTH.resend(n.email).then(function (r) {
+        state.authBusy = false;
+        state.authNotice = { kind: "verify", email: n.email, info: r.error ? r.error.text : "Sent again. It can take a minute." };
+        render();
+      });
+    },
+    "reset-save": function () {
+      var a = val("rs-pass"), b = val("rs-pass2");
+      if (a.length < 8) { state.authError = "Password must be at least 8 characters."; return render(); }
+      if (a !== b) { state.authError = "The two passwords do not match."; return render(); }
+      if (state.authBusy) return;
+      state.authBusy = true; state.authError = ""; render();
+      CP_AUTH.updatePassword(a).then(function (r) {
+        if (r.error) return authFail(r);
+        state.authTab = "login";
+        startSession();
+      });
+    },
+
     logout: function () {
+      if (REAL) {
+        var cur = me();
+        CP_AUTH.signOut();
+        if (cur) { stash[cur.id] = cur; state.users = state.users.filter(function (x) { return x.id !== cur.id; }); }
+        sync.last = "";
+      }
       state.userId = null; state.authTab = "login"; state.exam = null; state.mexam = null; state.mresult = null; state.quiz = null; state.googlePending = null;
       state.preview = null; state.adminSkill = null; state.adminEdit = null;
       state.onb = null; state.ch = null; state.adminCh = null; state.adminChReview = null;
@@ -2960,10 +3217,6 @@
       var o = state.onb;
       if (!o) return actions["onb-open"]();
       o.skipped = false;
-      if (el.dataset.fresh) {
-        o.items = window.CP_ONBOARD.buildPlacement();
-        o.idx = 0; o.answers = [];
-      }
       go(el.dataset.to);
     },
     "onb-step": function (el) {
@@ -2974,8 +3227,9 @@
       window.scrollTo(0, 0);
       if (n === 1) return go("onb-resume");
       if (n === 2) {
-        if (!o.items || !o.items.length) { o.items = window.CP_ONBOARD.buildPlacement(); o.idx = 0; o.answers = []; }
-        return go("onb-placement");
+        // From the recommendation, step 2 reopens the answers; otherwise it is the choice itself.
+        if (o.mode === "guided" && o.items && o.items.length) return go("onb-placement");
+        return go("onb-fork");
       }
       if (o.rec && o.rec.length) return go("onb-recommend");
     },
@@ -2994,19 +3248,37 @@
         state.onb.err = "That is not enough text to work with. Paste at least a few lines of your resume.";
         return render();
       }
+      var chk = O.assessResume(O.clean(text));
+      if (!chk.ok) return rejectResume(chk, "That text");
       acceptResume(O.clean(text), "Pasted text", "text");
     },
 
-    "onb-skip": function () {
-      // Kept, not discarded: skipping by accident is easy and walking back should be too.
-      if (state.onb) state.onb.skipped = true;
+    "onb-to-fork": function () {
+      if (!state.onb) state.onb = { step: 1 };
+      state.onb.skipped = false;
+      window.scrollTo(0, 0);
+      go("onb-fork");
+    },
+
+    // "I know my target role": straight to the roadmap list, resume coverage shown on each card.
+    "onb-know": function () {
+      if (!state.onb) state.onb = { step: 1 };
+      state.onb.mode = "know";
+      state.onb.skipped = false;
+      window.scrollTo(0, 0);
       go("roles");
     },
 
-    "onb-to-placement": function () {
+    // "Help me choose": five questions, then the ranked recommendation.
+    "onb-guided": function () {
+      if (!state.onb) state.onb = { step: 1 };
       var o = state.onb;
-      o.items = window.CP_ONBOARD.buildPlacement();
-      o.idx = 0; o.answers = [];
+      o.mode = "guided"; o.skipped = false;
+      if (!o.items || !o.items.length || (o.answers || []).length < o.items.length) {
+        o.items = window.CP_ONBOARD.buildPlacement();
+        o.idx = 0; o.answers = []; o.rec = null;
+      }
+      window.scrollTo(0, 0);
       go("onb-placement");
     },
 
@@ -3015,13 +3287,15 @@
       o.answers[o.idx] = +el.dataset.i;
       o.rec = null;   // an earlier recommendation no longer matches the answers
       o.idx++;
+      window.scrollTo(0, 0);
       if (o.idx >= o.items.length) {
-        o.score = window.CP_ONBOARD.scorePlacement(o.items, o.answers);
+        o.score = window.CP_ONBOARD.scorePlacement(o.items, o.answers, ROLES.map(function (r) { return r.id; }));
         var u = me();
         u.placement = { answered: o.score.answered, total: o.score.total,
           perRole: o.score.perRole, when: today() };
+        // The last answer goes straight to the recommendation; the review page stays reachable from step 2.
+        return actions["onb-to-recommend"]();
       }
-      window.scrollTo(0, 0);
       render();
     },
 
@@ -3041,6 +3315,7 @@
       var o = state.onb;
       // The rule-based ranking is computed first so there is always something to show.
       o.rec = window.CP_ONBOARD.recommend(ROLES, o.detect || { skills: {}, roles: {} }, o.score);
+      o.planned = window.CP_ONBOARD.plannedLead(ROLES, o.score);
       o.by = "rules";
       // Marked busy before the first paint, so the page says the model is working
       // rather than showing the fallback numbers as if they were final.
@@ -3383,6 +3658,16 @@
 
   /* ---------------- onboarding and challenge helpers ---------------- */
 
+  /* The file was readable but is not a resume. Say so plainly, keep the upload box open and
+     store nothing about the file. */
+  function rejectResume(chk, what) {
+    var o = state.onb = state.onb || {};
+    o.parsing = false; o.detect = null; o.name = ""; o.text = ""; o.rec = null;
+    o.err = what + " does not look like a resume" + (chk.looksLike ? ". It looks like " + chk.looksLike : "") +
+      ". Please upload your resume (PDF, Word or plain text) and try again.";
+    render();
+  }
+
   function acceptResume(text, name, kind) {
     var det = window.CP_ONBOARD.detect(text);
     var u = me();
@@ -3415,7 +3700,7 @@
     var O = window.CP_ONBOARD;
     var prompt = O.rankPrompt(ROLES, o.detect || { skills: {}, roles: {}, general: {} }, o.items, o.answers, o.text);
 
-    askModel({ rules: O.rankRules, convo: [{ role: "user", content: prompt }], signal: null, onText: null })
+    askModel({ rules: O.rankRules(ROLES), convo: [{ role: "user", content: prompt }], signal: null, onText: null })
       .then(function (res) {
         var ranking = O.readRanking(res.text, ROLES);
         o.busy = false;
@@ -3569,12 +3854,28 @@
     window.CP_ONBOARD.parseFile(f).then(function (res) {
       if (!res.ok) {
         state.onb.parsing = false;
-        state.onb.paste = true;
-        state.onb.err = res.kind === "pdf"
-          ? "That PDF keeps its text as images, or in a font that cannot be read back. Paste the text instead and it will work the same way."
-          : "Not enough readable text came out of that file. A PDF, a Word file or pasted text all work.";
+        state.onb.name = "";
+        var m;
+        if (res.kind === "image") {
+          m = "That is an image, not a resume file. Please upload your resume as a PDF, Word (.docx) or text file.";
+        } else if (res.kind === "doc") {
+          m = "Old Word (.doc) files cannot be read. Save your resume as .docx or PDF and upload it again.";
+        } else if (res.locked) {
+          m = "That PDF is password protected, so it cannot be read. Remove the password or upload another copy of your resume.";
+        } else if (res.scanned) {
+          m = "No text could be read from that file. It looks like a scan or a photo (for example an ID, visa or form), " +
+            "which is not a resume. Please upload your resume as a text PDF or Word file. If it is a scanned resume, paste its text instead.";
+        } else if (res.kind === "pdf") {
+          m = "Not enough readable text came out of that PDF to check it. If it is your resume, export it again as a text PDF " +
+            "or paste its text. If it is something else, please upload your resume.";
+        } else {
+          m = "Not enough readable text came out of that file to check it. Please upload your resume as a PDF, Word (.docx) or text file.";
+        }
+        state.onb.err = m;
         return render();
       }
+      var chk = window.CP_ONBOARD.assessResume(res.text);
+      if (!chk.ok) return rejectResume(chk, "That file");
       acceptResume(res.text, f.name, res.kind);
     }, function () {
       state.onb.parsing = false;
@@ -3608,7 +3909,7 @@
     if (ev.key !== "Enter") return;
     var auth = document.getElementById("auth");
     if (ev.target && ev.target.tagName === "INPUT" && auth && !auth.hidden) {
-      var btn = document.querySelector('[data-action="signup"], [data-action="login"]');
+      var btn = document.querySelector('[data-action="signup"], [data-action="login"], [data-action="forgot-send"], [data-action="reset-save"]');
       if (btn) { ev.preventDefault(); actions[btn.dataset.action](btn); }
     }
   });
@@ -4120,9 +4421,19 @@
     );
   };
 
-  seed();
-  loadAccounts();
-  ensureVersioning();
-  render();
-  initTutor();
+  /* Start-up: find out whether real accounts are on, then draw. With them off (the Claude artifact,
+     local tests) the page is the browser-only demo, exactly as before. */
+  CP_AUTH.init().then(function (r) {
+    REAL = !!r.enabled;
+    seed();
+    loadAccounts();
+    ensureVersioning();
+    if (REAL) {
+      if (r.link === "recovery") state.authTab = "reset";
+      else if (r.link === "error") state.authError = r.linkError || "That link is no longer valid.";
+      if (r.session && r.link !== "recovery") { initTutor(); return startSession(); }
+    }
+    render();
+    initTutor();
+  });
 })();

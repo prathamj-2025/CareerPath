@@ -61,7 +61,7 @@ http.createServer(async (req, res) => {
       const m = new RegExp("- " + id + " [^:]*: resume mentions (\\d+)").exec(sent);
       return m ? Number(m[1]) : 0;
     };
-    const ranked = ["pm", "ba", "da", "fa"]
+    const ranked = ["pm", "ba", "pjm"]
       .map((id) => ({ id, n: mentions(id) }))
       .sort((a, b) => b.n - a.n);
     const ranking = ranked.map((r, i) => ({

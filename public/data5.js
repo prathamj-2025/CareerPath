@@ -46,38 +46,7 @@
         ] }
     ],
 
-    "sql-da": [
-      { must: [
-          ["Aggregates to one row per day before the window", /group\s+by\s+[a-z_.]*(day|order_date)/],
-          ["Uses an explicit 7-row frame", /rows\s+between\s+6\s+preceding\s+and\s+current\s+row/],
-          ["Averages over a window", /avg\s*\([\s\S]*?\)\s*over/],
-          ["Covers days with no orders", /calendar|left\s+(outer\s+)?join/]
-        ] },
-      { must: [
-          ["Restarts the ranking for each category", /partition\s+by\s+[a-z_.]*category/],
-          ["Uses a ranking function", /row_number|dense_rank|(^|[^_])rank\s*\(/],
-          ["Ranks by revenue, highest first", /order\s+by\s+[a-z_.]*revenue\s+desc/],
-          ["Filters to the top 3 outside the window", /<=\s*3|=\s*1\s+or|qualify/]
-        ],
-        forbid: [["Uses LIMIT 3, which truncates the whole result instead of each category", /limit\s+3/]] }
-    ],
 
-    "sql-fa": [
-      { must: [
-          ["Filters on accounting period, not transaction date", /period\s*(=|in)/],
-          ["Flips the sign so revenue reads positive", /-\s*sum|sum\s*\(\s*-|\*\s*-\s*1/],
-          ["Handles revenue and expense differently", /case\s+when[\s\S]*revenue/],
-          ["Excludes intercompany entities", /entity_id\s+not\s+in|elim|ic01/]
-        ],
-        forbid: [["Filters on txn_date, which puts entries in the wrong period", /txn_date/]] },
-      { must: [
-          ["Brings the GL to period grain", /group\s+by\s+[a-z_.]*period/],
-          ["Keeps a period missing from either side", /full\s+(outer\s+)?join/],
-          ["Compares against a tolerance rather than zero", /abs\s*\(/],
-          ["Flags the failing periods", /case\s+when/]
-        ],
-        forbid: [["Uses an inner join, which hides the very gap you are checking for", /(^|[^t]\s)inner\s+join/]] }
-    ],
 
     /* ---------------- written answers: concept coverage ---------------- */
 
@@ -189,102 +158,6 @@
           ["Puts the recommendation first, detail later", /recommend|first|lead|appendix|below/]
         ] }
     ],
-    "stats-da": [
-      { points: [
-          ["Identifies right skew from the mean and median gap", /skew|tail|outlier|right/],
-          ["Reports both statistics rather than one", /both|median and mean|report both|alongside/],
-          ["Suggests segmenting the large orders", /segment|split|bulk|enterprise|separate|group/]
-        ] },
-      { points: [
-          ["Names regression to the mean", /regression to the mean|regress|revert|mean/],
-          ["Explains that the group was selected for being extreme", /extreme|selected|worst|chose|noise/],
-          ["Asks for a control or comparison group", /control|comparison|counterfactual|holdout|similar/]
-        ] }
-    ],
-    "viz-da": [
-      { points: [
-          ["Rejects the dual axis and says why", /dual|two axes|arbitrar|scale|misleading|manufactur/],
-          ["Offers aligned charts sharing an x-axis", /two charts|stack|aligned|separate|share|same x/],
-          ["Mentions indexing as an alternative if one chart is required", /index|normali|base|100|rebase|percent change/]
-        ] },
-      { points: [
-          ["Starts from the decisions it supports", /decision|question|purpose|what.*ask/],
-          ["Keeps a small summary layer", /summary|headline|top|three|five|kpi/],
-          ["Moves the rest to a detail view", /detail|drill|link|separate|secondary|remove/]
-        ] }
-    ],
-    "python-da": [
-      { points: [
-          ["Identifies duplicate keys on both sides", /duplicate|both sides|many.to.many|repeat/],
-          ["Uses a check such as duplicated() or validate", /duplicated|validate|value_counts|indicator|nunique/],
-          ["Decides the correct grain before merging", /aggregate|grain|dedup|group|collapse|one row/]
-        ] },
-      { points: [
-          ["Tests with a clean restart and run all", /restart|run all|clean|fresh|rerun/],
-          ["Considers an unset random seed", /seed|random|sample/],
-          ["Considers the data or library changing underneath", /version|depend|library|data chang|source|pin/]
-        ] }
-    ],
-    "cleaning-da": [
-      { points: [
-          ["Diagnoses the mechanism before choosing a fix", /mechanism|why|mcar|mar|mnar|random|compare/],
-          ["Compares rows with and without the value", /compare|with and without|differ|systematic|distribution/],
-          ["Names income as a likely not-at-random case", /not at random|mnar|depends on the value|high earner|refus/]
-        ] },
-      { points: [
-          ["Questions whether the identity key is too loose", /key|identity|too loose|match|over.?merg/],
-          ["Treats 30% as an upstream pipeline signal", /upstream|pipeline|double.?write|retry|backfill|source/],
-          ["Recommends monitoring the rate over time", /log|monitor|track|each run|rate|alert/]
-        ] }
-    ],
-    "modeling-fa": [
-      { points: [
-          ["Locates the missing mirror entry", /pp&e|ppe|balance sheet|mirror|counterpart|not added/],
-          ["Connects the imbalance amount to the specific line", /equal|exactly|same amount|matches|capex/],
-          ["States the general rule for cash flow items", /every|mirror|both|each cash flow|rule/]
-        ] },
-      { points: [
-          ["Separates recognition from collection", /recogni|accrual|earned|collect|cash received/],
-          ["Explains receivables as uncollected revenue", /receivable|uncollected|owed|not yet paid/],
-          ["Notes the profitable-but-cash-poor failure", /cash|insolven|run out|working capital|growth/]
-        ] }
-    ],
-    "valuation-fa": [
-      { points: [
-          ["Treats the gap as a signal that assumptions are too aggressive", /aggressive|too high|wrong|optimistic|assumption/],
-          ["Names terminal growth, WACC or margins as the driver", /terminal|growth|wacc|discount|margin/],
-          ["Solves backwards to a defensible range", /back|solve|imply|implied|reverse|range/]
-        ] },
-      { points: [
-          ["Says raw beta contains the comparable's leverage", /leverage|debt|capital structure|its own|financial risk/],
-          ["Separates business risk from financial risk", /business risk|asset|unlever|operat/],
-          ["Relevers at the subject's own structure", /relever|subject|target|own capital|own structure/]
-        ] }
-    ],
-    "excel-fa": [
-      { points: [
-          ["Traces precedents on the line that will not move", /trace|precedent|follow|audit|formula/],
-          ["Looks for a driver bypassing the switch", /bypass|direct|hardcod|reference|not linked|choose|index/],
-          ["Uses extreme inputs to find unresponsive outputs", /extreme|absurd|large|test|stress|sensitiv/]
-        ] },
-      { points: [
-          ["Explains that data tables recalculate their whole grid", /grid|recalc|every|whole|entire|each change/],
-          ["Names the automatic-except-data-tables setting", /automatic except|except data table|manual|calculation (mode|setting)/],
-          ["Suggests reducing grid size or table count", /smaller|reduce|fewer|size|limit/]
-        ] }
-    ],
-    "variance-fa": [
-      { points: [
-          ["Rules out volume as the cause", /volume (is )?on plan|not volume|rules? out|eliminat/],
-          ["Separates price from mix", /price|mix|composition|realiz/],
-          ["Links a mix problem to incentives", /quota|commission|incentive|comp|sales team|reward/]
-        ] },
-      { points: [
-          ["Rejects the favourable variance as arithmetic", /not good|arithmetic|expected|because volume|misleading|no/],
-          ["Rebuilds the comparison at actual volume", /flex|actual volume|restate|rebuild|adjust/],
-          ["Identifies the worse case of rising unit costs", /per unit|unit cost|efficiency|worse|rose/]
-        ] }
-    ]
   };
 
   var idx = {};

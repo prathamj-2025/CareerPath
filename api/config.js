@@ -1,10 +1,24 @@
 /* Public, non-secret settings the page needs at start-up.
  *
- * GOOGLE_CLIENT_ID is an OAuth client ID, which Google designs to be public (it sits in
- * every page that shows a Sign in with Google button). The page hides the Google button
- * when it is not set, so the deployment works with or without it.
+ * Every value here is designed to be public: the Supabase project URL and publishable key sit in
+ * every page that talks to Supabase, and are protected by row level security in the database,
+ * not by being hidden. The service role / secret key must never be put here or anywhere in the repo.
+ *
+ * GOOGLE_CLIENT_ID drives the older in-page Google button used by the prototype sign-in.
+ * SUPABASE_GOOGLE=1 shows "Continue with Google" for real accounts (turn it on only after the
+ * Google provider is set up in Supabase).
+ * CP_DEMO=1 switches the real accounts off and returns to the browser-only demo (used by tests).
  */
+const DEFAULT_URL = "https://vgqmpyqbzmdmvgyvmytq.supabase.co";
+const DEFAULT_KEY = "sb_publishable_MtVoEWvkc7xqhqui_o_S6Q_gWmXiNIt";
+
 export default function handler(req, res) {
   res.setHeader("cache-control", "no-store");
-  res.status(200).json({ googleClientId: process.env.GOOGLE_CLIENT_ID || null });
+  const demo = process.env.CP_DEMO === "1";
+  res.status(200).json({
+    googleClientId: process.env.GOOGLE_CLIENT_ID || null,
+    supabaseUrl: demo ? null : (process.env.SUPABASE_URL || DEFAULT_URL),
+    supabaseKey: demo ? null : (process.env.SUPABASE_PUBLISHABLE_KEY || DEFAULT_KEY),
+    googleOAuth: !demo && process.env.SUPABASE_GOOGLE === "1"
+  });
 }

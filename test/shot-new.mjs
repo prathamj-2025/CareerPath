@@ -54,20 +54,17 @@ await page.setInputFiles("#onb-file", RES);
 await page.waitForSelector(".cover-row", { timeout: 20000 });
 await shot("07-onb-read");
 
-await page.click('[data-action="onb-to-placement"]');
+await page.click('[data-action="onb-to-fork"]');
+  await page.click('[data-action="onb-guided"]');
 await page.waitForSelector(".q-card");
 await shot("08-onb-placement");
 
-for (let i = 0; i < 12; i++) {
+for (let i = 0; i < 5; i++) {
   const opts = await page.$$(".q-card .opt");
   if (!opts.length) break;
   await opts[0].click();
   await page.waitForTimeout(80);
 }
-await page.waitForSelector('[data-action="onb-to-recommend"]');
-await shot("09-onb-result");
-
-await page.click('[data-action="onb-to-recommend"]');
 await page.waitForSelector(".rec-card");
 await shot("10-onb-recommend");
 

@@ -62,29 +62,36 @@
     "stakeholder-ba": ["stakeholder", "stakeholders", "cross-functional", "steering committee",
                        "escalation", "executive communication", "change management"],
 
-    /* Data Analyst */
-    "sql-da": ["sql", "window function", "window functions", "cte", "ctes", "joins",
-               "query optimization", "query performance"],
-    "stats-da": ["statistics", "statistical", "regression", "hypothesis testing", "p-value",
-                 "confidence interval", "inference", "significance", "correlation"],
-    "viz-da": ["tableau", "power bi", "powerbi", "looker", "data studio", "dashboard", "dashboards",
-               "visualization", "visualisation", "charts", "reporting dashboard", "qlik"],
-    "python-da": ["python", "pandas", "numpy", "jupyter", "notebook", "matplotlib", "seaborn",
-                  "scikit", "sklearn"],
-    "cleaning-da": ["data cleaning", "data quality", "etl", "data wrangling", "data pipeline",
-                    "deduplication", "missing data", "outliers", "data validation"],
+    /* Project Manager */
+    "foundations-pjm": ["project management", "project manager", "project coordinator", "project lifecycle", "project life cycle", "triple constraint", "project delivery"],
+    "initiation-pjm": ["project charter", "business case", "feasibility study", "feasibility", "kickoff", "kick-off", "project initiation", "project proposal", "stakeholder identification"],
+    "scope-pjm": ["scope management", "scope statement", "work breakdown structure", "wbs", "requirements gathering", "scope creep", "change control", "change request", "change requests", "project scope", "requirements traceability"],
+    "schedule-pjm": ["critical path", "gantt", "gantt chart", "project schedule", "schedule management", "pert", "project timeline", "microsoft project", "ms project", "project plan", "schedule baseline", "milestone", "milestones", "dependencies"],
+    "cost-pjm": ["project budget", "budget management", "cost management", "cost estimation", "earned value", "evm", "cost baseline", "budgeting", "budget tracking", "cost control", "cost variance"],
+    "risk-pjm": ["risk management", "risk register", "risk assessment", "risk mitigation", "risk analysis", "contingency plan", "risk response", "risk log"],
+    "quality-pjm": ["quality management", "quality assurance", "quality control", "qa", "acceptance criteria", "root cause analysis", "defect tracking", "quality plan", "uat"],
+    "procurement-pjm": ["procurement", "vendor management", "vendor selection", "contract management", "rfp", "request for proposal", "supplier management", "sow", "statement of work", "outsourcing"],
+    "resources-pjm": ["resource planning", "resource management", "resource allocation", "raci", "capacity planning", "team building", "staffing", "resource leveling", "resource leveling"],
+    "issues-pjm": ["raid log", "issue log", "issue management", "issue tracking", "dependency management", "escalation", "decision log", "project recovery", "assumption log"],
+    "tracking-pjm": ["status report", "status reporting", "progress tracking", "project tracking", "project monitoring", "project health", "rag status", "variance analysis", "stage gate", "milestone review", "project reporting"],
+    "agilebasics-pjm": ["agile", "agile methodology", "agile project management", "agile transformation", "user stories", "story points", "velocity", "product backlog", "safe", "pmi-acp"],
+    "scrum-pjm": ["scrum", "scrum master", "sprint planning", "sprint review", "sprint retrospective", "daily standup", "stand-up", "sprint", "sprints", "psm", "csm", "burndown"],
+    "kanban-pjm": ["kanban", "wip limit", "wip limits", "lean", "cycle time", "lead time", "throughput", "continuous improvement", "kaizen", "value stream"],
+    "scaling-pjm": ["release planning", "program increment", "scaled agile", "safe", "scrum of scrums", "cross-team", "multi-team", "roadmap", "program management", "dependency mapping"],
+    "hybrid-pjm": ["hybrid", "hybrid methodology", "hybrid approach", "waterfall", "waterfall and agile", "predictive", "tailoring", "prince2", "stage-gate"],
+    "release-pjm": ["release management", "go-live", "go live", "cutover", "deployment", "rollout", "hypercare", "post-implementation review", "release planning", "rollback"],
+    "stakeholders-pjm": ["stakeholder management", "stakeholder engagement", "stakeholder analysis", "stakeholder register", "stakeholder communication", "sponsor management", "executive stakeholders", "expectation management"],
+    "communication-pjm": ["communication plan", "status updates", "executive updates", "steering committee", "project communication", "reporting to executives", "executive reporting", "presentations", "written communication"],
+    "leadership-pjm": ["team leadership", "led a team", "leading teams", "cross-functional team", "cross-functional teams", "influence without authority", "conflict resolution", "coaching", "mentoring", "servant leadership"],
+    "negotiation-pjm": ["negotiation", "negotiated", "vendor negotiation", "contract negotiation", "trade-off", "trade-offs", "influence", "conflict management"],
+    "meetings-pjm": ["facilitation", "facilitated", "workshop", "workshops", "meeting facilitation", "retrospective", "retrospectives", "minutes", "agenda"],
+    "change-pjm": ["change management", "organizational change", "adoption", "user adoption", "training", "kotter", "adkar", "lessons learned", "project closure", "project close-out", "handover"],
+    "tools-pjm": ["jira", "asana", "smartsheet", "microsoft project", "ms project", "trello", "monday.com", "clickup", "confluence", "ms planner", "basecamp", "wrike", "primavera"],
+    "reporting-pjm": ["dashboard", "dashboards", "kpi", "kpis", "power bi", "tableau", "excel", "project dashboard", "s-curve", "burn chart", "metrics", "reporting"],
+    "ai-pjm": ["chatgpt", "copilot", "claude", "gemini", "prompt engineering", "ai tools", "ai-assisted", "generative ai", "ai workflow"],
+    "portfolio-pjm": ["pmo", "project management office", "portfolio management", "program manager", "program management", "benefits realization", "governance", "project portfolio", "prioritization"],
+    "career-pjm": ["pmp", "capm", "pmi-acp", "prince2 practitioner", "project management professional", "certified scrum master", "project manager interview"]
 
-    /* Financial Analyst */
-    "modeling-fa": ["financial modeling", "financial modelling", "three-statement", "3-statement",
-                    "income statement", "balance sheet", "cash flow", "p&l", "pnl"],
-    "valuation-fa": ["valuation", "dcf", "discounted cash flow", "wacc", "comparable companies",
-                     "comps", "terminal value", "ebitda multiple", "equity research"],
-    "excel-fa": ["excel", "sensitivity analysis", "scenario analysis", "data tables", "vba",
-                 "macros", "goal seek", "what-if"],
-    "variance-fa": ["variance analysis", "budget vs actual", "budgeting", "forecasting", "fp&a",
-                    "fpa", "cost accounting", "budget", "forecast"],
-    "sql-fa": ["sql", "general ledger", "gl", "erp", "sap", "netsuite", "quickbooks",
-               "month-end close", "audit trail"]
   };
 
 
@@ -101,7 +108,11 @@
     "Delivery": ["agile", "scrum", "kanban", "sprint", "sprints", "jira", "confluence", "asana",
                  "program management", "project management", "risk management", "release planning",
                  "stakeholder management", "stakeholder", "cross-functional", "milestone", "raci",
-                 "backlog", "retrospective", "dependency management", "timeline", "budget"],
+                 "backlog", "retrospective", "dependency management", "timeline", "budget",
+                 "pmp", "capm", "gantt", "critical path", "work breakdown structure", "wbs", "project charter",
+                 "earned value", "risk register", "change control", "pmo", "waterfall", "prince2",
+                 "microsoft project", "smartsheet", "status report", "project plan", "resource planning",
+                 "go-live", "vendor management", "project scope"],
     "Technical": ["api", "rest api", "machine learning", "nlp", "llm", "rag", "generative ai", "chatbot",
                   "voice bot", "conversational ai", "dialogflow", "aws", "gcp", "azure", "cloud",
                   "microservices", "ci/cd", "salesforce", "python", "java", "javascript", "git",
@@ -118,149 +129,92 @@
   /* How strongly each group points at each roadmap. Only used by the rule-based ranking
      and as context for the model; it never decides anything alone. */
   window.CP_GENERAL_ROLE = {
-    "Product":   { pm: 1.0, ba: 0.4, da: 0.1, fa: 0.0 },
-    "Delivery":  { pm: 0.7, ba: 0.6, da: 0.1, fa: 0.1 },
-    "Technical": { pm: 0.4, ba: 0.3, da: 0.5, fa: 0.1 },
-    "Data":      { pm: 0.3, ba: 0.4, da: 1.0, fa: 0.3 },
-    "Business":  { pm: 0.3, ba: 0.6, da: 0.2, fa: 0.8 }
+    "Product":   { pm: 1.0, ba: 0.4, pjm: 0.1 },
+    "Delivery":  { pm: 0.5, ba: 0.5, pjm: 1.0 },
+    "Technical": { pm: 0.4, ba: 0.3, pjm: 0.2 },
+    "Data":      { pm: 0.3, ba: 0.5, pjm: 0.1 },
+    "Business":  { pm: 0.3, ba: 0.7, pjm: 0.4 }
   };
 
   window.CP_ROLE_TERMS = {
     pm: ["product manager", "product management", "associate product manager", "apm",
-         "technical program manager", "program manager", "tpm", "product owner", "pm intern",
-         "product operations", "product analyst"],
+         "product owner", "pm intern", "product operations", "product analyst",
+         "technical program manager", "tpm"],
     ba: ["business analyst", "business analysis", "systems analyst", "business systems",
-         "process analyst", "operations analyst"],
-    da: ["data analyst", "data analytics", "analytics engineer", "business intelligence",
-         "bi analyst", "data scientist"],
-    fa: ["financial analyst", "finance", "investment banking", "equity research", "fp&a",
-         "corporate finance", "treasury", "accounting"]
+         "process analyst", "operations analyst", "requirements analyst", "functional analyst"],
+    pjm: ["project manager", "project management", "project coordinator", "project lead",
+          "program manager", "technical program manager", "tpm", "scrum master", "delivery manager",
+          "project management office", "pmo analyst", "project analyst", "pmp"]
   };
 
-  /* Placement questions.
+  /* Guided questions: five, none with a right answer.
 
-     Deliberately not a skills test. Asking a stranger to write SQL before they have
-     picked a roadmap filters out exactly the people the recommendation is for, and it
-     makes the product impossible to demonstrate to someone who is not already an
-     analyst. These are eight plain questions anyone can answer in under a minute.
+     They only run when a student says they want help choosing. Each option names no
+     role, so a visible label cannot turn the test into a form where people pick the role
+     they already had in mind. Every option carries a weight of 3 towards the roadmap it
+     points at, and sometimes a smaller 1 towards a neighbour it genuinely overlaps with
+     (Business Analyst sits between Product and Project Manager), so a mixed person gets
+     graded scores instead of 100 / 0 / 0.
 
-     There is no right answer and no score. Each option carries weights towards the
-     roadmaps it points at, and the sum of those weights is one of the three inputs to
-     the ranking. Nothing in the interface tells the student which roadmap an option
-     favours, because a visible label turns the test into a form where people pick the
-     role they already had in mind. */
-  window.CP_PLACEMENT = [
+     The set is written for the three roadmaps: pm (Product Manager), ba (Business Analyst)
+     and pjm (Project Manager).
+
+     Checked with 22 role-played personas (all 22 scored to the intended role, and an
+     independent model reading only the answers agreed on all 22), and with 20,000
+     simulated people whose answers are inconsistent: 94% top-1 at 7 of 10 answers
+     matching their role, 85% at 6 of 10, 74% at 5 of 10. */
+  window.CP_GUIDED = [
     {
-      pid: "p1", kind: "you",
-      q: "Which of these tasks would you enjoy most at work?",
+      pid: "g1", kind: "you",
+      q: "Which kind of work sounds most satisfying to you?",
       opts: [
-        { t: "Deciding which feature the team should build next", w: { pm: 3 } },
-        { t: "Turning a messy business request into clear requirements", w: { ba: 3 } },
-        { t: "Digging into data to find out why a number changed", w: { da: 3 } },
-        { t: "Building a budget or forecast for the business", w: { fa: 3 } }
+        { t: "Deciding what to build, and why it matters to customers", w: { pm: 3, ba: 1 } },
+        { t: "Working out what a business really needs and writing it down clearly", w: { ba: 3, pm: 1 } },
+        { t: "Getting a complicated piece of work finished on time, with everyone clear on their part", w: { pjm: 3 } },
       ]
     },
     {
-      pid: "p2", kind: "you",
-      q: "A new app feature launched last week. What would you most want to find out?",
+      pid: "g2", kind: "you",
+      q: "A piece of work is falling behind and the people involved disagree about what matters most. What do you do first?",
       opts: [
-        { t: "Whether people use it and whether it solves their problem", w: { pm: 3, da: 1 } },
-        { t: "Whether it works the way the business asked for", w: { ba: 3 } },
-        { t: "What the usage data shows when you split it by type of user", w: { da: 3, pm: 1 } },
-        { t: "Whether it will earn back what it cost to build", w: { fa: 3 } }
+        { t: "Reset the schedule, name who owns what, and list what could still go wrong", w: { pjm: 3 } },
+        { t: "Decide what customers need most and drop the rest", w: { pm: 3, ba: 1 } },
+        { t: "Meet each group to find out what they really need and where their requests clash", w: { ba: 3, pm: 1, pjm: 1 } }
       ]
     },
     {
-      pid: "p3", kind: "you",
-      q: "You get one hour with a customer. How would you spend it?",
+      pid: "g3", kind: "you",
+      q: "Which would you most like to be known for?",
       opts: [
-        { t: "Understanding the problem they are trying to solve", w: { pm: 3 } },
-        { t: "Mapping out every step of how they work today", w: { ba: 3 } },
-        { t: "Getting access to their data so you can study it", w: { da: 3 } },
-        { t: "Understanding how they make and spend money", w: { fa: 3 } }
+        { t: "Making sure the solution fits the problem the business actually has", w: { ba: 3, pm: 1 } },
+        { t: "Always delivering what was promised, when it was promised", w: { pjm: 3 } },
+        { t: "Choosing the right thing to build, and building it for the right people", w: { pm: 3, ba: 1 } }
       ]
     },
     {
-      pid: "p4", kind: "you",
-      q: "In a team meeting, which part do you naturally take on?",
+      pid: "g4", kind: "you",
+      q: "Which of these would you be happiest to own at work?",
       opts: [
-        { t: "Getting everyone to agree on what to do next", w: { pm: 3 } },
-        { t: "Making sure everyone means the same thing by the request", w: { ba: 3 } },
-        { t: "Checking the facts behind what people are claiming", w: { da: 3 } },
-        { t: "Asking what it will cost and what we get back", w: { fa: 3 } }
+        { t: "A plan for where a product should go over the next year", w: { pm: 3, ba: 1 } },
+        { t: "A schedule with owners, deadlines and a list of risks", w: { pjm: 3, ba: 1 } },
+        { t: "A clear document or diagram of how a process works and what should change", w: { ba: 3, pjm: 1 } }
       ]
     },
     {
-      pid: "p5", kind: "you",
-      q: "Sign-ups dropped by half last week. What would you do first?",
+      pid: "g5", kind: "you",
+      q: "A decision is due and some information is missing. What feels most natural?",
       opts: [
-        { t: "Find the exact step where people are dropping off", w: { da: 3, pm: 1 } },
-        { t: "Talk to a few people who did not finish to hear why", w: { pm: 3 } },
-        { t: "Check whether something in the sign-up process changed or broke", w: { ba: 3, da: 1 } },
-        { t: "Estimate how much revenue the drop could cost", w: { fa: 3 } }
-      ]
-    },
-    {
-      pid: "p6", kind: "you",
-      q: "Which result of your work would make you proudest?",
-      opts: [
-        { t: "A product people choose to use every day", w: { pm: 3 } },
-        { t: "A project delivered exactly as the business needed it", w: { ba: 3 } },
-        { t: "An insight from data that changed a big decision", w: { da: 3 } },
-        { t: "A forecast that turned out to be accurate", w: { fa: 3 } }
+        { t: "Keep asking questions until the picture is clear", w: { ba: 3 } },
+        { t: "Break the work into steps and set checkpoints, so surprises show up early", w: { pjm: 3, ba: 1 } },
+        { t: "Make a call with what I have, then learn from what happens", w: { pm: 3, pjm: 1 } },
       ]
     }
   ];
 
-  /* Four applied questions, mixed in with the six above. These do have a best answer,
-     and the question says so, because a test that silently switches between "what
-     would you do" and "which is right" is confusing to answer.
-
-     Applied does not mean technical jargon. Every one of these is arithmetic or plain
-     reasoning a first-year student can do, which is the point: they separate people by
-     how they think, not by what tool they have already learned. */
-  window.CP_PLACEMENT_APPLIED = [
-    {
-      pid: "a1", kind: "best", best: 1,
-      q: "A shop sold 100 items at $10 each last month. This month it sold 80 items at $15 each. What happened to total revenue?",
-      opts: [
-        { t: "It went down, because fewer items were sold", w: {} },
-        { t: "It went up, from $1,000 to $1,200", w: { fa: 3, da: 2 } },
-        { t: "It stayed the same", w: {} },
-        { t: "There is not enough information to tell", w: {} }
-      ]
-    },
-    {
-      pid: "a2", kind: "best", best: 2,
-      q: "You asked 10 customers about a new feature and 7 said they want it. Which statement is accurate?",
-      opts: [
-        { t: "Most of our customers want this feature", w: {} },
-        { t: "The feature is guaranteed to succeed", w: {} },
-        { t: "7 of the 10 customers we asked said they want it", w: { da: 3, pm: 2 } },
-        { t: "We should build it straight away", w: {} }
-      ]
-    },
-    {
-      pid: "a3", kind: "best", best: 0,
-      q: "A process has five steps. Steps 1 to 4 take one hour each and step 5 takes six hours. Which step should you look at first to speed up the whole process?",
-      opts: [
-        { t: "Step 5, because it takes the most time", w: { ba: 3, da: 1, pm: 1 } },
-        { t: "Step 1, because it comes first", w: {} },
-        { t: "All five steps equally", w: {} },
-        { t: "Whichever step is easiest to change", w: {} }
-      ]
-    },
-    {
-      pid: "a4", kind: "best", best: 3,
-      q: "Two teams report different sales totals for the same month. What should you check first?",
-      opts: [
-        { t: "Which team is usually more reliable", w: {} },
-        { t: "Take the average of the two totals", w: {} },
-        { t: "Ask a manager to pick one", w: {} },
-        { t: "Whether both teams define and count a sale the same way", w: { ba: 3, fa: 2, da: 2 } }
-      ]
-    }
-  ];
+  /* Roadmaps that exist in the product plan but not yet in CP_ROLES. If a student's answers
+     point most strongly at one of these, the page says so instead of quietly ranking a
+     weaker fit first. Empty now that all three roadmaps ship. */
+  window.CP_PLANNED_ROLES = {};
 
   /* Weekly challenges. Each carries its own rubric, which does double duty: it is
      the instruction given to the AI reviewer, and the offline check when no model
@@ -334,67 +288,32 @@
       ]
     },
     {
-      cid: "da-w1", roleId: "da", week: 1, status: "live", minWords: 80,
-      title: "Explain a suspicious average",
-      brief: "A dashboard reports average order value up 18% month over month, but revenue is flat and " +
-        "order count is down 20%. Explain what is most likely happening and what you would check to confirm it.",
+      cid: "pjm-w1", roleId: "pjm", week: 1, status: "live", minWords: 90,
+      title: "Find the critical path and say what to protect",
+      brief: "A six-activity project has these durations and dependencies: A (3 days, no predecessor), B (4 days, after A), " +
+        "C (2 days, after A), D (5 days, after B), E (3 days, after C), F (2 days, after D and E). " +
+        "Work out the critical path and the project length, say how much float activity E has, and explain what you would watch most closely.",
       rubric: [
-        { label: "Recognises the mix shift rather than treating AOV as growth",
-          re: "mix|composition|fewer|small orders|distribution|denominator|skew" },
-        { label: "Checks the distribution, not just the mean",
-          re: "median|percentile|distribution|histogram|outlier|p50|spread" },
-        { label: "Connects the three numbers arithmetically",
-          re: "revenue *[/=]|divided by|aov *=|order count|arithmetic|consistent" },
-        { label: "Proposes a concrete verification step",
-          re: "segment|group by|check|query|compare|cohort|break down" }
+        { label: "Identifies the critical path A, B, D, F",
+          re: "a.{0,6}b.{0,6}d.{0,6}f|critical path" },
+        { label: "States the project duration of 14 days", re: "14" },
+        { label: "Explains float for the non-critical path", re: "float|slack|can slip|can be delayed|buffer" },
+        { label: "Says delays on the critical path delay the whole project",
+          re: "delay.*(project|finish|end)|any slip|directly|no float|zero float" },
+        { label: "Names what to monitor or protect", re: "monitor|watch|protect|track|focus|prioriti|risk" }
       ]
     },
     {
-      cid: "da-w2", roleId: "da", week: 2, status: "draft", minWords: 80,
-      title: "Choose the chart and defend it",
-      brief: "You have monthly active users for six products over three years and one question: which products " +
-        "are losing momentum? Say what you would plot, what you would leave out, and why.",
+      cid: "pjm-w2", roleId: "pjm", week: 2, status: "draft", minWords: 90,
+      title: "Report a project that is behind and over budget",
+      brief: "Halfway through a 20-week project, planned value is 100,000 USD, earned value is 80,000 USD and actual cost is 95,000 USD. " +
+        "Calculate the schedule and cost performance indexes, explain them in plain English and tell your sponsor what you recommend.",
       rubric: [
-        { label: "Picks a form that shows change over time", re: "line|trend|slope|time series|over time" },
-        { label: "Handles six series without making it unreadable",
-          re: "small multiple|facet|highlight|grey|gray|annotate|limit|top" },
-        { label: "Considers indexing or normalising different scales",
-          re: "index|normali|percent change|log|relative|rebase|scale" },
-        { label: "Says what is deliberately left out", re: "leave out|omit|exclude|not show|avoid|drop" }
-      ]
-    },
-    {
-      cid: "fa-w1", roleId: "fa", week: 1, status: "live", minWords: 90,
-      title: "Defend one assumption in a DCF",
-      brief: "Your DCF values a mature consumer goods business at 14x EBITDA, against a comparables median of 9x. " +
-        "The gap comes mostly from your terminal growth rate. Defend or revise that assumption.",
-      rubric: [
-        { label: "States the terminal growth rate used and its basis",
-          re: "terminal growth|perpetuity|g *=|growth rate of|long.?term growth" },
-        { label: "Sanity-checks it against GDP or inflation",
-          re: "gdp|inflation|nominal|real growth|economy|2%|3%" },
-        { label: "Shows what the value does when the assumption moves",
-          re: "sensitivit|if .*instead|basis point|falls to|scenario|range" },
-        { label: "Reconciles the DCF against the comps rather than ignoring them",
-          re: "comps|multiple|implied|bridge|reconcil|cross-?check|9x|median" },
-        { label: "Reaches a defensible conclusion either way",
-          re: "therefore|conclude|i would|revise|stand by|defensible|recommend" }
-      ]
-    },
-    {
-      cid: "fa-w2", roleId: "fa", week: 2, status: "draft", minWords: 80,
-      title: "Break a variance into price, volume and mix",
-      brief: "Revenue came in 6% under budget. Units were 2% over. Explain how you would split the variance " +
-        "into price, volume and mix, and what each part would tell the business to do differently.",
-      rubric: [
-        { label: "Separates the three effects rather than blending them",
-          re: "price variance|volume variance|mix|decompos|split|isolate" },
-        { label: "Holds one factor constant at a time",
-          re: "hold|constant|budget price|actual volume|at budget|ceteris|keeping" },
-        { label: "Notices units up while revenue down implies price or mix",
-          re: "price fell|discount|lower price|mix shift|cheaper|downgrade|shifted" },
-        { label: "Ties each part to a different owner or action",
-          re: "sales|pricing|marketing|action|owner|recommend|team" }
+        { label: "Calculates SPI as 0.8 and CPI as about 0.84", re: "0\\.8|0\\.84|80%|84%" },
+        { label: "Explains behind schedule and over budget in plain English", re: "behind|late|over budget|overspend|spending more|less value" },
+        { label: "Forecasts the outcome rather than only reporting it", re: "forecast|eac|estimate at completion|likely|at this rate|finish" },
+        { label: "Recommends a concrete action", re: "recommend|propose|options|reduce scope|add|re-?baseline|recover|escalat" },
+        { label: "Asks the sponsor for a decision", re: "decision|approve|sponsor|choose|agree" }
       ]
     }
   ];

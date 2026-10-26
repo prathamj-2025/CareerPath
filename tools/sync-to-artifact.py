@@ -13,4 +13,9 @@ h = h.replace('</head>\n<body>', '').replace('</body>\n</html>', '')
 open(os.path.join(out, 'index.html'), 'w', encoding='utf-8').write(h)
 for f in os.listdir(src):
     if f.endswith('.js'): shutil.copy(os.path.join(src, f), os.path.join(out, f))
+vend = os.path.join(src, 'vendor')
+if os.path.isdir(vend):
+    os.makedirs(os.path.join(out, 'vendor'), exist_ok=True)
+    for f in os.listdir(vend):
+        if f.endswith('.js'): shutil.copy(os.path.join(vend, f), os.path.join(out, 'vendor', f))
 print('built', out)

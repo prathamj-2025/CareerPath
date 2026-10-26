@@ -63,59 +63,7 @@
       }
     ],
 
-    "sql-da": [
-      {
-        kind: "query",
-        prompt: "Produce daily revenue with a 7-day moving average, covering every calendar day in the range even on days with no orders.",
-        schema: "orders                        calendar\n  order_id   BIGINT             day  DATE\n  order_date DATE\n  amount     NUMERIC",
-        hints: [
-          "Aggregate to one row per day before applying any window, or the window frames over order rows instead of days.",
-          "An ORDER BY with no explicit frame gives you a running average from the start of the series, not a 7-day one.",
-          "Days with no orders have no row to sit on, so the spine has to come from the calendar table."
-        ],
-        solution: "WITH daily AS (\n  SELECT c.day,\n         COALESCE(SUM(o.amount), 0) AS revenue\n  FROM calendar c\n  LEFT JOIN orders o ON o.order_date = c.day\n  WHERE c.day BETWEEN DATE '2026-01-01' AND DATE '2026-09-30'\n  GROUP BY c.day\n)\nSELECT\n  day,\n  revenue,\n  AVG(revenue) OVER (\n    ORDER BY day\n    ROWS BETWEEN 6 PRECEDING AND CURRENT ROW\n  ) AS ma_7d\nFROM daily\nORDER BY day;",
-        answer: "The explicit ROWS BETWEEN 6 PRECEDING AND CURRENT ROW is what makes this a 7-day average. Omit the frame and the implicit default is RANGE UNBOUNDED PRECEDING, which gives a running average over the whole series and looks plausible enough that the mistake often ships.\n\nThe calendar spine matters for the same reason. Without it, ROWS counts the last 7 rows present, so a week containing three zero-order days averages over 7 rows spanning ten calendar days. The first six rows are also averaging over fewer than seven days, which you either accept or filter out at the edge."
-      },
-      {
-        kind: "query",
-        prompt: "Return the top 3 products by revenue within each category.",
-        schema: "sales\n  product   TEXT\n  category  TEXT\n  revenue   NUMERIC",
-        hints: [
-          "LIMIT 3 applies to the whole result set, not to each category.",
-          "You need a ranking that restarts for every category, which is what PARTITION BY does.",
-          "A window function cannot be filtered in the same SELECT's WHERE clause, so the rank has to be computed one level down."
-        ],
-        solution: "WITH ranked AS (\n  SELECT\n    category,\n    product,\n    revenue,\n    ROW_NUMBER() OVER (\n      PARTITION BY category\n      ORDER BY revenue DESC\n    ) AS rn\n  FROM sales\n)\nSELECT category, product, revenue\nFROM ranked\nWHERE rn <= 3\nORDER BY category, rn;",
-        answer: "This is the top-N-per-group pattern and it comes up constantly. PARTITION BY restarts the numbering for each category; ORDER BY inside the window decides what \"top\" means.\n\nThe choice of ranking function matters when revenue ties. ROW_NUMBER picks an arbitrary winner among tied rows and always returns exactly three. RANK returns more than three if there is a tie at the boundary and leaves gaps afterwards. DENSE_RANK also returns more than three but without gaps. Pick deliberately rather than by habit, and if you have a tiebreaker the business cares about, add it to the ORDER BY."
-      }
-    ],
 
-    "sql-fa": [
-      {
-        kind: "query",
-        prompt: "Build a P&L summary for accounting period 9: revenue and operating expense by account, for the trading entities only, with revenue presented as a positive number.",
-        schema: "gl_lines\n  entry_id     BIGINT\n  account_code TEXT\n  account_type TEXT     -- 'revenue', 'expense', 'asset', 'liability', 'equity'\n  period       INT      -- accounting period, 1-12 (13 = adjusting)\n  entity_id    TEXT\n  txn_date     DATE\n  amount       NUMERIC  -- credits stored negative",
-        hints: [
-          "Filter on period, not on txn_date. An entry dated 2 October can belong to period 9.",
-          "Revenue is a credit and is stored negative, so a plain SUM returns a negative revenue figure that is correct but unpresentable.",
-          "Intercompany entities must come out or the consolidated figures double count."
-        ],
-        solution: "SELECT\n  account_code,\n  account_type,\n  CASE WHEN account_type = 'revenue'\n       THEN -SUM(amount)\n       ELSE  SUM(amount)\n  END AS reported_amount\nFROM gl_lines\nWHERE period = 9\n  AND account_type IN ('revenue', 'expense')\n  AND entity_id NOT IN ('ELIM', 'IC01')\nGROUP BY account_code, account_type\nORDER BY account_type, account_code;",
-        answer: "The sign flip belongs in one place, applied by account type, rather than scattered through the query. Flipping inconsistently across accounts is how a P&L ends up internally contradictory.\n\nPeriod filtering is the single most common reason a finance query disagrees with the reported numbers. Note also that period 13, the adjusting period, is excluded here by the period = 9 filter, which is right for a monthly view and wrong for a full-year roll-up: a year-to-date query that forgets period 13 misses the audit adjustments entirely.\n\nHardcoding the elimination entity list is a known weakness. In production that belongs in a reference table, because a new intercompany entity added next quarter would silently break this query with nothing to announce it."
-      },
-      {
-        kind: "query",
-        prompt: "Write the tie-out check: for each period, the difference between the GL total and the trial balance total, flagged when it exceeds a rounding tolerance.",
-        schema: "gl_lines                      trial_balance\n  period  INT                   period  INT\n  amount  NUMERIC               total   NUMERIC",
-        hints: [
-          "Both sides have to be brought to the same grain before they can be compared.",
-          "A period present in one source and missing from the other is exactly the failure you are trying to catch, so an inner join would hide it.",
-          "Floating point and rounding mean you compare against a small tolerance, not against zero."
-        ],
-        solution: "WITH gl AS (\n  SELECT period, SUM(amount) AS gl_total\n  FROM gl_lines\n  GROUP BY period\n)\nSELECT\n  COALESCE(gl.period, tb.period)                       AS period,\n  COALESCE(gl.gl_total, 0)                             AS gl_total,\n  COALESCE(tb.total, 0)                                AS tb_total,\n  COALESCE(gl.gl_total, 0) - COALESCE(tb.total, 0)     AS difference,\n  CASE WHEN ABS(COALESCE(gl.gl_total, 0) - COALESCE(tb.total, 0)) > 0.01\n       THEN 'FAIL' ELSE 'OK' END                       AS tie_out\nFROM gl\nFULL OUTER JOIN trial_balance tb ON tb.period = gl.period\nORDER BY period;",
-        answer: "The FULL OUTER JOIN is the point. An inner join would quietly drop a period that exists in the GL but not the trial balance, which is precisely the discrepancy worth catching, and the check would report clean.\n\nA tolerance rather than = 0 keeps the check from failing on rounding noise. Set it to the materiality the business actually uses rather than picking a number.\n\nThis is the kind of query that should run automatically alongside the report, not as something a person remembers to check. A tie-out that runs every time catches drift the moment it appears; a quarterly manual review finds it after decisions have already been made on the wrong numbers."
-      }
-    ],
 
     /* ---------------- judgement skills: hints on written answers ---------------- */
 
@@ -175,54 +123,6 @@
       { hints: ["Translate into the unit the CFO owns: cash, margin, payback.",
                 "Lead with the trade, not the process detail."] }
     ],
-    "stats-da": [
-      { hints: ["A mean roughly three times the median is a strong signal about the shape of the distribution.",
-                "Check whether the tail is one kind of customer, because that is a segmentation question, not a statistics one."] },
-      { hints: ["You selected the group precisely because it was extreme.",
-                "Extreme values are partly noise, and noise does not repeat."] }
-    ],
-    "viz-da": [
-      { hints: ["Any correlation the reader sees on a dual axis is a product of two arbitrary scale choices.",
-                "Two charts sharing an x-axis show the same timing relationship without asserting a relationship."] },
-      { hints: ["Start from the decisions it should support, not from the tiles already on it.",
-                "A dashboard's value is mostly in what it leaves out."] }
-    ],
-    "python-da": [
-      { hints: ["Row counts only grow like that when the merge key repeats on both sides.",
-                "pandas will tell you before it corrupts the data, if you ask it to validate the relationship."] },
-      { hints: ["Try restart-and-run-all first: if the result changes on a clean run, it is state or a seed.",
-                "If only the comparison to last week changed, look at the data source and the library versions."] }
-    ],
-    "cleaning-da": [
-      { hints: ["How much is missing matters far less than why.",
-                "Compare the rows with and without income across everything else you have."] },
-      { hints: ["Check the identity key before celebrating: too loose a key merges genuinely different records.",
-                "If the key is right, 30% duplication is an upstream problem worth more than the cleaning step."] }
-    ],
-    "modeling-fa": [
-      { hints: ["When the imbalance equals one line item exactly, that line is missing its counterpart.",
-                "Every cash flow movement needs a mirror on the balance sheet."] },
-      { hints: ["Revenue is recognised when earned, not when collected.",
-                "Ask where the cash physically is if the sale has been booked but not paid."] }
-    ],
-    "valuation-fa": [
-      { hints: ["The cross-check just caught something. Work backwards from the implied multiple.",
-                "Solve for the terminal growth rate that lands inside the comparable range, then judge whether that rate is defensible."] },
-      { hints: ["Raw beta carries two things: business risk and that company's own leverage.",
-                "You want the first without the second, then relevered at your subject's capital structure."] }
-    ],
-    "excel-fa": [
-      { hints: ["Trace precedents on the line that is not moving.",
-                "Set every downside input to an absurd value and see which outputs fail to react."] },
-      { hints: ["Data tables recalculate their whole grid on every workbook change.",
-                "There is a calculation setting that leaves normal formulas live and refreshes tables on demand."] }
-    ],
-    "variance-fa": [
-      { hints: ["Volume on plan removes one of the three explanations immediately.",
-                "If it is mix rather than price, the cause is usually how quota and commission are structured."] },
-      { hints: ["Variable costs should fall when volume falls, so some of that favourability is arithmetic.",
-                "Rebuild the comparison at actual volume before drawing any conclusion."] }
-    ]
   };
 
   var idx = {};

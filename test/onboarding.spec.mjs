@@ -32,16 +32,38 @@ const nav = () => page.$$eval("#sidebar .nav-item span:first-child", els => els.
 /* A resume the parser has to read out of a real PDF, written to a temp file so the
    suite does not depend on anything outside the repository. */
 const RESUME = [
-  "ALEX RIVERA", "alex@usc.edu | Los Angeles, CA", "",
+  "ALEX RIVERA", "alex@usc.edu | (213) 555-0142 | Los Angeles, CA", "",
+  "EDUCATION",
+  "University of Southern California, M.S. Engineering Management, 2024 - 2026",
+  "",
   "EXPERIENCE",
-  "Data Analyst, Northwind Retail",
-  "Wrote SQL against Snowflake to build weekly reporting for the merchandising team.",
-  "Built dashboards in Tableau and automated the refresh with Python and pandas.",
-  "Ran data cleaning and validation on the product catalogue, fixing duplicates and missing data.",
-  "Used statistics and hypothesis testing to size the effect of a pricing change.",
+  "Project Coordinator, Northwind Logistics    Jun 2022 - Aug 2024",
+  "- Managed a 14-week warehouse migration with a Gantt chart, a risk register and weekly status reports.",
+  "- Ran sprint planning and retrospectives in Jira with a Scrum team of eight.",
+  "- Led stakeholder management with operations, finance and two vendors, and tracked the project budget.",
+  "- Delivered change control for 30 scope requests and kept the critical path on schedule.",
   "", "SKILLS",
-  "SQL, Python, pandas, Tableau, statistics, data cleaning, window functions, dashboards"
+  "Project management, Scrum, Jira, risk management, Microsoft Project, stakeholder management, budgeting"
 ].join("\n");
+
+const JOB_AD = [
+  "Senior Project Manager - Acme Corp", "About the role",
+  "We are looking for a Senior Project Manager to lead our cloud migration program.",
+  "Responsibilities", "- You will own the project plan, budget and risk register.",
+  "Qualifications", "- 7+ years of project management experience; PMP preferred.",
+  "Benefits", "Health insurance and 401k. Acme is an equal opportunity employer. Apply now."
+].join("\n");
+
+/* A minimal text PDF: one content stream, text set with Tj, no embedded font. */
+function textPdf(lines) {
+  let body = "BT\n/F1 11 Tf 72 720 Td\n";
+  for (const ln of lines) body += "(" + ln.replace(/([()\\])/g, "\\$1") + ") Tj 0 -14 Td\n";
+  body += "ET\n";
+  const data = zlib.deflateSync(Buffer.from(body, "latin1"));
+  return Buffer.concat([
+    Buffer.from("%PDF-1.5\n8 0 obj\n<< /Filter /FlateDecode /Length " + data.length + " >>\nstream\n", "latin1"),
+    data, Buffer.from("\nendstream\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF\n", "latin1")]);
+}
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "cp-"));
 const txtPath = path.join(tmp, "alex-resume.txt");
@@ -61,6 +83,48 @@ await step("a new account starts at the resume step", async () => {
   await page.waitForSelector("#onb-file");
   const h = await text(".page-head h1");
   if (!h.includes("resume")) throw new Error("landed on: " + h);
+});
+
+await step("the resume step has no skip button, only an honest way out for people without a resume", async () => {
+  const t = await text("#view");
+  if (/skip/i.test(t)) throw new Error("the page still offers a skip: " + t.match(/.{0,30}skip.{0,30}/i)[0]);
+  if (!t.includes("I don")) throw new Error("no way forward for someone with no resume");
+});
+
+await step("a job description in a PDF is refused as not a resume", async () => {
+  const f = path.join(tmp, "job-ad.pdf");
+  fs.writeFileSync(f, textPdf(JOB_AD.split("\n")));
+  await page.setInputFiles("#onb-file", f);
+  await page.waitForSelector(".err", { timeout: 15000 });
+  const t = await text("#view");
+  if (!/does not look like a resume/.test(t)) throw new Error("not refused: " + t.slice(0, 200));
+  if (!/job description/.test(t)) throw new Error("did not say what it looks like: " + t.slice(0, 200));
+  if (!/upload your resume/i.test(t)) throw new Error("did not ask for a re-upload");
+  if (await page.$(".cover-row")) throw new Error("read skills out of a document that is not a resume");
+  if (!(await page.$("#onb-file"))) throw new Error("no way to upload again");
+});
+
+await step("a plain text file that is not a resume is refused too", async () => {
+  const f = path.join(tmp, "notes.txt");
+  fs.writeFileSync(f, "Lecture 4: Supply and demand\nWhen the price of a good rises, the quantity demanded falls. This is the law of demand. " +
+    "The demand curve slopes downward. Shifts in the curve come from income, tastes and the prices of related goods. " +
+    "Equilibrium is where supply equals demand. In the next lecture we cover elasticity and how firms respond to price changes.");
+  await page.setInputFiles("#onb-file", f);
+  await page.waitForSelector(".err", { timeout: 15000 });
+  const t = await text("#view");
+  if (!/does not look like a resume/.test(t)) throw new Error("not refused: " + t.slice(0, 200));
+  if (await page.$(".cover-row")) throw new Error("accepted lecture notes");
+});
+
+await step("pasted text that is not a resume is refused", async () => {
+  await page.click('[data-action="onb-paste"]');
+  await page.fill("#onb-text", "Dear Hiring Manager, I am writing to express my interest in the Product Manager position. " +
+    "I have led several launches and enjoy working with engineers and designers. Thank you for your time and consideration. Sincerely, Alex");
+  await page.click('[data-action="onb-paste-save"]');
+  await page.waitForSelector(".err");
+  const t = await text("#view");
+  if (!/does not look like a resume/.test(t)) throw new Error("cover letter accepted: " + t.slice(0, 160));
+  await page.click('[data-action="onb-paste"]');
 });
 
 await step("the resume is read in the browser and never uploaded", async () => {
@@ -108,7 +172,7 @@ await step("a PDF typeset with TeX is read as words, from the page and not the f
 });
 
 await step("a product manager's resume is recognised in its own vocabulary", async () => {
-  const PM = "Technical Program Manager, Acme. Led cross-functional agile teams, ran sprint planning in Jira, " +
+  const PM = "Associate Product Manager, Acme. Led cross-functional agile teams, ran sprint planning in Jira, " +
     "owned the product roadmap and go-to-market plan, wrote user stories, managed stakeholders and risk, and " +
     "launched a chatbot built on an LLM with RAG. Presented OKRs to executives. Figma wireframes for the MVP.";
   const r = await page.evaluate((t) => {
@@ -132,11 +196,11 @@ await step("a product manager's resume is recognised in its own vocabulary", asy
 
 await step("the evidence shown is the words the resume actually contains", async () => {
   const pills = await page.$$eval(".card .pill.ok", els => els.map(e => e.textContent.trim().toLowerCase()));
-  for (const want of ["sql", "tableau", "pandas", "statistics"]) {
+  for (const want of ["scrum", "jira", "risk management", "stakeholder management"]) {
     if (!pills.includes(want)) throw new Error("missing evidence: " + want);
   }
   // Module names are curriculum, not resume words, so they must not be presented as found.
-  for (const bad of ["SQL for Data Analysts", "Statistics & Inference", "Valuation"]) {
+  for (const bad of ["Project Management Foundations", "Scope, Requirements and the WBS", "Cost Estimation and Budgeting"]) {
     if (pills.includes(bad.toLowerCase())) throw new Error("presented a module name as a resume word: " + bad);
   }
   const t = await text("#view");
@@ -145,61 +209,123 @@ await step("the evidence shown is the words the resume actually contains", async
 
 await step("coverage is reported per roadmap without overclaiming", async () => {
   const rows = await page.$$eval(".cover-row", els => els.map(e => e.textContent.replace(/\s+/g, " ").trim()));
-  if (rows.length !== 4) throw new Error("expected a row per roadmap, got " + rows.length);
-  const da = rows.find(r => r.startsWith("Data Analyst"));
-  if (!/5 \/ 5/.test(da)) throw new Error("data analyst coverage wrong: " + da);
-  // SQL is on every roadmap, so finance is not zero, but it must stay well behind.
-  const fa = rows.find(r => r.startsWith("Financial Analyst"));
+  if (rows.length !== 3) throw new Error("expected a row per roadmap, got " + rows.length);
   const n = (r) => Number(/(\d+) \/ \d+/.exec(r)[1]);
-  if (n(fa) >= n(da)) throw new Error("finance matched as well as data: " + fa);
+  const pjm = rows.find(r => r.startsWith("Project Manager"));
+  const pm = rows.find(r => r.startsWith("Product Manager"));
+  const ba = rows.find(r => r.startsWith("Business Analyst"));
+  if (n(pjm) < 6) throw new Error("a project resume covers too little of its roadmap: " + pjm);
+  if (n(pm) >= n(pjm) || n(ba) >= n(pjm)) throw new Error("other roadmaps matched as well as project management: " + rows.join(" | "));
 });
 
-await step("the placement questions are answerable without any skill", async () => {
-  await page.click('[data-action="onb-to-placement"]');
+await step("after the resume the student says whether they know their target role", async () => {
+  await page.click('[data-action="onb-to-fork"]');
+  await page.waitForSelector(".fork");
+  const h = await text("#view h1");
+  if (!/know your target role/i.test(h)) throw new Error("fork heading: " + h);
+  const cards = await page.$$eval(".fork-card h3", els => els.map(e => e.textContent.trim()));
+  if (cards.length !== 2 || !/know my target/i.test(cards[0]) || !/help me choose/i.test(cards[1]))
+    throw new Error("expected two choices, got " + cards.join(" | "));
+  if (await page.$('[data-action="onb-skip"]')) throw new Error("the fork still has a skip");
+  if (/skip/i.test(await text("#view"))) throw new Error("the fork still mentions skipping");
+  const steps = await text(".onb-steps");
+  if (!steps.includes("Your target")) throw new Error("steps strip: " + steps);
+});
+
+await step("asking for help starts five questions that need no skill", async () => {
+  await page.click('[data-action="onb-guided"]');
   await page.waitForSelector(".q-card");
   const head = await text(".progress-head");
-  if (!/\d+\s*\/\s*\d+/.test(head)) throw new Error("no progress shown: " + head);
+  if (!/1\s*\/\s*5/.test(head)) throw new Error("expected question 1 of 5: " + head);
   const stem = await text(".q-stem");
-  if (/SELECT|FROM |GROUP BY|COUNT\(/i.test(stem)) throw new Error("a query turned up in placement: " + stem);
+  if (/SELECT|FROM |GROUP BY|COUNT\(/i.test(stem)) throw new Error("a query turned up in the questions: " + stem);
 });
 
-await step("no question tells the student which roadmap it points at", async () => {
-  const names = ["Product Manager", "Business Analyst", "Data Analyst", "Financial Analyst",
-                 "SQL for", "roadmap"];
-  for (let i = 0; i < 12; i++) {
+await step("no question names a roadmap, and none has a right answer", async () => {
+  const names = ["Product Manager", "Business Analyst", "Project Manager", "SQL for", "roadmap"];
+  for (let i = 0; i < 5; i++) {
     const card = await page.$(".q-card");
-    if (!card) break;
+    if (!card) throw new Error("ran out of questions at " + (i + 1));
     const shown = await text("#view");
     for (const n of names) {
-      if (shown.includes(n)) throw new Error('question ' + (i + 1) + ' leaks "' + n + '"');
+      if (shown.includes(n)) throw new Error("question " + (i + 1) + ' leaks "' + n + '"');
     }
     const kind = await text(".progress-head");
-    if (!/No right answer|One best answer/.test(kind)) throw new Error("question " + (i + 1) + " does not say its kind");
-    await page.$$eval(".q-card .opt", els => els[0].click());
-    await page.waitForTimeout(70);
-  }
-  const done = await text("#view");
-  if (!done.includes("Answers recorded")) throw new Error("never reached the end");
-});
-
-await step("the result reports no overall score", async () => {
-  const t = await text("#view");
-  if (/\d+%/.test(t)) throw new Error("a percentage is shown");
-  if (/\bscore\b/i.test(t)) throw new Error("the result talks about a score");
-});
-
-await step("the applied questions are marked, the rest are not", async () => {
-  const marks = await page.$$eval(".picked .pill", els => els.map(e => e.textContent.trim()));
-  if (marks.length !== 4) throw new Error("expected 4 marked answers, got " + marks.length);
-  for (const m of marks) {
-    if (!/^Best answer$|^Best was:/.test(m)) throw new Error("odd mark: " + m);
+    if (!/No right answer/.test(kind)) throw new Error("question " + (i + 1) + " does not say it has no right answer");
+    if (/One best answer/.test(await text("#view"))) throw new Error("a question claims a best answer");
+    if (/skip/i.test(await text("#view"))) throw new Error("question " + (i + 1) + " offers a skip");
+    // Answer as a project-minded person would, which the resume above also supports.
+    const idx = await page.evaluate((n) => window.CP_GUIDED[n].opts.findIndex(o => o.w.pjm >= 3), i);
+    await page.$$eval(".q-card .opt", (els, k) => els[k].click(), idx);
+    await page.waitForTimeout(80);
   }
 });
 
-await step("the answers the student gave are shown back", async () => {
-  const picked = await page.$$eval(".picked b", els => els.map(e => e.textContent.trim()));
-  if (picked.length !== 10) throw new Error("expected 10 answers, got " + picked.length);
-  if (picked.some(p => !p)) throw new Error("an answer came back empty");
+await step("the last answer goes straight to a recommendation with a score for every roadmap", async () => {
+  await page.waitForSelector(".rec-card");
+  const cards = await page.$$(".rec-card");
+  if (cards.length !== 3) throw new Error("expected 3 roadmaps, got " + cards.length);
+  const pcts = await page.$$eval(".rec-score b", els => els.map(e => e.textContent.trim()));
+  if (!pcts.every(p => /^\d{1,3}%$/.test(p))) throw new Error("match is not a percentage: " + pcts.join(","));
+});
+
+await step("five answers are enough to separate the three target roles", async () => {
+  // Answer strings come from 22 role-played personas (18 clear, 4 mixed), each scored by the app's own code.
+  const rows = [
+    ["ACDBC", ["pm"]],
+    ["CABCB", ["pjm"]],
+    ["ACDBC", ["pm", "ba"]],
+    ["CABCB", ["pjm"]],
+    ["BDADA", ["ba"]],
+    ["CABCB", ["pjm"]],
+    ["ACBBC", ["pm", "pjm"]],
+    ["BABCB", ["ba", "pjm"]],
+    ["BDADA", ["ba"]],
+    ["CABCB", ["pm", "pjm"]],
+    ["CBBCB", ["pjm"]],
+    ["CABCB", ["pjm"]],
+    ["BDADA", ["ba"]],
+    ["ACDBC", ["pm"]],
+    ["BDADA", ["ba"]],
+    ["BDADA", ["ba"]],
+    ["ACDBC", ["pm"]],
+    ["ACDBC", ["pm"]],
+    ["ACDBC", ["pm"]],
+    ["CABCB", ["pjm"]],
+    ["ADDBC", ["pm"]],
+    ["BDADA", ["ba"]]
+  ];
+  const res = await page.evaluate((rows) => {
+    const O = window.CP_ONBOARD, Q = window.CP_GUIDED, T = ["pm", "ba", "pjm"];
+    return rows.map(([a, labels]) => {
+      const idx = a.split("").map(ch => "ABCD".indexOf(ch));
+      const s = O.scorePlacement(Q, idx, T);
+      const top = T.slice().sort((x, y) => s.perRole[y].weight - s.perRole[x].weight)[0];
+      return { ok: labels.indexOf(top) > -1, top, labels };
+    });
+  }, rows);
+  const bad = res.filter(r => !r.ok);
+  if (bad.length) throw new Error(bad.length + " of " + res.length + " personas missed: " + JSON.stringify(bad[0]));
+});
+
+await step("all three roadmaps exist and none is only planned", async () => {
+  const r = await page.evaluate(() => {
+    const O = window.CP_ONBOARD, Q = window.CP_GUIDED, R = window.CP_ROLES, ids = R.map(x => x.id);
+    const pick = (role) => Q.map(q => q.opts.findIndex(o => (o.w[role] || 0) >= 3));
+    const out = {};
+    ids.forEach(id => {
+      const s = O.scorePlacement(Q, pick(id), ids);
+      out[id] = O.recommend(R, { skills: {}, roles: {}, general: {} }, s)[0];
+    });
+    return { ids: ids, planned: Object.keys(window.CP_PLANNED_ROLES || {}), top: out };
+  });
+  if (r.ids.join(",") !== "pm,ba,pjm") throw new Error("roadmaps are " + r.ids.join(","));
+  if (r.planned.length) throw new Error("a roadmap is still marked as planned: " + r.planned.join(","));
+  for (const id of r.ids) {
+    if (r.top[id].roleId !== id) throw new Error(id + " answers ranked " + r.top[id].roleId);
+    if (r.top[id].score < 80) throw new Error("no resume capped the " + id + " score at " + r.top[id].score);
+    if (r.top[id].score > 95) throw new Error("a score above 95 claims certainty five answers cannot give: " + r.top[id].score);
+  }
 });
 
 await step("placement awards no stars, points or certificates", async () => {
@@ -211,10 +337,8 @@ await step("placement awards no stars, points or certificates", async () => {
 });
 
 await step("the recommendation ranks the roadmap the resume actually supports", async () => {
-  await page.click('[data-action="onb-to-recommend"]');
-  await page.waitForSelector(".rec-card");
   const first = await text(".rec-card.lead .rec-name");
-  if (first !== "Data Analyst") throw new Error("top match was " + first);
+  if (first !== "Project Manager") throw new Error("top match was " + first);
   const reasons = await text(".rec-card.lead .crits");
   if (!reasons.includes("answers pointed")) throw new Error("no reason from the questions: " + reasons);
 });
@@ -225,17 +349,18 @@ await step("the model ranks the roadmaps and says why", async () => {
   const by = await text(".rank-by");
   if (!by.includes("Ranked by the model")) throw new Error("the model did not rank it: " + by.slice(0, 120));
   const whys = await page.$$eval(".rec-why", els => els.map(e => e.textContent.trim()));
-  if (whys.length !== 4) throw new Error("expected a reason per roadmap, got " + whys.length);
+  if (whys.length !== 3) throw new Error("expected a reason per roadmap, got " + whys.length);
   const pcts = await page.$$eval(".rec-score b", els => els.map(e => e.textContent.trim()));
   if (!pcts.every(p => /^\d{1,3}%$/.test(p))) throw new Error("match is not a percentage: " + pcts.join(","));
 });
 
 await step("the three steps are buttons that go back to what was done", async () => {
-  // From the recommendation: open the questions, then the resume, then come forward again.
+  // From the recommendation: open the answers, then the resume, then come forward again.
   await page.click('.onb-step[data-step="2"]');
   await page.waitForSelector("#view h1");
   let h = await text("#view h1");
-  if (!/Answers recorded/.test(h)) throw new Error("step 2 did not open the questions: " + h);
+  if (!/Answers recorded/.test(h)) throw new Error("step 2 did not open the answers: " + h);
+  if ((await page.$$(".picked b")).length !== 5) throw new Error("the five answers were not shown back");
   await page.click('.onb-step[data-step="1"]');
   await page.waitForSelector(".cover-row, .pill.ok, #onb-file", { timeout: 5000 });
   h = await text("#view h1");
@@ -244,7 +369,7 @@ await step("the three steps are buttons that go back to what was done", async ()
   // The recommendation is still reachable without asking the model again.
   await page.click('.onb-step[data-step="3"]');
   await page.waitForSelector(".rec-card");
-  if ((await page.$$(".rec-card")).length !== 4) throw new Error("the recommendation did not come back");
+  if ((await page.$$(".rec-card")).length !== 3) throw new Error("the recommendation did not come back");
 });
 
 await step("changing an answer retires the old recommendation", async () => {
@@ -253,14 +378,11 @@ await step("changing an answer retires the old recommendation", async () => {
   await page.waitForSelector(".q-card");
   const pill3 = await page.$('.onb-step[data-step="3"]');
   if (pill3) throw new Error("step 3 still offers a recommendation that no longer matches the answers");
-  for (let i = 0; i < 12; i++) {
-    const opts = await page.$$(".q-card .opt");
-    if (!opts.length) break;
-    await opts[0].click();
-    await page.waitForTimeout(60);
+  for (let i = 0; i < 5; i++) {
+    const idx = await page.evaluate((n) => window.CP_GUIDED[n].opts.findIndex(o => o.w.pjm >= 3), i);
+    await page.$$eval(".q-card .opt", (els, k) => els[k].click(), idx);
+    await page.waitForTimeout(80);
   }
-  await page.waitForSelector('[data-action="onb-to-recommend"]');
-  await page.click('[data-action="onb-to-recommend"]');
   await page.waitForSelector(".rec-card");
   await page.waitForSelector(".rec-why", { timeout: 25000 });
 });
@@ -277,10 +399,10 @@ await step("a malformed model answer is refused rather than displayed", async ()
       "not json at all",
       '{"ranking":[]}',
       '{"ranking":[{"roleId":"pm","match":50,"why":"a"}]}',
-      '{"ranking":[{"roleId":"pm","match":150,"why":"a"},{"roleId":"ba","match":1,"why":"b"},{"roleId":"da","match":1,"why":"c"},{"roleId":"fa","match":1,"why":"d"}]}',
-      '{"ranking":[{"roleId":"pm","match":50,"why":""},{"roleId":"ba","match":1,"why":"b"},{"roleId":"da","match":1,"why":"c"},{"roleId":"fa","match":1,"why":"d"}]}',
-      '{"ranking":[{"roleId":"pm","match":50,"why":"a"},{"roleId":"pm","match":1,"why":"b"},{"roleId":"da","match":1,"why":"c"},{"roleId":"fa","match":1,"why":"d"}]}',
-      '{"ranking":[{"roleId":"xx","match":50,"why":"a"},{"roleId":"ba","match":1,"why":"b"},{"roleId":"da","match":1,"why":"c"},{"roleId":"fa","match":1,"why":"d"}]}'
+      '{"ranking":[{"roleId":"pm","match":150,"why":"a"},{"roleId":"ba","match":1,"why":"b"},{"roleId":"pjm","match":1,"why":"c"}]}',
+      '{"ranking":[{"roleId":"pm","match":50,"why":""},{"roleId":"ba","match":1,"why":"b"},{"roleId":"pjm","match":1,"why":"c"}]}',
+      '{"ranking":[{"roleId":"pm","match":50,"why":"a"},{"roleId":"pm","match":1,"why":"b"},{"roleId":"pjm","match":1,"why":"c"}]}',
+      '{"ranking":[{"roleId":"xx","match":50,"why":"a"},{"roleId":"ba","match":1,"why":"b"},{"roleId":"pjm","match":1,"why":"c"}]}'
     ];
     return cases.map(c => O.readRanking(c, R) === null);
   });
@@ -290,27 +412,27 @@ await step("a malformed model answer is refused rather than displayed", async ()
 
 await step("a well-formed model answer is accepted", async () => {
   const ok = await page.evaluate(() => {
-    const good = '{"ranking":[{"roleId":"da","match":88,"why":"x"},{"roleId":"pm","match":40,"why":"y"},' +
-      '{"roleId":"ba","match":30,"why":"z"},{"roleId":"fa","match":12,"why":"w"}]}';
+    const good = '{"ranking":[{"roleId":"pjm","match":88,"why":"x"},{"roleId":"pm","match":40,"why":"y"},' +
+      '{"roleId":"ba","match":30,"why":"z"}]}';
     const r = window.CP_ONBOARD.readRanking(good, window.CP_ROLES);
-    return r && r.length === 4 && r[0].roleId === "da" && r[0].match === 88;
+    return r && r.length === 3 && r[0].roleId === "pjm" && r[0].match === 88;
   });
   if (!ok) throw new Error("a valid answer was rejected");
 });
 
 await step("every roadmap stays pickable regardless of rank", async () => {
   const n = await page.$$eval('[data-action="onb-pick"]', els => els.length);
-  if (n !== 4) throw new Error("only " + n + " roadmaps offered");
+  if (n !== 3) throw new Error("expected 3 roadmaps offered, got " + n);
 });
 
 await step("picking a roadmap lands on it", async () => {
   await page.click('.rec-card.lead [data-action="onb-pick"]');
   await page.waitForSelector(".skill-list");
   const eyebrow = await text(".page-head .eyebrow");
-  if (!eyebrow.includes("Data Analyst")) throw new Error("landed on " + eyebrow);
+  if (!eyebrow.includes("Project Manager")) throw new Error("landed on " + eyebrow);
 });
 
-await step("skipping the questions is not a one-way door", async () => {
+await step("leaving the flow for the role picker is not a one-way door", async () => {
   // Walk out of the flow to the role picker, then walk back into it.
   await page.click('[data-action="nav"][data-nav="roles"]');
   await page.waitForSelector(".role-grid");
@@ -342,16 +464,16 @@ await step("switching roadmaps records the one left behind", async () => {
   await page.waitForSelector(".role-grid");
   const t = await text("#view");
   if (!t.includes("Roadmaps you have worked on before")) throw new Error("no history section");
-  if (!t.includes("Data Analyst")) throw new Error("the old roadmap is not listed");
+  if (!t.includes("Project Manager")) throw new Error("the old roadmap is not listed");
 });
 
 await step("nothing is deleted: the old roadmap can be resumed", async () => {
-  const back = await page.$('[data-action="pick-role"][data-role="da"]');
+  const back = await page.$('[data-action="pick-role"][data-role="pjm"]');
   if (!back) throw new Error("no way back to the old roadmap");
   await back.click();
   await page.waitForSelector(".skill-list");
   const eyebrow = await text(".page-head .eyebrow");
-  if (!eyebrow.includes("Data Analyst")) throw new Error("did not return: " + eyebrow);
+  if (!eyebrow.includes("Project Manager")) throw new Error("did not return: " + eyebrow);
 });
 
 /* ---------------- weekly challenge ---------------- */
@@ -362,7 +484,7 @@ await step("the student can reach this week's challenge", async () => {
   await page.click('[data-nav="challenge"]');
   await page.waitForSelector("#ch-text");
   const t = await text("#view");
-  if (!t.includes("Explain a suspicious average")) throw new Error("wrong challenge for this roadmap");
+  if (!t.includes("Find the critical path and say what to protect")) throw new Error("wrong challenge for this roadmap");
 });
 
 await step("the rubric is published before the answer is written", async () => {
@@ -379,7 +501,7 @@ await step("an empty answer is refused", async () => {
 });
 
 await step("a short answer is capped and told why", async () => {
-  await page.fill("#ch-text", "Mix shift. Check the median.");
+  await page.fill("#ch-text", "Critical path. Watch it.");
   await page.click('[data-action="ch-submit"]');
   await page.waitForSelector(".check-panel");
   const t = await text(".check-panel");
@@ -530,7 +652,7 @@ await step("creating a challenge saves it as a draft, never live", async () => {
 
 await step("an admin cannot change a submitted score", async () => {
   const cid = await page.evaluate(() => {
-    const c = window.CP_CHALLENGES.filter(x => x.roleId === "da" && x.status === "live")[0];
+    const c = window.CP_CHALLENGES.filter(x => x.roleId === "pjm" && x.status === "live")[0];
     return c ? c.cid : "";
   });
   if (!cid) throw new Error("no live challenge to review");

@@ -216,9 +216,6 @@ window.CP_PM_TRACKS = [
   }
 
   pm.tracks = window.CP_PM_TRACKS;
-  pm.tracks = window.CP_PM_TRACKS;
-  pm.tracks = window.CP_PM_TRACKS;
-  pm.tracks = window.CP_PM_TRACKS;
   pm.skills = window.CP_PM_META.map(function (m) {
     var c = window.CP_PM_COURSE[m.id];
     return {

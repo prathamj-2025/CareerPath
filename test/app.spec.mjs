@@ -549,14 +549,19 @@ await step('signup still creates a student, never an admin', async () => {
   // A new account starts at onboarding, which is skippable straight to the role picker.
   let h = await page.textContent('.page-head h1');
   if (!h.includes('resume')) throw new Error('signup did not land on onboarding: ' + h);
-  await page.click('[data-action="onb-skip"]');
+  await page.click('[data-action="onb-to-fork"]');
+  await page.waitForTimeout(150);
+  h = await page.textContent('.page-head h1');
+  if (!h.includes('know your target role')) throw new Error('skip did not reach the fork: ' + h);
+  await page.click('[data-action="onb-know"]');
   await page.waitForTimeout(150);
   h = await page.textContent('.page-head h1');
   if (!h.includes('target role')) throw new Error('got: ' + h);
+  if (!(await page.$$('.role-card')).length) throw new Error('the know-my-target path shows no roadmaps');
 });
 
 await step('mobile width has no horizontal scroll', async () => {
-  await page.click('[data-role="fa"]');
+  await page.click('[data-role="pjm"]');
   await page.waitForTimeout(150);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(250);
