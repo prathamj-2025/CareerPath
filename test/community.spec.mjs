@@ -77,6 +77,23 @@ await step('a student on another roadmap or school is not on the board', async (
 await step('profile details save to the database and the leaderboard opt-out hides the student from others', async () => {
   await tia.click('[data-nav="profile"]');
   await tia.waitForSelector('#pf-name');
+  const lay = async () => tia.evaluate(() => {
+    const b = document.querySelector('#pf-board').getBoundingClientRect();
+    const t = document.querySelector('.check-title').getBoundingClientRect();
+    const h = document.querySelector('.check-help');
+    const lines = Math.round(h.getBoundingClientRect().height / parseFloat(getComputedStyle(h).lineHeight));
+    const words = h.textContent.trim().split(/\s+/);
+    const r = document.createRange(); r.selectNodeContents(h);
+    const rects = Array.from(r.getClientRects()); const lastTop = Math.max(...rects.map(x => x.top));
+    const lastWords = rects.filter(x => x.top === lastTop).length;
+    return { sameRow: Math.abs((b.top + b.height / 2) - (t.top + t.height / 2)) < 10 && t.left > b.right, lines, lastTop, lastWords, w: b.width };
+  });
+  let L = await lay();
+  need(L.sameRow && L.w < 30, 'checkbox and label are not on one row: ' + JSON.stringify(L));
+  await tia.setViewportSize({ width: 380, height: 800 }); await tia.waitForTimeout(150);
+  L = await lay();
+  need(L.sameRow && L.w < 30, 'narrow: checkbox and label are not on one row: ' + JSON.stringify(L));
+  await tia.setViewportSize({ width: 1280, height: 900 });
   await tia.fill('#pf-name', 'Tia Ramirez-Lopez');
   await tia.selectOption('#pf-year', '2028');
   await tia.uncheck('#pf-board');

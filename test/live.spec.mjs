@@ -163,6 +163,20 @@ await step('signing out closes the connection', async () => {
   need(!(r.by['ben@usc.edu'] || []).length && !(r.per['ben@usc.edu'] || 0), 'Ben still has an open connection: ' + JSON.stringify(r.per));
 });
 
+await step('the footer links sit at the bottom of the screen on a short page, and below the content on a long one', async () => {
+  await ann.click('[data-nav="certs"]'); await ann.waitForTimeout(300);
+  for (const h of [700, 900, 1100]) {
+    await ann.setViewportSize({ width: 1280, height: h }); await ann.waitForTimeout(150);
+    const r = await ann.evaluate(() => { const f = document.getElementById('sitefoot').getBoundingClientRect(); return { bottom: Math.round(f.bottom + window.scrollY), page: document.documentElement.scrollHeight, links: document.querySelectorAll('#sitefoot a').length }; });
+    need(r.links === 6, 'footer links: ' + r.links);
+    need(Math.abs(r.bottom - r.page) <= 2, 'footer not at the bottom at height ' + h + ': ' + JSON.stringify(r));
+    need(r.bottom >= h - 2, 'footer floats above the bottom of the screen at height ' + h + ': ' + JSON.stringify(r));
+  }
+  await ann.click('[data-nav="roadmap"]'); await ann.waitForTimeout(300);
+  const long = await ann.evaluate(() => { const f = document.getElementById('sitefoot').getBoundingClientRect(), v = document.getElementById('view').getBoundingClientRect(); return f.top >= v.bottom - 1; });
+  need(long, 'footer overlaps the content');
+});
+
 for (const p of [ann, ben]) need(!p.errs.length, 'js errors: ' + p.errs.join('|'));
 await ann.context().close(); await ben.context().close();
 await browser.close();

@@ -67,7 +67,7 @@ const faqs = [
   ["How do stars work?", "Each sub-module has an assessment. Your best score sets your level: 50% earns 1 star, 65% earns 2, 75% earns 3, 85% earns 4, and 95% plus a submitted project earns 5. Three stars means job-ready."],
   ["How do I earn a certificate?", "Certificates are earned per main module. Get every required sub-module in that module to job-ready (three stars), then pass the module exam with 75% or more."],
   ["Do I have to follow the order?", "No. The numbering is a suggested order. You can open any sub-module at any time."],
-  ["Who can see me on the leaderboard?", "Students from your own school see your first name, last initial and points. You can turn this off in Profile, and you will be hidden from the board while keeping your progress."],
+  ["Who can see me on the leaderboards?", "There are two. The course leaderboard is limited to students at your own school on the same roadmap. The weekly challenge leaderboard is open to students from every college. Both show only your first name, last initial and score, and the challenge board also shows your school. You can turn this off in Profile, and you will be hidden from both boards while keeping your progress."],
   ["Is the study assistant always right?", "No. It is an AI model and it can make mistakes. Use it to understand what you are reading, and check anything important against the lesson or another source."],
   ["What happens to my resume?", "It is read in your browser. Only a short summary is saved with your profile: the file name, its length, and the skills and role titles found in it. The full text is not stored. If you ask CareerPath to rank roadmaps, the text is sent to our AI provider to produce the ranking and is not kept."],
   ["I did not get the verification email.", "Check your spam folder first, then use the Resend button on the sign-in page. If it still does not arrive in a few minutes, contact us and we will help."],
@@ -120,7 +120,7 @@ page({
   <h2>Getting started</h2>
   <ol class="steps">
     <li><b>Create your account</b> with your email and a password, or use Continue with Google. If you use email, open the verification link we send you before signing in.</li>
-    <li><b>Tell us a little about you:</b> your school, major and graduation year. Your school sets which leaderboard you appear on.</li>
+    <li><b>Tell us a little about you:</b> your school, major and graduation year. Your school sets which course leaderboard you appear on.</li>
     <li><b>Choose a role.</b> Pick one, or answer the five questions to get a match score for each.</li>
     <li><b>Open a module,</b> read a lesson, and take the assessment when you are ready.</li>
   </ol>
@@ -216,13 +216,13 @@ page({
   <ul>
     <li>To sign you in, save your progress and show it back to you on any device.</li>
     <li>To recommend a roadmap and show your match scores.</li>
-    <li>To show your school leaderboard.</li>
+    <li>To show the leaderboards.</li>
     <li>To answer study assistant questions and give feedback on written answers.</li>
     <li>To fix problems and keep the service secure.</li>
   </ul>
 
-  <h2>The leaderboard</h2>
-  <p>Students at your school can see your first name, last initial and points. You can switch this off in Profile and you will be hidden from the board, with your progress kept.</p>
+  <h2>The leaderboards</h2>
+  <p>CareerPath has two. The course leaderboard is limited to students at your school on the same roadmap, and shows your first name, last initial and points. The weekly challenge leaderboard is open to students from every college, and shows your first name, last initial, school and challenge score. You can switch both off in Profile and you will be hidden from the boards, with your progress kept.</p>
 
   <h2>Who handles your data</h2>
   <ul>

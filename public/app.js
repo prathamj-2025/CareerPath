@@ -1778,30 +1778,32 @@
       "</div>" + challengeAside(user, c) + "</div>";
   }
 
-  /* The challenge board moves as other students submit, for the same reason the school
-     board does: a ranking nobody watches change is just a table. */
+  /* The challenge board is open to every college: one fresh, level contest each week, so it is not limited
+     to a school the way the course board is. It moves as students submit, because a ranking nobody
+     watches change is just a table. */
   function challengeAside(user, c) {
     return '<aside class="rail">' +
       '<div class="side-card">' +
-        '<div class="side-head"><span>Challenge leaderboard</span><span class="live-pill"><i></i>Live</span></div>' +
+        '<div class="side-head"><span>Challenge leaderboard</span>' + (REAL ? "" : '<span class="live-pill"><i></i>Live</span>') + '</div>' +
         '<div class="side-board" data-live="chboard" data-cid="' + c.cid + '">' + chBoardHTML(user, c) + "</div>" +
         '<div class="feed" data-live="chfeed">' + chFeedHTML() + "</div>" +
-        '<p class="tiny muted" style="margin:0">' + esc(user.school) + " only, on this roadmap. Challenge points are " +
+        '<p class="tiny muted" style="margin:0">' + "Open to students from every college, on this roadmap. Challenge points are " +
         "separate from your stars.</p>" +
       "</div>" +
     "</aside>";
   }
 
   function chBoardHTML(user, c) {
-    var rows = chSubmissions(c.cid).filter(function (r) { return r.user.school === user.school; });
-    if (!rows.length) return '<p class="tiny muted" style="padding:0 14px">No one at your school has submitted yet.</p>';
+    var rows = chSubmissions(c.cid);
+    if (!rows.length) return '<p class="tiny muted" style="padding:0 14px">No one has submitted yet. Be the first this week.</p>';
     return '<table class="grid"><thead><tr><th></th><th>Student</th><th>Score</th></tr></thead><tbody>' +
       rows.map(function (row, i) {
         var cls = (row.user.id === user.id ? "lb-you " : "") + (fresh(row.user.id) ? "lb-move" : "");
         return '<tr class="' + cls.trim() + '">' +
           '<td><span class="rank ' + (i < 3 ? "top" : "") + '">' + (i + 1) + "</span></td>" +
           "<td>" + esc(row.user.name.split(" ")[0] + " " + (row.user.name.split(" ")[1] || "").charAt(0) + ".") +
-            (row.user.id === user.id ? ' <span class="pill accent">You</span>' : "") + "</td>" +
+            (row.user.id === user.id ? ' <span class="pill accent">You</span>' : "") +
+            (row.user.school ? '<span class="tiny muted" style="display:block">' + esc(row.user.school) + "</span>" : "") + "</td>" +
           '<td class="mono">' + row.sub.pct + "%</td></tr>";
       }).join("") + "</tbody></table>";
   }
@@ -2862,8 +2864,9 @@
           '<div class="field"><label for="pf-year">Graduation</label><select id="pf-year">' + optionList(["2026", "2027", "2028", "2029"], String(user.gradYear)) + "</select></div>" +
         "</div>" +
         '<div class="field"><label for="pf-major">Major</label><select id="pf-major">' + optionList(MAJORS, user.major) + "</select></div>" +
-        '<label class="row" style="gap:8px;align-items:flex-start"><input type="checkbox" id="pf-board"' + (user.showOnBoard !== false ? " checked" : "") + ' style="margin-top:3px">' +
-          "<span>Show me on my school&rsquo;s leaderboard<br><span class=\"tiny muted\">Other students see only your first name and last initial. You still see your own place.</span></span></label>" +
+        '<label class="check-row"><input type="checkbox" id="pf-board"' + (user.showOnBoard !== false ? " checked" : "") + ">" +
+          '<span class="check-text"><span class="check-title">Show me on the leaderboards</span>' +
+          '<span class="check-help">Other students see only your first name and last initial. You still see your own place.</span></span></label>' +
         '<div class="row" style="gap:10px;align-items:center"><button class="btn primary" data-action="profile-save">Save details</button>' +
           (state.acctMsg ? '<span class="tiny" role="status">' + esc(state.acctMsg) + "</span>" : "") + "</div>" +
       "</div></div>";

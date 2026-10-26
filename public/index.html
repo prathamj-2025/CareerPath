@@ -203,7 +203,8 @@
     .who { padding: 4px; }
   }
 
-  #main { flex: 1; min-width: 0; container-type: inline-size; }
+  #main { flex: 1; min-width: 0; container-type: inline-size; display: flex; flex-direction: column; }
+  #main > #view { flex: 1 0 auto; width: 100%; }
   .page { max-width: 1120px; margin: 0 auto; padding: 26px 20px 64px; }
   .page-head { margin-bottom: 22px; }
   .eyebrow {
@@ -255,6 +256,11 @@
   .stars .off { color: var(--star-empty); }
 
   .field { display: flex; flex-direction: column; gap: 5px; }
+  .check-row { display: flex; flex-wrap: nowrap; align-items: flex-start; gap: 10px; cursor: pointer; }
+  .check-row input { flex: none; margin: 3px 0 0; }
+  .check-text { display: block; min-width: 0; flex: 1 1 auto; }
+  .check-title { display: block; font-size: 14px; }
+  .check-help { display: block; margin-top: 2px; font-size: 12px; line-height: 1.45; color: var(--ink-3, var(--ink-2)); text-wrap: pretty; }
   .field label { font-size: 12.5px; font-weight: 500; color: var(--ink-2); }
   .field input, .field select {
     background: var(--surface); border: 1px solid var(--line-strong);
@@ -1064,7 +1070,7 @@
 
   /* footer links to the website pages */
   #sitefoot:empty { display: none; }
-  #sitefoot { max-width: 1120px; margin: 0 auto; padding: 18px 20px 28px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; gap: 10px 18px; flex-wrap: wrap; font-size: 13px; color: var(--ink-3); }
+  #sitefoot { flex: 0 0 auto; width: 100%; max-width: 1120px; margin: 0 auto; padding: 18px 20px 28px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; gap: 10px 18px; flex-wrap: wrap; font-size: 13px; color: var(--ink-3); }
   .site-links { display: flex; flex-wrap: wrap; gap: 6px 16px; }
   .site-links a { color: var(--ink-2); text-decoration: none; }
   .site-links a:hover { color: var(--accent); text-decoration: underline; }

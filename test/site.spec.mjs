@@ -150,6 +150,15 @@ for (const [file, h1] of Object.entries(pages)) {
     await p.setViewportSize({ width: 380, height: 800 });
     const over2 = await p.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     need(over2 <= 0, 'horizontal scroll on a phone: ' + over2);
+    // Running text must be laid out as text: no column of one-word lines.
+    for (const w of [1280, 380]) {
+      await p.setViewportSize({ width: w, height: 900 });
+      const narrow = await p.$$eval('main p, main li, main summary', els => els.filter(e => {
+        const words = e.textContent.trim().split(/\s+/).length, r = e.getBoundingClientRect();
+        return words >= 12 && r.height / parseFloat(getComputedStyle(e).lineHeight) > words / 3;   // more lines than a third of the words
+      }).map(e => e.textContent.trim().slice(0, 40)));
+      need(!narrow.length, 'text squeezed into a narrow column at ' + w + ': ' + narrow.join(' | '));
+    }
     need(!errs.length, errs.join('|'));
     await p.close();
   });
