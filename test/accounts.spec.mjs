@@ -199,6 +199,23 @@ await step('a student cannot make themselves an admin, an admin goes to Content'
   await page.context().close();
 });
 
+await step('a new Google account is asked for school, major and year before onboarding', async () => {
+  const page = await fresh();
+  await link(page, (await j('/__google?email=gina@gmail.com')).hash);
+  await page.waitForSelector('[data-action="google-finish"]');
+  need(await page.isHidden('#onb-file').catch(() => true), 'skipped the profile questions');
+  await page.fill('#gf-name', 'Gina G');
+  await page.selectOption('#gf-year', '2028');
+  await page.click('[data-action="google-finish"]');
+  await page.waitForSelector('#onb-file');
+  const row = await j('/__profile?email=gina@gmail.com');
+  need(row.name === 'Gina G' && row.school && row.grad_year === '2028', 'profile not saved: ' + JSON.stringify(row));
+  await page.reload(); await page.waitForTimeout(700);
+  need(!(await page.$('[data-action="google-finish"]')), 'asked again after finishing');
+  need(await page.isHidden('#auth'), 'signed out by reload');
+  await page.context().close();
+});
+
 await browser.close();
 console.log(failed ? failed + ' failed' : 'all passed');
 process.exit(failed ? 1 : 0);

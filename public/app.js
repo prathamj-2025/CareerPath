@@ -625,6 +625,13 @@
         state.authError = r.error.text; return render();
       }
       var u = adoptProfile(r.profile);
+      if (u.role === "student" && !u.school) {
+        /* First time with Google: the account has a name and email but not the three profile details
+           the leaderboards need. Ask for them before going on. */
+        state.finishUser = u.id; state.userId = null;
+        state.googlePending = { name: u.name, email: u.email, picture: u.picture };
+        return render();
+      }
       state.userId = u.id; state.authError = ""; state.authNotice = null;
       var fresh = u.role === "student" && !u.roleId && !u.resume && !u.placement && !u.roleHistory.length;
       if (u.role === "admin") return go("a-content");
@@ -866,12 +873,18 @@
 
   /* Real-account screens */
   function realGoogle() {
-    if (!CP_AUTH.googleOAuth || state.booting || state.authNotice || state.authTab === "reset" || state.authTab === "forgot") return "";
-    return '<div class="g-wrap"><a class="btn" style="justify-content:center;width:100%" href="' + esc(CP_AUTH.googleUrl()) + '">Continue with Google</a>' +
+    if (!CP_AUTH.googleOAuth || state.googlePending || state.booting || state.authNotice || state.authTab === "reset" || state.authTab === "forgot") return "";
+    var G = '<svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true" focusable="false">' +
+      '<path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.6 17.7 9.5 24 9.5z"/>' +
+      '<path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.6 5.9c4.5-4.1 7-10.2 7-17.6z"/>' +
+      '<path fill="#FBBC05" d="M10.5 28.7c-.5-1.4-.8-3-.8-4.7s.3-3.2.8-4.7l-7.9-6.1C.9 16.4 0 20.1 0 24s.9 7.6 2.6 10.8l7.9-6.1z"/>' +
+      '<path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.6-5.9c-2.1 1.4-4.9 2.3-8.3 2.3-6.3 0-11.6-4.1-13.5-9.8l-7.9 6.1C6.5 42.6 14.6 48 24 48z"/></svg>';
+    return '<div class="g-wrap"><a class="btn" style="justify-content:center;gap:10px;width:100%;text-decoration:none" href="' + esc(CP_AUTH.googleUrl()) + '">' + G + "<span>Continue with Google</span></a>" +
       '<div class="or-div"><span>or</span></div></div>';
   }
 
   function realBody(isSignup) {
+    if (state.googlePending) return googleFinishForm();
     if (state.booting) return '<p class="muted" role="status">Signing you in&hellip;</p>';
     var n = state.authNotice;
     if (n) {
@@ -982,7 +995,7 @@
       "</div>" +
       '<div class="field"><label for="gf-major">Major</label><select id="gf-major">' +
         MAJORS.map(function (m) { return "<option>" + esc(m) + "</option>"; }).join("") + "</select></div>" +
-      '<button class="btn primary" style="margin-top:6px;justify-content:center" data-action="google-finish">Create student account</button>' +
+      '<button class="btn primary" style="margin-top:6px;justify-content:center" data-action="google-finish"' + (state.authBusy ? " disabled" : "") + '>' + (REAL ? "Continue" : "Create student account") + '</button>' +
       '<button class="btn ghost sm" style="justify-content:center" data-action="google-cancel">Use a different account</button>' +
     "</div>";
   }
@@ -3131,6 +3144,21 @@
     "google-finish": function () {
       var g = state.googlePending;
       if (!g) return;
+      if (REAL) {
+        var uu = state.users.filter(function (x) { return x.id === state.finishUser; })[0];
+        if (!uu || state.authBusy) return;
+        var patch = { name: val("gf-name") || g.name, school: val("gf-school"), major: val("gf-major"), grad_year: val("gf-year") };
+        state.authBusy = true; state.authError = ""; render();
+        return CP_AUTH.saveProfile(patch).then(function (r) {
+          state.authBusy = false;
+          if (r.error) { state.authError = r.error.text; return render(); }
+          uu.name = patch.name; uu.school = patch.school; uu.major = patch.major; uu.gradYear = patch.grad_year;
+          sync.last = JSON.stringify(profilePatch(uu));
+          state.googlePending = null; state.finishUser = null; state.userId = uu.id;
+          state.onb = { step: 1 };
+          go("onb-resume");
+        });
+      }
       var u = newUser({ name: val("gf-name") || g.name, email: g.email, password: null, role: "student",
         school: val("gf-school"), major: val("gf-major"), gradYear: val("gf-year") });
       u.google = true; u.picture = g.picture || null;
@@ -3140,6 +3168,11 @@
       go("onb-resume");
     },
     "google-cancel": function () {
+      if (REAL) {
+        CP_AUTH.signOut();
+        state.users = state.users.filter(function (x) { return x.id !== state.finishUser; });
+        state.finishUser = null;
+      }
       state.googlePending = null; state.authError = "";
       if (window.google && google.accounts) google.accounts.id.disableAutoSelect();
       render();

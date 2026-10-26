@@ -41,6 +41,15 @@ http.createServer(async (req, res) => {
     const s = session(u);
     return send(200, { hash: `#access_token=${s.access_token}&refresh_token=${s.refresh_token}&expires_in=3600&type=recovery` });
   }
+  if (p === '/__google') {            // simulates coming back from Google: confirmed, name and email only
+    const email = url.searchParams.get('email');
+    const u = { id: uuid(), email, password: null, confirmed: true, meta: { full_name: 'Gina Google' } };
+    users.set(email, u);
+    profiles.set(u.id, { id: u.id, email, name: 'Gina Google', role: 'student', school: '', major: '', grad_year: '', title: '',
+      picture_url: null, roadmap_id: null, roadmap_history: [], onboarding: {} });
+    const s = session(u);
+    return send(200, { hash: `#access_token=${s.access_token}&refresh_token=${s.refresh_token}&expires_in=3600&token_type=bearer` });
+  }
   if (p === '/__admin') { const u = users.get(url.searchParams.get('email')); profiles.get(u.id).role = 'admin'; return send(200, {}); }
   if (p === '/__expire') { tokens.clear(); return send(200, {}); }   // access tokens die, refresh tokens live
   if (p === '/__profile') { const u = users.get(url.searchParams.get('email')); return send(200, profiles.get(u.id) || null); }
