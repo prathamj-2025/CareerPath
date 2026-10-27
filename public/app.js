@@ -886,9 +886,9 @@
       state.userId = u.id; state.authError = ""; state.authNotice = null;
       if (u.role === "student") { loadProgress(u); loadChallenges(u); }
       var fresh = u.role === "student" && !u.roleId && !u.resume && !u.placement && !u.roleHistory.length;
-      if (u.role === "admin") { loadAdminData(); return go("a-content"); }
+      if (u.role === "admin") { loadAdminData(); return goPage(pageFor(u, "a-content")); }
       if (fresh) { state.onb = { step: 1 }; return go("onb-resume"); }
-      go(u.roleId ? "roadmap" : "roles");
+      goPage(pageFor(u, u.roleId ? "roadmap" : "roles"));
     });
   }
 
@@ -1107,12 +1107,36 @@
     });
     return out.join("");
   }
+  /* A refresh keeps you on the page you were on. Only browsing pages are remembered, in this tab only (sessionStorage):
+     an exam in progress or a result is not, because those need data the page no longer holds. */
+  var KEEP_PAGES = ["roadmap", "roles", "track", "skill", "learn", "certs", "cert", "challenge", "leaderboard", "history", "profile",
+    "a-content", "a-bank", "a-lessons", "a-drafts", "a-challenges", "a-students"];
+  function rememberPage() {
+    try {
+      var r = state.route, u = me();
+      if (u && !state.preview && KEEP_PAGES.indexOf(r.name) > -1) sessionStorage.setItem("cp-page", JSON.stringify({ uid: u.id, route: r }));
+      else if (!u || !state.preview) sessionStorage.removeItem("cp-page");
+    } catch (e) { /* storage can be blocked; the page then opens on the roadmap as before */ }
+  }
+  function forgetPage() { try { sessionStorage.removeItem("cp-page"); } catch (e) {} }
+  function pageFor(u, fallback) {
+    try {
+      var saved = JSON.parse(sessionStorage.getItem("cp-page") || "null");
+      if (saved && saved.uid === u.id && saved.route && KEEP_PAGES.indexOf(saved.route.name) > -1) {
+        var admin = u.role === "admin", isAdminPage = saved.route.name.indexOf("a-") === 0;
+        if (admin === isAdminPage || saved.route.name === "profile") return saved.route;
+      }
+    } catch (e) {}
+    return { name: fallback };
+  }
   function go(name, params) {
     state.roleMenu = false;
     state.route = Object.assign({ name: name }, params || {});
+    rememberPage();
     window.scrollTo(0, 0);
     render();
   }
+  function goPage(r) { var p = Object.assign({}, r); var n = p.name; delete p.name; go(n, p); }
   function summaryCell(k, v) {
     return '<div class="summary-cell"><div class="k">' + k + '</div><div class="v mono">' + v + "</div></div>";
   }
@@ -2273,7 +2297,7 @@
     var weak = res.items.filter(function (q, i) { return !resOk(res, i, q); });
     var st = trackStatus(user, r, t);
     return '<div class="page-head result-head"><div class="eyebrow">Module exam result &middot; ' + esc(t.name) + "</div>" +
-        '<h1 class="result-h1"><span class="big">' + res.pct + "%</span> <span class=\"rest\">&mdash; " + (res.pass ? "Passed" : "Not yet") + "</span></h1>" +
+        '<h1 class="result-h1"><span class="big">' + res.pct + "%</span> <span class=\"rest\">" + (res.pass ? "Passed" : "Not yet") + "</span></h1>" +
         '<p class="sub">' + (state.preview ? "Preview only. Nothing was recorded."
           : res.first ? "You earned the " + esc(certTitle(user, r, t)) + " certificate and " + res.points + " leaderboard points."
           : res.pass ? "You passed again. Your certificate was already issued."
@@ -2907,7 +2931,7 @@
     var weak = qs.filter(function (q, i) { return !resOk(res, i, q); });
 
     return '<div class="page-head result-head"><div class="eyebrow">Result &middot; ' + esc(s.name) + "</div>" +
-        '<h1 class="result-h1"><span class="big">' + res.pct + "%</span> <span class=\"rest\">&mdash; " + res.award.label + "</span></h1>" +
+        '<h1 class="result-h1"><span class="big">' + res.pct + "%</span> <span class=\"rest\">" + res.award.label + "</span></h1>" +
         '<p class="sub">' + (state.preview
             ? "Preview only. No score, stars, or points were recorded for anyone."
             : (res.newStars ? "Your roadmap has been updated and " + res.pointsAwarded + " leaderboard points were added."
@@ -3880,6 +3904,7 @@
         state.users = state.users.filter(function (x) { return !x.remote; });
         live.rows = null; live.boardKey = ""; live.chRows = null; live.chKey = "";
       }
+      forgetPage();
       state.userId = null; state.authTab = "login"; state.exam = null; state.mexam = null; state.mresult = null; state.quiz = null; state.googlePending = null;
       state.preview = null; state.adminSkill = null; state.adminEdit = null;
       state.onb = null; state.ch = null; state.adminCh = null; state.adminChReview = null;

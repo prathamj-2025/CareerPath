@@ -171,6 +171,27 @@ await step('a project submission is saved inside history, loads on another devic
   await other.context().close();
 });
 
+await step('a refresh stays on the same page, and signing out forgets it', async () => {
+  const page = await fresh();
+  await login(page, 'sam@usc.edu');
+  await page.waitForTimeout(1200);
+  await page.click('[data-action="open-track"][data-track="pm-fundamentals"]');
+  await page.waitForTimeout(200);
+  await page.click('.skill-row:nth-child(3)');
+  await page.waitForSelector('.proj');
+  await page.reload();
+  await page.waitForSelector('.proj', { timeout: 8000 });   // same skill page, not the roadmap
+  await page.click('[data-nav="leaderboard"]');
+  await page.waitForTimeout(300);
+  await page.reload();
+  await page.waitForSelector('[data-live="board"]', { timeout: 8000 });
+  await page.click('[data-action="logout"]');
+  await page.waitForSelector('#auth:not([hidden])');
+  need(await page.evaluate(() => sessionStorage.getItem('cp-page')) === null, 'the page was not forgotten on sign out');
+  need(page.errs.length === 0, page.errs.join(' | '));
+  await page.context().close();
+});
+
 await browser.close();
 console.log(failed ? failed + ' failed' : 'all passed');
 process.exit(failed ? 1 : 0);
