@@ -1173,6 +1173,13 @@
     el.hidden = false;
     document.getElementById("shell").hidden = true;
 
+    /* Restoring a saved sign-in (a refresh): show a quiet loading screen, not the marketing sign-in page for a moment. */
+    if (REAL && state.booting && !state.googlePending && !state.authNotice) {
+      el.innerHTML = '<div class="boot"><div class="boot-in"><div class="brand"><div class="brand-mark">' + CAP +
+        '</div><div class="brand-name">career<span>path</span></div></div><p role="status">Loading your account&hellip;</p></div></div>';
+      return;
+    }
+
     el.innerHTML =
       '<div class="auth-aside">' +
         BRAND +

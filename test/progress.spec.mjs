@@ -179,8 +179,15 @@ await step('a refresh stays on the same page, and signing out forgets it', async
   await page.waitForTimeout(200);
   await page.click('.skill-row:nth-child(3)');
   await page.waitForSelector('.proj');
+  // While the saved sign-in is restored, the sign-in landing page must never flash.
+  await page.addInitScript(() => {
+    window.__sawLanding = false;
+    new MutationObserver(() => { if (document.querySelector('.auth-claim')) window.__sawLanding = true; })
+      .observe(document, { childList: true, subtree: true });
+  });
   await page.reload();
   await page.waitForSelector('.proj', { timeout: 8000 });   // same skill page, not the roadmap
+  need(!(await page.evaluate(() => window.__sawLanding)), 'the sign-in landing page flashed during the refresh');
   await page.click('[data-nav="leaderboard"]');
   await page.waitForTimeout(300);
   await page.reload();

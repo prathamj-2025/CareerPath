@@ -879,6 +879,10 @@
 
   /* landing */
   #auth { background: transparent; }
+  #auth:has(.boot) { display: block; }
+  .boot { min-height: 100dvh; display: grid; place-items: center; background: var(--bg); color: var(--ink); }
+  .boot-in { display: grid; justify-items: center; gap: 14px; }
+  .boot-in p { margin: 0; font-size: 14px; opacity: .65; }
   .auth-aside {
     background:
       radial-gradient(520px 420px at 78% 24%, var(--accent-soft), transparent 70%),
