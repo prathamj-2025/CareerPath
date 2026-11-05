@@ -10,12 +10,15 @@
    Stars, scores and points are written here with the service role key. The database refuses the same writes from a browser
    (supabase/migrations/007_server_grading.sql), so a score cannot be set from the page. Real accounts only. */
 import { authenticate, body, fail, today } from "./_auth.js";
-import { content, roleOf, skillOf, questionOf } from "./_content.js";
+import { content, roleOf, skillOf, questionAt } from "./_content.js";
 
 const MAX_STARTS_PER_HOUR = 20;      // exam attempts opened by one student
 const MAX_ATTEMPTS_PER_DAY = 10;     // graded attempts of one exam by one student in 24 hours
 const MAX_OPEN_MINUTES = 240;        // an attempt left open longer than this is expired
 
+async function loadContent(res) {
+  try { return await content(); } catch (e) { fail(res, 503, "content_unavailable", "The course content could not be loaded. Try again in a moment."); return null; }
+}
 const ago = (ms) => new Date(Date.now() - ms).toISOString();
 const splitHistory = (h) => {
   const list = Array.isArray(h) ? h : [];
@@ -34,8 +37,10 @@ export default async function handler(req, res) {
 }
 
 async function start({ uid, profile, rest }, b, res) {
-  const C = content(), G = C.grading;
-  const role = roleOf(profile.roadmap_id);
+  const C = await loadContent(res);
+  if (!C) return;
+  const G = C.grading;
+  const role = roleOf(C, profile.roadmap_id);
   if (!role) return fail(res, 403, "no_roadmap", "Choose a roadmap first.");
   const kind = b.kind === "module" ? "module" : "skill";
   const id = typeof b.id === "string" ? b.id.slice(0, 80) : "";
@@ -44,7 +49,7 @@ async function start({ uid, profile, rest }, b, res) {
   if (kind === "skill") {
     const sk = skillOf(role, id);
     if (!sk) return fail(res, 404, "no_such_exam", "That assessment is not on your roadmap.");
-    items = sk.assessment.map((q) => ({ skill: sk.id, qid: q.qid }));
+    items = sk.assessment.map((q) => ({ skill: sk.id, qid: q.qid, v: q.v || 1 }));
   } else {
     const t = (role.tracks || []).filter((x) => x.id === id)[0];
     if (!t || !t.cert) return fail(res, 404, "no_such_exam", "That module has no exam.");
@@ -54,7 +59,7 @@ async function start({ uid, profile, rest }, b, res) {
     (rows.data || []).forEach((r) => { stars[r.skill_id] = r.stars; });
     const missing = req.filter((s) => (stars[s.id] || 0) < G.JOB_READY);
     if (missing.length) return fail(res, 403, "not_eligible", "Reach 3 stars in every required sub-module first: " + missing.map((s) => s.name).join(", ") + ".");
-    items = G.drawModuleExam(role, t);
+    items = G.drawModuleExam(role, t).map((it) => ({ skill: it.skill, qid: it.qid, v: (questionAt(skillOf(role, it.skill), it.qid) || {}).v || 1 }));
   }
   if (!items.length) return fail(res, 404, "no_questions", "This exam has no questions yet.");
 
@@ -69,11 +74,16 @@ async function start({ uid, profile, rest }, b, res) {
   await rest("DELETE", "exam_attempts?user_id=eq." + uid + "&kind=eq." + kind + "&target=eq." + encodeURIComponent(id) + "&submitted_at=is.null");
   const made = await rest("POST", "exam_attempts", { user_id: uid, kind, target: id, items }, "return=representation");
   if (!made.ok || !Array.isArray(made.data) || !made.data[0]) return fail(res, 502, "save_failed", "Could not start the exam. Try again.");
-  return res.status(200).json({ ok: true, attempt: made.data[0].id, kind, id, items });
+  // The page gets the question text with the ids (never the answers), so it shows exactly what will be graded,
+  // including a question an admin edited a moment ago.
+  const shown = items.map((it) => { const q = questionAt(skillOf(role, it.skill), it.qid, it.v); return Object.assign({}, it, { q: q.q, opts: q.opts, lvl: q.lvl }); });
+  return res.status(200).json({ ok: true, attempt: made.data[0].id, kind, id, items: shown });
 }
 
 async function submit({ uid, profile, rest }, b, res) {
-  const C = content(), G = C.grading;
+  const C = await loadContent(res);
+  if (!C) return;
+  const G = C.grading;
   const attemptId = typeof b.attempt === "string" ? b.attempt.slice(0, 64) : "";
   const answers = Array.isArray(b.answers) ? b.answers : null;
   if (!attemptId || !answers) return fail(res, 400, "bad_request", "Send the attempt and your answers.");
@@ -86,12 +96,12 @@ async function submit({ uid, profile, rest }, b, res) {
   const items = Array.isArray(at.items) ? at.items : [];
   if (answers.length !== items.length) return fail(res, 400, "bad_request", "Answer every question before submitting.");
 
-  const role = roleOf(profile.roadmap_id);
+  const role = roleOf(C, profile.roadmap_id);
   if (!role) return fail(res, 403, "no_roadmap", "Choose a roadmap first.");
 
-  // Grade.
+  // Grade each question as it was when the attempt started (an admin may have edited or removed it since).
   const detail = items.map((it, i) => {
-    const sk = skillOf(role, it.skill), q = questionOf(sk, it.qid);
+    const sk = skillOf(role, it.skill), q = questionAt(sk, it.qid, it.v);
     const given = Number.isInteger(answers[i]) ? answers[i] : -1;
     const ok = !!q && given === q.a;
     return { i, skill: it.skill, qid: it.qid, lvl: q ? q.lvl : 0, ok, a: ok ? undefined : (q ? q.a : undefined), why: ok ? undefined : (q ? q.why : undefined) };

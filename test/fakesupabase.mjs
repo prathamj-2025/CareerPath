@@ -16,6 +16,7 @@ const ALLOWED = new Set(['name', 'school', 'major', 'grad_year', 'picture_url', 
 const progress = new Map();   // 'user|skill' -> row
 const modules = new Map();    // 'user|track' -> row
 const attempts = new Map();   // id -> exam_attempts row (written only with the service key)
+const content = { lessons: [], questions: [], missing: false };   // admin content edits (service key only)
 const subs = new Map();       // 'user|challenge' -> challenge_submissions row (written only with the service key)
 const SECRET = 'sb_secret_test';
 const log = [];               // every write, so tests can see what the site sent
@@ -112,7 +113,7 @@ const server = http.createServer(async (req, res) => {
   if (p === '/__admin') { const u = users.get(url.searchParams.get('email')); profiles.get(u.id).role = 'admin'; return send(200, {}); }
   if (p === '/__expire') { tokens.clear(); return send(200, {}); }   // access tokens die, refresh tokens live
   if (p === '/__profile') { const u = users.get(url.searchParams.get('email')); return send(200, profiles.get(u.id) || null); }
-  if (p === '/__reset') { rt.joins = []; rt.fanouts = []; rt.tokenUpdates = 0; rt.refuse = false; for (const c of sockets) c.ws.terminate(); users.clear(); profiles.clear(); tokens.clear(); refreshes.clear(); progress.clear(); modules.clear(); subs.clear(); attempts.clear(); log.length = 0; return send(200, {}); }
+  if (p === '/__reset') { rt.joins = []; rt.fanouts = []; rt.tokenUpdates = 0; rt.refuse = false; for (const c of sockets) c.ws.terminate(); users.clear(); profiles.clear(); tokens.clear(); refreshes.clear(); progress.clear(); modules.clear(); subs.clear(); attempts.clear(); content.lessons = []; content.questions = []; content.missing = false; log.length = 0; return send(200, {}); }
   if (p === '/__progress') { const u = users.get(url.searchParams.get('email')); return send(200, { skills: [...progress.values()].filter(r => r.user_id === u.id), modules: [...modules.values()].filter(r => r.user_id === u.id) }); }
   if (p === '/__seed') {   // put saved progress on the server before the student signs in (as if from another device)
     const u = users.get(url.searchParams.get('email')); const b = body;
@@ -221,6 +222,51 @@ const server = http.createServer(async (req, res) => {
     pr.points = Math.min(Math.max((pr.points || 0) + Number(body.p_delta || 0), 0), 999999);
     const t = boardOf(pr); if (t) fanout(t);
     return send(200, pr.points);
+  }
+  if (p === '/__contentoff') { content.missing = url.searchParams.get('on') === '1'; return send(200, {}); }   // as if migration 008 was not run
+  if (p === '/__content') return send(200, content);
+  if (p === '/rest/v1/content_lessons' || p === '/rest/v1/content_questions') {   // 008: the server only
+    if (!isService(req)) return send(401, { code: '42501', message: 'permission denied for table ' + p.split('/').pop() });
+    if (content.missing) return send(404, { code: 'PGRST205', message: 'Could not find the table' });
+    const isL = p.endsWith('lessons'), list = isL ? content.lessons : content.questions;
+    const pk = r => isL ? [r.skill_id, r.idx, r.version].join('|') : [r.qid, r.version].join('|');
+    const clash = (rows, except) => {                 // the unique indexes of 008
+      const seen = new Set(), live = new Set(), dr = new Set();
+      for (const r of rows) {
+        if (seen.has(pk(r))) return 'pk'; seen.add(pk(r));
+        const k = isL ? r.skill_id + '|' + r.idx : r.qid;
+        if (r.status === 'live') { if (live.has(k)) return 'live'; live.add(k); }
+        if (!isL && r.status === 'draft') { if (dr.has(k)) return 'draft'; dr.add(k); }
+        if (!isL && (!Array.isArray(r.opts) || r.opts.length !== 4 || !(r.answer >= 0 && r.answer <= 3) || !(r.lvl >= 1 && r.lvl <= 5))) return 'check';
+      }
+      return '';
+    };
+    if (req.method === 'GET') {
+      const off = Number(url.searchParams.get('offset') || 0), lim = Number(url.searchParams.get('limit') || 1000);
+      return send(200, list.filter(r => matches(r, url)).slice(off, off + lim));
+    }
+    if (req.method === 'POST') {
+      const rows = (Array.isArray(body) ? body : [body]).map(r => ({ created_at: new Date().toISOString(), ...r }));
+      const ignore = (req.headers.prefer || '').includes('ignore-duplicates');
+      for (const r of rows) {
+        if (ignore && list.some(x => pk(x) === pk(r))) continue;
+        const bad = clash([...list, r]); if (bad) return send(409, { code: '23505', message: 'unique violation ' + bad });
+        list.push(r);
+      }
+      return send(201);
+    }
+    if (req.method === 'PATCH') {
+      const hit = list.filter(r => matches(r, url));
+      const next = list.map(r => (hit.includes(r) ? { ...r, ...body } : r));
+      const bad = clash(next); if (bad) return send(409, { code: '23505', message: 'unique violation ' + bad });
+      list.splice(0, list.length, ...next);
+      return send(204);
+    }
+    if (req.method === 'DELETE') {
+      const keep = list.filter(r => !matches(r, url));
+      list.splice(0, list.length, ...keep);
+      return send(204);
+    }
   }
   if (p === '/rest/v1/exam_attempts') {
     const svc = isService(req);

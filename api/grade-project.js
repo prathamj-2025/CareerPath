@@ -18,12 +18,14 @@ export default async function handler(req, res) {
   const ctx = await authenticate(req, res, { students: true });
   if (!ctx) return;
   const { uid, profile, rest } = ctx;
-  const C = content(), P = C.project, G = C.grading;
+  let C;
+  try { C = await content(); } catch (e) { return fail(res, 503, "content_unavailable", "The course content could not be loaded. Try again in a moment."); }
+  const P = C.project, G = C.grading;
 
   const b = body(req);
   const skillId = typeof b.skill === "string" ? b.skill.slice(0, 80) : "";
   const text = typeof b.text === "string" ? b.text.trim() : "";
-  const role = roleOf(profile.roadmap_id), sk = skillOf(role, skillId);
+  const role = roleOf(C, profile.roadmap_id), sk = skillOf(role, skillId);
   if (!sk || !sk.project) return fail(res, 404, "no_project", "That project is not on your roadmap.");
   if (text.length > MAX_CHARS) return fail(res, 400, "too_long", "That is too long. Keep the project under " + MAX_CHARS.toLocaleString("en-US") + " characters.");
   const n = P.words(text);

@@ -12,7 +12,8 @@ import gradeHandler from '../api/grade-challenge.js';
 import examHandler from '../api/exam.js';
 import projectHandler from '../api/grade-project.js';
 import keysHandler from '../api/keys.js';
-const API = { '/api/ask': handler, '/api/config': configHandler, '/api/google-auth': googleAuthHandler, '/api/grade-challenge': gradeHandler, '/api/exam': examHandler, '/api/grade-project': projectHandler, '/api/keys': keysHandler };
+import contentHandler from '../api/content.js';
+const API = { '/api/ask': handler, '/api/config': configHandler, '/api/google-auth': googleAuthHandler, '/api/grade-challenge': gradeHandler, '/api/exam': examHandler, '/api/grade-project': projectHandler, '/api/keys': keysHandler, '/api/content': contentHandler };
 
 const PORT = Number(process.env.PORT || 3111);
 const ROOT = path.join(import.meta.dirname, '..', 'public');

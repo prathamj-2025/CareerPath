@@ -8,8 +8,10 @@ export default async function handler(req, res) {
   if (req.method !== "GET" && req.method !== "POST") return fail(res, 405, "method_not_allowed", "Use GET.");
   const ctx = await authenticate(req, res, { admins: true });
   if (!ctx) return;
+  let C;
+  try { C = await content(); } catch (e) { return fail(res, 503, "content_unavailable", "The course content could not be loaded. Try again in a moment."); }
   const keys = {};
-  content().roles.forEach((r) => r.skills.forEach((s) => {
+  C.roles.forEach((r) => r.skills.forEach((s) => {
     keys[r.id + "/" + s.id] = s.assessment.map((q) => ({ qid: q.qid, a: q.a, why: q.why }));
   }));
   res.setHeader("cache-control", "no-store");

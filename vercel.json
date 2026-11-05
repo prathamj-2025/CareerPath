@@ -1,8 +1,19 @@
 {
   "functions": {
-    "api/grade-challenge.js": { "includeFiles": "public/{data6,challenge}.js" },
-    "api/exam.js": { "includeFiles": "{content/*.js,public/grading.js,public/project.js}" },
-    "api/grade-project.js": { "includeFiles": "{content/*.js,public/grading.js,public/project.js}" },
-    "api/keys.js": { "includeFiles": "{content/*.js,public/grading.js,public/project.js}" }
+    "api/grade-challenge.js": {
+      "includeFiles": "public/{data6,challenge}.js"
+    },
+    "api/exam.js": {
+      "includeFiles": "{content/*.js,public/grading.js,public/project.js}"
+    },
+    "api/grade-project.js": {
+      "includeFiles": "{content/*.js,public/grading.js,public/project.js}"
+    },
+    "api/keys.js": {
+      "includeFiles": "{content/*.js,public/grading.js,public/project.js}"
+    },
+    "api/content.js": {
+      "includeFiles": "{content/*.js,public/grading.js,public/project.js}"
+    }
   }
 }

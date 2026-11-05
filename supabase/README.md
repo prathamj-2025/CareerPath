@@ -16,6 +16,10 @@ One shared Supabase project. Database changes live here as numbered SQL files in
   keep one write, `save_lessons`, for lessons done. Safe to run twice. Run it AFTER the website that uses it is
   deployed and `SUPABASE_SERVICE_ROLE_KEY` is set in Vercel, because the old site wrote scores from the browser.
 
+- `008_content_edits.sql`: admin edits to lessons and questions (`content_lessons`, `content_questions`). Locked: the site
+  cannot read or write them, only `api/content.js` can, after checking the caller is an admin. Safe to run twice. Run it
+  after the website that uses it is deployed; until then the site simply uses the files in `content/`.
+
 Run them in order, one at a time, in the SQL editor.
 
 ## Exam and project scoring (server side)
@@ -26,6 +30,15 @@ and `public/` holds copies with the keys removed. After you change anything in `
 and commit both folders; `test/grading.spec.mjs` fails if they disagree or if a key reaches `public/`.
 `api/keys.js` gives the keys to signed-in admins only, for the question bank and the admin preview. Uses the same
 `SUPABASE_SERVICE_ROLE_KEY` as below. Limits: 20 exam starts per hour and 10 graded attempts per exam per 24 hours.
+
+## Editing course content (admins)
+
+The lessons and questions in `content/` are the starting point. When an admin changes something on the admin pages, the
+change is saved to the database through `api/content.js` and students see it within a minute (the page refreshes content
+when a student opens a skill). Lessons publish at once. Questions are saved as a draft and go live when published; the
+version they replace moves to the archive, and an exam attempt that was already open is graded against the version the
+student saw. A skill must keep at least 5 live questions. Admin edits are layered over the files, so a file change to a
+question an admin has edited does not show until that edit is retired. Answer keys for edited questions stay on the server.
 
 ## Weekly challenge scoring (server side)
 

@@ -373,5 +373,34 @@ await step('grading: exam attempts are readable by their owner and admins, and w
   need(await dbFails(`insert into public.exam_attempts (user_id, kind, target) values ($1, 'nonsense', 'x')`, [S1]), 'unknown kind accepted');
 });
 
+await step('content: students and admins cannot read or write the content tables directly, only the server can', async () => {
+  const q = `insert into public.content_questions (qid, version, status, skill_id, lvl, q, opts, answer) values ('discovery-pm-q1', 2, 'live', 'discovery-pm', 2, 'Q?', '["a","b","c","d"]', 1)`;
+  need(await fails(S1, q), 'a student wrote a question');
+  need(await fails(ADM, q), 'an admin wrote straight to the table (admins go through the server)');
+  await svc(q);
+  need(await fails(S1, `select * from public.content_questions`), 'a student read the answer keys');
+  need(await fails(ADM, `select * from public.content_questions`), 'an admin read the table directly');
+  need(await fails(S1, `insert into public.content_lessons (skill_id, idx, version, status, title, body) values ('discovery-pm', 0, 2, 'live', 't', 'b')`), 'a student edited a lesson');
+  need(await fails(S1, `select * from public.content_lessons`), 'a student read lesson edits directly');
+  await db.exec(`set role anon`); let blocked = false;
+  try { await db.query(`select * from public.content_questions`); } catch { blocked = true; } await db.exec(`reset role`);
+  need(blocked, 'a visitor read the content table');
+});
+await step('content: one live version and one draft per question, four options, a valid answer and level', async () => {
+  const base = `insert into public.content_questions (qid, version, status, skill_id, lvl, q, opts, answer) values `;
+  need(await dbFails(base + `('discovery-pm-q1', 3, 'live', 'discovery-pm', 2, 'Q2?', '["a","b","c","d"]', 0)`), 'two live versions accepted');
+  await db.query(base + `('discovery-pm-q1', 3, 'draft', 'discovery-pm', 2, 'Q3?', '["a","b","c","d"]', 0)`);
+  need(await dbFails(base + `('discovery-pm-q1', 4, 'draft', 'discovery-pm', 2, 'Q4?', '["a","b","c","d"]', 0)`), 'two drafts accepted');
+  need(await dbFails(base + `('x-q1', 1, 'live', 'x', 2, 'Q?', '["a","b","c"]', 0)`), 'three options accepted');
+  need(await dbFails(base + `('x-q2', 1, 'live', 'x', 2, 'Q?', '["a","b","c","d"]', 4)`), 'answer 4 accepted');
+  need(await dbFails(base + `('x-q3', 1, 'live', 'x', 6, 'Q?', '["a","b","c","d"]', 0)`), 'level 6 accepted');
+  need(await dbFails(base + `('x-q4', 1, 'weird', 'x', 2, 'Q?', '["a","b","c","d"]', 0)`), 'unknown status accepted');
+  const l = `insert into public.content_lessons (skill_id, idx, version, status, title, body) values `;
+  await db.query(l + `('discovery-pm', 0, 1, 'archived', 'Old', 'old body')`);
+  await db.query(l + `('discovery-pm', 0, 2, 'live', 'New', 'new body')`);
+  need(await dbFails(l + `('discovery-pm', 0, 3, 'live', 'Newer', 'newer body')`), 'two live versions of a lesson accepted');
+  need(await dbFails(l + `('discovery-pm', 1, 1, 'live', '', 'body')`), 'empty lesson title accepted');
+});
+
 console.log(failed ? failed + ' failed' : 'all passed');
 process.exit(failed ? 1 : 0);

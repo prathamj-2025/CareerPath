@@ -32,6 +32,8 @@
     authNotice: null,     // { kind: "verify" | "reset-sent", email, info } shown instead of the forms
     authDraft: {},        // what was typed in the sign-up form, kept when an error re-draws it
     booting: false,       // restoring a saved session at start-up
+    adminBusy: false,     // an admin content change is being saved
+    adminMsg: "",         // why the last admin content change was refused
     lessonIdx: 0,
     practiceState: {},    // key -> { hints revealed, answer shown, learner's attempt }
     projDraft: {},        // skillId -> { text, busy, err, hints } for the practical project
@@ -884,6 +886,7 @@
         return render();
       }
       state.userId = u.id; state.authError = ""; state.authNotice = null;
+      contentAt = 0; loadContent(true);
       if (u.role === "student") { loadProgress(u); loadChallenges(u); }
       var fresh = u.role === "student" && !u.roleId && !u.resume && !u.placement && !u.roleHistory.length;
       if (u.role === "admin") { loadAdminData(); return goPage(pageFor(u, "a-content")); }
@@ -1132,6 +1135,7 @@
   function go(name, params) {
     state.roleMenu = false;
     state.route = Object.assign({ name: name }, params || {});
+    state.adminMsg = "";
     rememberPage();
     window.scrollTo(0, 0);
     render();
@@ -2200,6 +2204,68 @@
     }).catch(function () { return { error: { code: "network", message: "Could not reach the server. Check your connection and try again." } }; });
   }
 
+  function apiGet(path) {
+    return CP_AUTH.token().then(function (t) {
+      if (!t) return { error: { code: "signed_out", message: "Your session expired. Sign in again." } };
+      return fetch(path, { headers: { authorization: "Bearer " + t }, cache: "no-store" }).then(function (r) {
+        return r.json().catch(function () { return null; }).then(function (b) {
+          if (r.ok && b && !b.error) return { data: b };
+          return { error: (b && b.error) || { code: "server_error", message: "The server could not be reached." } };
+        });
+      });
+    }).catch(function () { return { error: { code: "network", message: "Could not reach the server." } }; });
+  }
+
+  /* Lessons and questions admins have changed since the site files shipped (api/content.js). The page keeps the files'
+     version of everything that was not changed. Students receive the live text with no answers; admins also receive the
+     answers, the drafts and the earlier versions. */
+  function applyContent(view) {
+    var skills = (view && view.skills) || {};
+    var n = 0;
+    ROLES.forEach(function (r) {
+      r.skills.forEach(function (sk) {
+        var c = skills[sk.id]; if (!c) return;
+        n++;
+        Object.keys(c.lessons || {}).forEach(function (i) {
+          var l = sk.lessons[i]; if (!l) return;
+          l.title = c.lessons[i].title; l.body = c.lessons[i].body;
+        });
+        sk.assessment = (c.assessment || []).map(function (q) {
+          var o = { qid: q.qid, v: q.v, lvl: q.lvl, q: q.q, opts: q.opts.slice() };
+          if (q.a != null) { o.a = q.a; o.why = q.why; }
+          return o;
+        });
+        sk.drafts = c.drafts || [];
+        sk.archive = c.archive || [];
+      });
+    });
+    return n;
+  }
+  var contentAt = 0;
+  function loadContent(force) {
+    if (!REAL) return Promise.resolve();
+    if (!force && Date.now() - contentAt < 60000) return Promise.resolve();   // students pick up an admin's change within a minute
+    contentAt = Date.now();
+    return apiGet("/api/content").then(function (r) {
+      if (r.data && applyContent(r.data)) render();
+    });
+  }
+
+  /* An admin change goes to the server, which checks it and saves it; the page redraws from the server's answer. */
+  function adminCall(payload, after) {
+    if (state.adminBusy) return;
+    state.adminBusy = true; state.adminMsg = ""; render();
+    apiPost("/api/content", payload).then(function (r) {
+      state.adminBusy = false;
+      if (r.error) { state.adminMsg = r.error.message; return render(); }
+      applyContent(r.data);
+      if (after) after(); else render();
+    });
+  }
+  function adminMsgBox() {
+    return state.adminMsg ? '<div class="check-panel warn" style="margin-bottom:16px"><b>That did not save.</b><p class="tiny" style="margin-top:4px">' + esc(state.adminMsg) + "</p></div>" : "";
+  }
+
   function examErrBox() {
     return state.examErr ? '<div class="check-panel warn" style="margin-bottom:16px"><b>Could not start the exam.</b><p class="tiny" style="margin-top:4px">' + esc(state.examErr) + "</p></div>" : "";
   }
@@ -2208,8 +2274,8 @@
   function localQuestions(user, items) {
     var r = role(user.roleId);
     return items.map(function (it) {
-      var sk = skill(user.roleId, it.skill), q = findQ(sk, it.qid);
-      return q ? { q: q.q, opts: q.opts, lvl: q.lvl, qid: q.qid, v: q.v, skillId: sk.id, skillName: sk.name } : null;
+      var sk = skill(user.roleId, it.skill), q = it.q ? it : findQ(sk, it.qid);   // the server sends the text it will grade
+      return q && sk ? { q: q.q, opts: q.opts, lvl: q.lvl, qid: it.qid, v: q.v, skillId: sk.id, skillName: sk.name } : null;
     }).filter(Boolean);
   }
   function resOk(res, i, q) { return res.ok ? !!res.ok[i] : res.answers[i] === q.a; }
@@ -3240,6 +3306,7 @@
         '<button class="btn sm" data-action="preview" data-mode="learn">Preview course as student</button>' +
       "</div>" +
 
+      adminMsgBox() +
       (state.adminEdit === "new" ? editorCard(null, s) : "") +
 
       '<div class="stack" style="gap:10px">' +
@@ -3317,6 +3384,7 @@
         '<p class="sub">Lesson edits publish immediately. They carry no scoring risk, so they do not need a review step.</p></div>' +
       '<div class="row" style="margin-bottom:16px">' +
         '<button class="btn sm" data-action="preview" data-mode="learn">Preview course as student</button></div>' +
+      adminMsgBox() +
       '<div class="stack" style="gap:10px">' +
         s.lessons.map(function (l, i) {
           if (ed === i) {
@@ -3342,6 +3410,7 @@
     var drafts = allDrafts();
     return '<div class="page-head"><div class="eyebrow">Review queue</div><h1>Question drafts awaiting publish</h1>' +
       '<p class="sub">Nothing here is live yet. Publishing swaps the draft in and archives the version it replaces, so a score recorded against the old version stays explainable.</p></div>' +
+      adminMsgBox() +
       (drafts.length === 0
         ? '<div class="card"><p class="muted">The queue is empty. Edit a question in Content to create a draft.</p>' +
           '<button class="btn sm primary" style="margin-top:12px" data-action="nav" data-nav="a-content">Open content</button></div>'
@@ -3913,7 +3982,7 @@
       }
       forgetPage();
       state.userId = null; state.authTab = "login"; state.exam = null; state.mexam = null; state.mresult = null; state.quiz = null; state.googlePending = null;
-      state.preview = null; state.adminSkill = null; state.adminEdit = null;
+      state.preview = null; state.adminSkill = null; state.adminEdit = null; state.adminMsg = ""; state.adminBusy = false;
       state.onb = null; state.ch = null; state.adminCh = null; state.adminChReview = null;
       state.practiceState = {}; state.projDraft = {};   // drafts belong to the person who wrote them
       live.feed = []; live.chFeed = []; live.flash = {};
@@ -4159,7 +4228,7 @@
       render();
     },
 
-    "open-skill": function (el) { state.quiz = null; state.examErr = ""; go("skill", { skill: el.dataset.skill }); },
+    "open-skill": function (el) { state.quiz = null; state.examErr = ""; loadContent(); go("skill", { skill: el.dataset.skill }); },
 
     "start-learn": function (el) {
       state.lessonIdx = el.dataset.lesson ? +el.dataset.lesson : 0;
@@ -4386,7 +4455,7 @@
 
     "open-cert": function (el) { go("cert", { skill: el.dataset.skill }); },
 
-    "open-track": function (el) { state.examErr = ""; go("track", { track: el.dataset.track }); },
+    "open-track": function (el) { state.examErr = ""; loadContent(); go("track", { track: el.dataset.track }); },
 
     "exam-retry": function () {
       var x = state.pendingExam;
@@ -4449,6 +4518,9 @@
       };
       if (!fields.q || fields.opts.some(function (o) { return !o; })) return;
       var isNew = el.dataset.qid === "new";
+      if (REAL) {
+        return adminCall({ action: "q-draft", skill: s.id, qid: isNew ? undefined : el.dataset.qid, fields: fields }, function () { state.adminEdit = null; go("a-drafts"); });
+      }
       var qid = isNew ? s.id + "-q" + (s.assessment.length + s.drafts.length + 1) + "n" : el.dataset.qid;
       s.drafts = s.drafts.filter(function (d) { return d.qid !== qid; });
       s.drafts.push({ qid: qid, fields: fields, isNew: isNew, created: today() });
@@ -4459,16 +4531,19 @@
     "a-review-one": function (el) { go("a-drafts"); },
 
     "a-publish": function (el) {
+      if (REAL) return adminCall({ action: "q-publish", skill: el.dataset.skill, qid: el.dataset.qid });
       var s = skill(el.dataset.role, el.dataset.skill);
       publishDraft(s, el.dataset.qid);
       render();
     },
     "a-discard": function (el) {
+      if (REAL) return adminCall({ action: "q-discard", skill: el.dataset.skill, qid: el.dataset.qid });
       var s = skill(el.dataset.role, el.dataset.skill);
       s.drafts = s.drafts.filter(function (d) { return d.qid !== el.dataset.qid; });
       render();
     },
     "a-retire": function (el) {
+      if (REAL) return adminCall({ action: "q-retire", skill: state.adminSkill.skillId, qid: el.dataset.qid });
       var s = skill(state.adminSkill.roleId, state.adminSkill.skillId);
       retireQuestion(s, el.dataset.qid);
       render();
@@ -4480,6 +4555,10 @@
       var s = skill(state.adminSkill.roleId, state.adminSkill.skillId);
       var l = s.lessons[+el.dataset.i];
       var t = val("al-t"), b = val("al-b");
+      if (REAL) {
+        if (!t || !b) return;
+        return adminCall({ action: "lesson-save", skill: s.id, idx: +el.dataset.i, title: t, body: b }, function () { state.adminLesson = null; render(); });
+      }
       if (t) l.title = t;
       if (b) l.body = b;
       state.adminLesson = null;

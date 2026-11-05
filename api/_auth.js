@@ -7,7 +7,23 @@ export function fail(res, status, code, message) {
   return null;
 }
 
-/* Returns { env, uid, profile, asUser, asServer, get, rest } or null after sending the error. */
+/* A PostgREST client that acts as the server (service role key). Null when the key is not set. */
+export function serviceRest() {
+  const env = supabase();
+  if (!env.secret) return null;
+  const asServer = { apikey: env.secret, "content-type": "application/json" };
+  if (env.secret.startsWith("eyJ")) asServer.authorization = "Bearer " + env.secret;   // legacy JWT-style key
+  return async (method, path, body, prefer) => {
+    const h = Object.assign({}, asServer);
+    if (prefer) h.prefer = prefer;
+    const r = await fetch(env.url + "/rest/v1/" + path, { method, headers: h, body: body === undefined ? undefined : JSON.stringify(body) });
+    let data = null;
+    try { data = await r.json(); } catch (e) { data = null; }
+    return { ok: r.ok, status: r.status, data };
+  };
+}
+
+/* Returns { env, uid, profile, rest } or null after sending the error. */
 export async function authenticate(req, res, opts) {
   const env = supabase();
   if (!env.secret) {
@@ -19,8 +35,6 @@ export async function authenticate(req, res, opts) {
   if (!token) return fail(res, 401, "signed_out", "Please sign in again.");
 
   const asUser = { apikey: env.key, authorization: "Bearer " + token };
-  const asServer = { apikey: env.secret, "content-type": "application/json" };
-  if (env.secret.startsWith("eyJ")) asServer.authorization = "Bearer " + env.secret;   // legacy JWT-style key
 
   let uid = "";
   try {
@@ -33,14 +47,7 @@ export async function authenticate(req, res, opts) {
   if (!uid) return fail(res, 401, "signed_out", "Please sign in again.");
 
   // Read as the server so the answer never depends on what row-level rules let the student see.
-  const rest = async (method, path, body, prefer) => {
-    const h = Object.assign({}, asServer);
-    if (prefer) h.prefer = prefer;
-    const r = await fetch(env.url + "/rest/v1/" + path, { method, headers: h, body: body === undefined ? undefined : JSON.stringify(body) });
-    let data = null;
-    try { data = await r.json(); } catch (e) { data = null; }
-    return { ok: r.ok, status: r.status, data };
-  };
+  const rest = serviceRest();
   const got = await rest("GET", "profiles?id=eq." + uid + "&select=id,role,roadmap_id,points");
   const profile = got.ok && Array.isArray(got.data) ? got.data[0] : null;
   if (!profile) return fail(res, 403, "no_profile", "Your profile is not ready yet. Try again in a moment.");
