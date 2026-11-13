@@ -11,6 +11,7 @@
    (supabase/migrations/007_server_grading.sql), so a score cannot be set from the page. Real accounts only. */
 import { authenticate, body, fail, today } from "./_auth.js";
 import { content, roleOf, skillOf, questionAt } from "./_content.js";
+import { sync as syncCerts } from "./_certs.js";
 
 const MAX_STARTS_PER_HOUR = 20;      // exam attempts opened by one student
 const MAX_ATTEMPTS_PER_DAY = 10;     // graded attempts of one exam by one student in 24 hours
@@ -132,6 +133,9 @@ async function submit({ uid, profile, rest }, b, res) {
   const total = out.delta ? await rest("POST", "rpc/add_points", { p_user: uid, p_delta: out.delta }) : null;
   let points = total && total.ok && typeof total.data === "number" ? total.data : null;
   if (points == null) { const p = await rest("GET", "profiles?id=eq." + uid + "&select=points"); points = p.ok && p.data && p.data[0] ? p.data[0].points : profile.points; }
+
+  // Issue the certificate now if this result earned one, so its ID exists straight away (best effort; the page also asks).
+  try { await syncCerts(C, uid, profile, rest); } catch (e) { /* the certificates page will issue it */ }
 
   return res.status(200).json({ ok: true, kind: at.kind, target: at.target, pct, right, total: items.length, detail, points,
     pointsAwarded: out.delta, award: out.award, newStars: out.newStars, passed: out.passed, first: out.first,

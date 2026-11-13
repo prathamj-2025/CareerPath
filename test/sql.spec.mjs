@@ -423,5 +423,22 @@ await step('assistant limits: take_ai counts per student and site-wide, and only
   need(blocked, 'a visitor called take_ai');
 });
 
+await step('certificates: students read their own, admins read all, nobody writes from the site, IDs are well formed and unique', async () => {
+  const ins = `insert into public.certificates (id, user_id, kind, target, title, holder, school, roadmap_id, roadmap_name, stars, score) values `;
+  await svc(ins + `('CP-7K2M-X9QD', $1, 'module', 'discovery-track', 'Product Discovery', 'Ann', 'USC', 'pm', 'Product Manager', 4, 88)`, [S1]);
+  await svc(ins + `('CP-AAAA-BBBB', $1, 'skill', 'sql-ba', 'SQL', 'Bo', 'USC', 'ba', 'Business Analyst', 3, 75)`, [S2]);
+  need((await as(S1, `select id from public.certificates`)).rows.length === 1, 'a student saw someone else\'s certificate');
+  need((await as(ADM, `select id from public.certificates`)).rows.length === 2, 'an admin did not see all certificates');
+  need(await fails(S1, `update public.certificates set revoked_at = null where id = 'CP-7K2M-X9QD'`) !== null || (await svc(`select revoked_at from public.certificates where id = 'CP-7K2M-X9QD'`)).rows[0].revoked_at === null, 'a student edited a certificate');
+  need(await fails(S1, ins + `('CP-ZZZZ-ZZZZ', '${S1}', 'skill', 'x', 'X', 'Ann', 'USC', 'pm', 'PM', 3, 80)`), 'a student issued a certificate');
+  need(await fails(ADM, ins + `('CP-ZZZZ-YYYY', '${S1}', 'skill', 'x', 'X', 'Ann', 'USC', 'pm', 'PM', 3, 80)`), 'an admin issued a certificate from the site');
+  need(await dbFails(ins + `('cp-lower-case', '${S1}', 'skill', 'x', 'X', 'Ann', 'USC', 'pm', 'PM', 3, 80)`), 'a badly formed ID was accepted');
+  need(await dbFails(ins + `('CP-7K2M-X9QD', '${S2}', 'skill', 'y', 'Y', 'Bo', 'USC', 'pm', 'PM', 3, 80)`), 'a duplicate ID was accepted');
+  need(await dbFails(ins + `('CP-DUPL-ICAT', '${S1}', 'module', 'discovery-track', 'Again', 'Ann', 'USC', 'pm', 'PM', 3, 80)`), 'the same certificate was issued twice');
+  await db.exec(`set role anon`); let blocked = false;
+  try { await db.query(`select * from public.certificates`); } catch { blocked = true; } await db.exec(`reset role`);
+  need(blocked, 'a visitor read the certificates table');
+});
+
 console.log(failed ? failed + ' failed' : 'all passed');
 process.exit(failed ? 1 : 0);

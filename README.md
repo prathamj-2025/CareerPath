@@ -122,6 +122,8 @@ browser-only demo (set `CP_DEMO=1` to force that).
   (`api/ask.js`, `supabase/migrations/009_ai_usage.sql`, see `supabase/README.md`).
 - Admins edit lessons and questions on the admin pages. Changes are saved to the database (`api/content.js`,
   `supabase/migrations/008_content_edits.sql`) and reach students without a redeploy. Run 008 after deploying this version.
+- Certificates are issued by the server with a random ID, checked on a public page (`verify.html`, `api/verify.js`,
+  `api/certs.js`, `supabase/migrations/010_certificates.sql`). Admins can revoke one. Run 010 after deploying this version.
 - Skill assessments, module exams and practical projects are graded on the server (`api/exam.js`, `api/grade-project.js`).
   The answer keys live in `content/`, which is never served; `public/` has copies without keys, made by
   `npm run build:content`. Students cannot write points, stars or scores from the browser (`007_server_grading.sql`).
@@ -201,6 +203,8 @@ or `model`. Each should produce a different, actionable message in the assistant
 ```
 api/ask.js             Serverless function. Holds the API key, streams the reply back.
 api/grade-challenge.js Serverless function. Scores and saves a weekly challenge answer (secret key, server only).
+api/certs.js           Issues and lists certificates; admins revoke or restore. api/verify.js is the public check.
+public/verify.html     The public page where a certificate ID is checked.
 public/index.html      Markup and all styling.
 public/app.js          The whole application: routing, scoring, admin, assistant.
 public/data.js         Product Manager track.
@@ -225,9 +229,9 @@ available, the assistant hides itself and the rest of the app works normally.
 
 ## Known limits
 
-**Grading still runs in the browser.** Accounts, progress, points and the leaderboard are saved in the
-database, but stars and points are calculated by the page, so a technically skilled student could forge
-them. Moving grading into database functions closes this and is the next backend step.
+**Grading is on the server for assessments, module exams and projects.** Stars, scores and points are written only by
+the server, so they cannot be forged from the browser. The weekly challenge lock and the study assistant's exam lock
+are enforced by the server for the assistant, but the challenge lock itself is still the page's.
 
 **The answer check is structural.** A practice query is checked against what a correct
 answer must contain and the mistakes that make one wrong. It does not execute the query,

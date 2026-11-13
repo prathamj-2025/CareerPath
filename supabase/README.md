@@ -24,6 +24,10 @@ One shared Supabase project. Database changes live here as numbered SQL files in
   read or call them. Safe to run twice. Run after the website that uses it is deployed; until then the assistant works but
   only the per-minute limit and the exam lock apply.
 
+- `010_certificates.sql`: the `certificates` table. Students and admins can read it; only `api/certs.js` and `api/exam.js` write
+  to it (service role key). Safe to run twice. Run it after the website that uses it is deployed; until then certificate IDs
+  show "issuing..." and the verification page finds nothing.
+
 Run them in order, one at a time, in the SQL editor.
 
 ## Exam and project scoring (server side)
@@ -34,6 +38,19 @@ and `public/` holds copies with the keys removed. After you change anything in `
 and commit both folders; `test/grading.spec.mjs` fails if they disagree or if a key reaches `public/`.
 `api/keys.js` gives the keys to signed-in admins only, for the question bank and the admin preview. Uses the same
 `SUPABASE_SERVICE_ROLE_KEY` as below. Limits: 20 exam starts per hour and 10 graded attempts per exam per 24 hours.
+
+## Certificates
+
+A certificate is issued by the server when the results in the database say it is earned: a passed module exam (roadmaps with
+modules), or three stars on a skill (roadmaps without). `api/exam.js` issues it right after the result is saved, and
+`api/certs.js` (called when a student opens the Certificates pages) issues anything missing. Each gets a random ID like
+`CP-7K2M-X9QD` (letters and digits without 0, O, 1, I; about a trillion combinations), so an ID cannot be guessed or worked out
+from anything else. `verify.html` (and `api/verify.js` behind it, no sign-in) shows the holder's name, the certificate title,
+the roadmap, the school, the date and the score, and nothing else (no email, no student id). Unknown and badly formed IDs get
+the same answer, and one address can make 30 checks a minute. The holder's name follows the profile, so a corrected name is
+corrected on the certificate; the ID never changes. An admin can revoke a certificate on the student's page in the admin area
+(and restore it); the verification page then says it was revoked, and doing the exam again does not bring it back.
+Students use the Print or save as PDF button on the certificate page, which prints the certificate alone in light colours.
 
 ## Study assistant limits
 

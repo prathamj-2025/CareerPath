@@ -17,6 +17,7 @@ const progress = new Map();   // 'user|skill' -> row
 const modules = new Map();    // 'user|track' -> row
 const attempts = new Map();   // id -> exam_attempts row (written only with the service key)
 const content = { lessons: [], questions: [], missing: false };   // admin content edits (service key only)
+const certs = new Map();      // id -> certificates row (migration 010; written only with the service key)
 const ai = new Map(); let aiOff = false;   // take_ai counters (migration 009)
 const subs = new Map();       // 'user|challenge' -> challenge_submissions row (written only with the service key)
 const SECRET = 'sb_secret_test';
@@ -114,7 +115,7 @@ const server = http.createServer(async (req, res) => {
   if (p === '/__admin') { const u = users.get(url.searchParams.get('email')); profiles.get(u.id).role = 'admin'; return send(200, {}); }
   if (p === '/__expire') { tokens.clear(); return send(200, {}); }   // access tokens die, refresh tokens live
   if (p === '/__profile') { const u = users.get(url.searchParams.get('email')); return send(200, profiles.get(u.id) || null); }
-  if (p === '/__reset') { rt.joins = []; rt.fanouts = []; rt.tokenUpdates = 0; rt.refuse = false; for (const c of sockets) c.ws.terminate(); users.clear(); profiles.clear(); tokens.clear(); refreshes.clear(); progress.clear(); modules.clear(); subs.clear(); attempts.clear(); content.lessons = []; content.questions = []; content.missing = false; ai.clear(); aiOff = false; log.length = 0; return send(200, {}); }
+  if (p === '/__reset') { rt.joins = []; rt.fanouts = []; rt.tokenUpdates = 0; rt.refuse = false; for (const c of sockets) c.ws.terminate(); users.clear(); profiles.clear(); tokens.clear(); refreshes.clear(); progress.clear(); modules.clear(); subs.clear(); attempts.clear(); certs.clear(); content.lessons = []; content.questions = []; content.missing = false; ai.clear(); aiOff = false; log.length = 0; return send(200, {}); }
   if (p === '/__progress') { const u = users.get(url.searchParams.get('email')); return send(200, { skills: [...progress.values()].filter(r => r.user_id === u.id), modules: [...modules.values()].filter(r => r.user_id === u.id) }); }
   if (p === '/__seed') {   // put saved progress on the server before the student signs in (as if from another device)
     const u = users.get(url.searchParams.get('email')); const b = body;
@@ -125,6 +126,7 @@ const server = http.createServer(async (req, res) => {
   }
   if (p === '/__subs') return send(200, [...subs.values()]);
   if (p === '/__attempts') { const u = users.get(url.searchParams.get('email')); return send(200, [...attempts.values()].filter(r => r.user_id === u.id)); }
+  if (p === '/__certs') return send(200, [...certs.values()]);
   if (p === '/__log') return send(200, log);
   if (p === '/__rt') {
     const by = {}; for (const c of sockets) { const em = c.uid && profiles.get(c.uid) && profiles.get(c.uid).email; by[em || 'unjoined'] = (by[em || 'unjoined'] || []).concat([...c.chans]); }
@@ -302,6 +304,32 @@ const server = http.createServer(async (req, res) => {
       return (req.headers.prefer || '').includes('return=representation') ? send(200, hit) : send(204);
     }
     if (req.method === 'DELETE') { [...attempts.values()].filter(r => matches(r, url)).forEach(r => attempts.delete(r.id)); return send(204); }
+  }
+
+  // ---- certificates (010): students and admins read; only the server writes ----
+  if (p === '/rest/v1/certificates') {
+    const svc = isService(req);
+    const id = svc ? null : who(req); if (!svc && !id) return send(401, { message: 'JWT expired', code: 'PGRST301' });
+    if (req.method === 'GET') {
+      const me = id ? profiles.get(id) : null;
+      return send(200, [...certs.values()].filter(r => (svc || me.role === 'admin' || r.user_id === id) && matches(r, url)));
+    }
+    if (!svc) return send(403, { code: '42501', message: 'permission denied for table certificates' });
+    if (req.method === 'POST') {
+      if (!/^CP-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(body.id || '')) return send(400, { code: '23514', message: 'check constraint' });
+      if (certs.has(body.id)) return send(409, { code: '23505', message: 'duplicate key value violates unique constraint "certificates_pkey"' });
+      if ([...certs.values()].some(r => r.user_id === body.user_id && r.kind === body.kind && r.target === body.target))
+        return send(409, { code: '23505', message: 'duplicate key value violates unique constraint "certificates_user_id_kind_target_key"' });
+      const row = { issued_at: new Date().toISOString(), revoked_at: null, holder: '', school: '', roadmap_id: '', roadmap_name: '', stars: 0, score: 0, ...body };
+      certs.set(row.id, row); log.push({ table: 'certificates', rows: 1 });
+      return (req.headers.prefer || '').includes('return=representation') ? send(201, [row]) : send(201);
+    }
+    if (req.method === 'PATCH') {
+      const hit = [...certs.values()].filter(r => matches(r, url));
+      hit.forEach(r => Object.assign(r, body));
+      return (req.headers.prefer || '').includes('return=representation') ? send(200, hit) : send(204);
+    }
+    return send(403, { code: '42501', message: 'permission denied' });
   }
 
   // ---- weekly challenge submissions: students read their own; only the server (service key) writes ----

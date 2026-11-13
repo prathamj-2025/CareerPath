@@ -248,6 +248,47 @@
     return "CP-" + user.roleId.toUpperCase() + "-" + code;
   }
 
+  /* Certificate IDs. In real accounts the server issues each certificate and its ID (api/certs.js), and anyone can check
+     the ID on verify.html. The page only shows what the server returns. The demo has no server, so it keeps a local ID
+     that nothing can verify. */
+  var certStore = { list: null, busy: false, failed: false, admin: {} };
+  function dateOf(iso) {
+    var d = new Date(iso);
+    return isNaN(d) ? today() : d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+  }
+  function loadCerts() {
+    if (!REAL || state.preview || certStore.busy || certStore.list || certStore.failed) return;
+    certStore.busy = true;
+    apiGet("/api/certs").then(function (r) {
+      certStore.busy = false;
+      if (r.error) certStore.failed = true; else certStore.list = r.data.certs || [];
+      if (state.route.name === "certs" || state.route.name === "cert") render();
+    });
+  }
+  function certRecord(user, targetId) {
+    return ((certStore.list || []).filter(function (c) { return c.target === targetId && (!c.roadmapId || c.roadmapId === user.roleId); })[0]) || null;
+  }
+  function certIdText(user, targetId) {
+    if (!REAL || state.preview) return verifyId(user, targetId);
+    var c = certRecord(user, targetId);
+    return c ? c.id : certStore.failed ? "unavailable, reload the page" : "issuing...";
+  }
+  function certVerifyUrl(id) { return location.origin + "/verify.html?id=" + encodeURIComponent(id); }
+  function certNote(user, targetId) {
+    var c = REAL && !state.preview ? certRecord(user, targetId) : null;
+    if (REAL && !state.preview) {
+      return (c && c.revoked ? '<div class="check-panel warn no-print" style="margin-top:14px"><b>This certificate was revoked.</b><p class="tiny" style="margin-top:4px">It no longer verifies. Contact support if you think this is a mistake.</p></div>' : "") +
+        '<div class="row no-print" style="margin-top:14px;gap:10px;flex-wrap:wrap">' +
+          '<button class="btn sm primary" data-action="print-cert">Print or save as PDF</button>' +
+          (c ? '<button class="btn sm" data-action="copy-cert-link" data-url="' + esc(certVerifyUrl(c.id)) + '">Copy verification link</button>' : "") + "</div>" +
+        '<p class="tiny muted no-print" style="margin-top:12px">' + (c
+          ? "Anyone can check this ID at <b>" + esc(location.host) + "/verify.html</b>. It shows your name, the certificate, your school, the date and your score, and nothing else."
+          : "The ID is created by the server when the certificate is issued.") + "</p>";
+    }
+    return '<div class="row no-print" style="margin-top:14px"><button class="btn sm primary" data-action="print-cert">Print or save as PDF</button></div>' +
+      '<p class="tiny muted no-print" style="margin-top:12px">This is the demo. In a real account the server issues the ID and anyone can check it on a public verification page.</p>';
+  }
+
   /* ---------------- weekly challenge ----------------
      A challenge is scored by its rubric, which is a fixed set of criteria, so the
      score is reproducible and a student can see exactly why they got it. The AI
@@ -1147,6 +1188,9 @@
     state.roleMenu = false;
     state.route = Object.assign({ name: name }, params || {});
     state.adminMsg = "";
+    if (name === "certs" || (name === "cert" && !(certStore.list || []).some(function (c) { return params && c.target === params.skill; }))) {
+      certStore.list = null; certStore.failed = false;      // look again: a result may have just earned one
+    }
     rememberPage();
     window.scrollTo(0, 0);
     render();
@@ -3072,6 +3116,7 @@
   }
 
   function viewCerts(user) {
+    loadCerts();
     var list = certsFor(user);
     var r = role(user.roleId);
     return '<div class="page-head"><div class="eyebrow">Certificates</div><h1>Verified proficiency</h1>' +
@@ -3086,7 +3131,7 @@
         : '<div class="skill-list">' + list.map(function (c) {
             return '<button class="skill-row" data-action="open-cert" data-skill="' + c.skill.id + '">' +
               '<span><span class="skill-name">' + esc(c.skill.name) + '</span><span class="skill-lens" style="display:block">' +
-                (c.track ? "Module exam " + c.p.best + "%" : LEVELS[c.p.stars].label) + " &middot; " + verifyId(user, c.skill.id) + "</span></span>" +
+                (c.track ? "Module exam " + c.p.best + "%" : LEVELS[c.p.stars].label) + " &middot; " + certIdText(user, c.skill.id) + "</span></span>" +
               '<span class="skill-right">' + starHTML(c.p.stars) + '<span class="pill accent">View</span></span></button>';
           }).join("") + "</div>");
   }
@@ -3095,33 +3140,37 @@
     var r = role(user.roleId);
     var t = trackById(r, state.route.skill);
     if (t) return viewTrackCert(user, r, t);
+    loadCerts();
     var s = skill(user.roleId, state.route.skill);
     var p = prog(user, s.id);
-    return '<div class="page-head"><button class="btn sm ghost" style="margin-bottom:10px" data-action="nav" data-nav="certs">&larr; Certificates</button><h1>Certificate</h1></div>' +
+    var rec = REAL && !state.preview ? certRecord(user, s.id) : null;
+    return '<div class="page-head no-print"><button class="btn sm ghost" style="margin-bottom:10px" data-action="nav" data-nav="certs">&larr; Certificates</button><h1>Certificate</h1></div>' +
       '<div class="cert"><div class="cert-seal">' + CAP.replace('width="18" height="18"', 'width="30" height="30"') + '</div><div class="cert-org">CareerPath &middot; Verified Skill Certificate</div>' +
         '<div class="cert-name">' + esc(user.name) + '</div><div class="cert-skill">' + esc(s.name) + "</div>" +
         '<div class="cert-level"><div style="font-size:24px">' + starHTML(p.stars, "24px") + "</div>" +
           '<div style="font-weight:500;margin-top:5px">' + LEVELS[p.stars].label + "</div></div>" +
         '<p class="tiny muted" style="max-width:62ch;margin:0 auto">Demonstrated through assessment on the ' + esc(r.name) +
           " track. Progress on this platform is earned only through scored assessment.</p>" +
-        '<div class="cert-meta"><span>ID ' + verifyId(user, s.id) + "</span><span>Score " + p.best + "%</span>" +
-          "<span>" + esc(user.school) + "</span><span>Issued " + today() + "</span></div></div>" +
-      '<p class="tiny muted" style="margin-top:14px">In the working product this is a downloadable PDF and the ID resolves to a public verification page.</p>';
+        '<div class="cert-meta"><span>ID ' + certIdText(user, s.id) + "</span><span>Score " + p.best + "%</span>" +
+          "<span>" + esc(user.school) + "</span><span>Issued " + (rec ? dateOf(rec.issued) : today()) + "</span></div></div>" +
+      certNote(user, s.id);
   }
 
   function viewTrackCert(user, r, t) {
     var m = mex(user, t.id), st = trackStatus(user, r, t);
     if (!m.passed) return viewTrack(user);
+    loadCerts();
+    var rec = REAL && !state.preview ? certRecord(user, t.id) : null;
     var subs = st.req.concat(st.withBadge ? st.opt : []);
-    return '<div class="page-head"><button class="btn sm ghost" style="margin-bottom:10px" data-action="nav" data-nav="certs">&larr; Certificates</button><h1>Certificate</h1></div>' +
+    return '<div class="page-head no-print"><button class="btn sm ghost" style="margin-bottom:10px" data-action="nav" data-nav="certs">&larr; Certificates</button><h1>Certificate</h1></div>' +
       '<div class="cert"><div class="cert-seal">' + CAP.replace('width="18" height="18"', 'width="30" height="30"') + '</div><div class="cert-org">CareerPath &middot; Verified Module Certificate</div>' +
         '<div class="cert-name">' + esc(user.name) + '</div><div class="cert-skill">' + esc(certTitle(user, r, t)) + "</div>" +
         '<div class="cert-level"><div style="font-weight:500;margin-top:5px">Module exam passed with ' + m.best + "%</div></div>" +
         '<p class="tiny muted" style="max-width:62ch;margin:0 auto">Demonstrated on the ' + esc(r.name) + " track: " + subs.length +
           " sub-modules taken to job-ready level (" + subs.map(function (x) { return esc(x.name); }).join(", ") + "), then a module exam drawn from their assessments.</p>" +
-        '<div class="cert-meta"><span>ID ' + verifyId(user, t.id) + "</span><span>Best score " + m.best + "%</span>" +
-          "<span>" + esc(user.school) + "</span><span>Issued " + (m.passedOn || today()) + "</span></div></div>" +
-      '<p class="tiny muted" style="margin-top:14px">In the working product this is a downloadable PDF and the ID resolves to a public verification page.</p>';
+        '<div class="cert-meta"><span>ID ' + certIdText(user, t.id) + "</span><span>Best score " + m.best + "%</span>" +
+          "<span>" + esc(user.school) + "</span><span>Issued " + (rec ? dateOf(rec.issued) : (m.passedOn || today())) + "</span></div></div>" +
+      certNote(user, t.id);
   }
 
   function viewLeaderboard(user) {
@@ -3541,9 +3590,41 @@
       '<p class="tiny muted" style="margin-top:14px">Select a name to open that student&rsquo;s profile. Filtering by role and school together is how you read a single leaderboard cohort, since students only compete within their own school and target role.</p>';
   }
 
+  /* The IDs (and revoked state) of one student's certificates, for the admin page. */
+  function loadAdminCerts(uid) {
+    var e = certStore.admin[uid];
+    if (!REAL || e) return;
+    certStore.admin[uid] = { list: null, failed: false };
+    apiGet("/api/certs?user=" + encodeURIComponent(uid)).then(function (r) {
+      if (r.error) certStore.admin[uid].failed = true; else certStore.admin[uid].list = r.data.certs || [];
+      if (state.route.name === "a-student" && state.adminStudent === uid) render();
+    });
+  }
+  function certAdmin(id, action) {
+    apiPost("/api/certs", { action: action, id: id }).then(function (r) {
+      if (r.error) { state.adminMsg = r.error.message; return render(); }
+      Object.keys(certStore.admin).forEach(function (uid) {
+        var e = certStore.admin[uid];
+        (e.list || []).forEach(function (c, i) { if (c.id === id) e.list[i] = r.data.cert; });
+      });
+      render();
+    });
+  }
+  function adminCertCell(u, targetId) {
+    if (!REAL) return '<td class="mono tiny">' + verifyId(u, targetId) + "</td><td></td>";
+    var e = certStore.admin[u.id];
+    var c = e && e.list ? e.list.filter(function (x) { return x.target === targetId && (!x.roadmapId || x.roadmapId === u.roleId); })[0] : null;
+    if (!c) return '<td class="mono tiny muted">' + (e && e.failed ? "unavailable" : e && e.list ? "not issued yet" : "...") + "</td><td></td>";
+    return '<td class="mono tiny">' + esc(c.id) + (c.revoked ? ' <span class="pill warn">revoked</span>' : "") + "</td>" +
+      "<td>" + (c.revoked
+        ? '<button class="btn sm" data-action="cert-restore" data-id="' + esc(c.id) + '">Restore</button>'
+        : '<button class="btn sm" data-action="cert-revoke" data-id="' + esc(c.id) + '">Revoke</button>') + "</td>";
+  }
+
   function viewAdminStudent() {
     var u = state.users.filter(function (x) { return x.id === state.adminStudent; })[0];
     if (!u) return viewAdminStudents();
+    loadAdminCerts(u.id);
     var r = role(u.roleId);
 
     var rows = r ? r.skills.map(function (s) {
@@ -3622,11 +3703,11 @@
           (certsFor(u).length === 0
             ? '<p class="tiny muted">None yet.' + (role(u.roleId) && role(u.roleId).tracks ? " A certificate is issued for a main module after its module exam." : " A certificate is issued at " + STAR + STAR + STAR + " or above.") + "</p>"
             : '<div class="scroll-x"><table class="grid">' +
-              "<thead><tr><th>Skill</th><th>Level</th><th>Score</th><th>Verification ID</th></tr></thead><tbody>" +
+              "<thead><tr><th>Skill</th><th>Level</th><th>Score</th><th>Verification ID</th><th></th></tr></thead><tbody>" +
               certsFor(u).map(function (c) {
                 return "<tr><td>" + esc(c.skill.name) + "</td><td>" + starHTML(c.p.stars) +
                   ' <span class="tiny muted">' + LEVELS[c.p.stars].label + "</span></td>" +
-                  '<td class="mono">' + c.p.best + '%</td><td class="mono tiny">' + verifyId(u, c.skill.id) + "</td></tr>";
+                  '<td class="mono">' + c.p.best + "%</td>" + adminCertCell(u, c.skill.id) + "</tr>";
               }).join("") + "</tbody></table></div>") +
         "</div>" +
       "</div>") +
@@ -4465,6 +4546,13 @@
     },
 
     "open-cert": function (el) { go("cert", { skill: el.dataset.skill }); },
+    "print-cert": function () { window.print(); },
+    "copy-cert-link": function (el) {
+      var url = el.dataset.url, done = function () { el.textContent = "Copied"; };
+      try { navigator.clipboard.writeText(url).then(done, function () { window.prompt("Copy this link", url); }); } catch (e) { done(); }
+    },
+    "cert-revoke": function (el) { certAdmin(el.dataset.id, "revoke"); },
+    "cert-restore": function (el) { certAdmin(el.dataset.id, "restore"); },
 
     "open-track": function (el) { state.examErr = ""; loadContent(); go("track", { track: el.dataset.track }); },
 
@@ -4593,7 +4681,7 @@
       }
     },
 
-    "a-student": function (el) { state.adminStudent = el.dataset.id; go("a-student"); },
+    "a-student": function (el) { state.adminStudent = el.dataset.id; delete certStore.admin[el.dataset.id]; go("a-student"); },
 
     "sf-clear": function () {
       state.studentFilter = { role: "all", school: "all", q: "" };

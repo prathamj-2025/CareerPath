@@ -135,7 +135,7 @@ await m.close();
 
 /* ---- website pages (static files, served by either server) ---- */
 const pages = { 'about.html': 'About CareerPath', 'faq.html': 'Frequently asked questions', 'help.html': 'Help and support',
-  'contact.html': 'Contact us', 'terms.html': 'Terms of use', 'privacy.html': 'Privacy policy' };
+  'contact.html': 'Contact us', 'terms.html': 'Terms of use', 'privacy.html': 'Privacy policy', 'verify.html': 'Verify a certificate' };
 for (const [file, h1] of Object.entries(pages)) {
   await step('website page ' + file + ' loads with header, footer and no errors', async () => {
     const p = await browser.newPage({ viewport: { width: 1280, height: 900 } });
