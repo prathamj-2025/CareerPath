@@ -15,6 +15,9 @@
     "api/content.js": {
       "includeFiles": "{content/*.js,public/grading.js,public/project.js}"
     },
+    "api/challenges.js": {
+      "includeFiles": "public/{data6,challenge}.js"
+    },
     "api/certs.js": {
       "includeFiles": "{content/*.js,public/grading.js,public/project.js}"
     }

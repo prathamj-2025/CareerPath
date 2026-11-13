@@ -927,7 +927,7 @@
         return render();
       }
       state.userId = u.id; state.authError = ""; state.authNotice = null;
-      contentAt = 0; loadContent(true);
+      contentAt = 0; loadContent(true); chDefsAt = 0; loadChallengeDefs(true);
       if (u.role === "student") apiPost("/api/exam", { action: "cancel" });   // a reload loses an open exam, so close it
       if (u.role === "student") { loadProgress(u); loadChallenges(u); }
       var fresh = u.role === "student" && !u.roleId && !u.resume && !u.placement && !u.roleHistory.length;
@@ -1185,6 +1185,8 @@
   }
   function go(name, params) {
     leaveExam(name);
+    syncChallengeLock(state.route && state.route.name, name);
+    if (name === "challenge" || name === "a-challenges") loadChallengeDefs();
     state.roleMenu = false;
     state.route = Object.assign({ name: name }, params || {});
     state.adminMsg = "";
@@ -2304,6 +2306,39 @@
     return apiGet("/api/content").then(function (r) {
       if (r.data && applyContent(r.data)) render();
     });
+  }
+
+  /* The weekly challenges (api/challenges.js). Students get the live one for their roadmap with the rubric labels only; admins
+     get every challenge with its patterns. Until the server answers, the page uses the challenges that ship in the site files. */
+  var chDefsAt = 0;
+  function applyChallengeDefs(list) {
+    var next = (list || []).map(function (c) {
+      return { cid: c.cid, roleId: c.roleId, week: c.week, status: c.status, title: c.title, brief: c.brief, minWords: c.minWords,
+        rubric: (c.rubric || []).map(function (r) { return { label: r.label, re: r.re || "" }; }) };
+    });
+    CHALLENGES.splice(0, CHALLENGES.length);
+    next.forEach(function (c) { CHALLENGES.push(c); });
+  }
+  function loadChallengeDefs(force) {
+    if (!REAL) return Promise.resolve();
+    if (!force && Date.now() - chDefsAt < 30000) return Promise.resolve();
+    chDefsAt = Date.now();
+    return apiGet("/api/challenges").then(function (r) {
+      if (r.data && r.data.challenges) { applyChallengeDefs(r.data.challenges); render(); }
+    });
+  }
+  /* While the challenge page is open and unsubmitted, the server refuses the study assistant, so the lock does not depend
+     on this page. Leaving the page, or submitting, lifts it. */
+  function syncChallengeLock(from, to) {
+    if (!REAL || state.preview) return;
+    var u = me();
+    if (!u || u.role !== "student") return;
+    if (to === "challenge" && from !== "challenge") {
+      var c = u.roleId ? liveChallenge(u.roleId) : null;
+      if (c && !u.challenges[c.cid]) apiPost("/api/challenges", { action: "open", cid: c.cid });
+    } else if (from === "challenge" && to !== "challenge") {
+      apiPost("/api/challenges", { action: "leave" });
+    }
   }
 
   /* An admin change goes to the server, which checks it and saves it; the page redraws from the server's answer. */
@@ -3747,6 +3782,7 @@
       '<div class="row" style="margin-bottom:16px">' +
         '<button class="btn primary sm" data-action="ac-new">Create challenge</button>' +
       "</div>" +
+      adminMsgBox() +
       (state.adminCh === "new" ? chEditor(null) : "") +
       '<div class="stack">' + byRole.map(function (x) {
         return '<div class="card"><div class="row" style="justify-content:space-between;margin-bottom:10px">' +
@@ -3765,7 +3801,7 @@
                       (n === 1 ? "" : "s") + "</p></div>" +
                   '<div class="row" style="gap:6px;flex-wrap:nowrap">' +
                     '<span class="pill ' + st.pill + '">' + st.label + "</span>" +
-                    '<button class="btn sm" data-action="ac-edit" data-cid="' + c.cid + '">Edit</button>' +
+                    (c.status === "draft" || c.status === "scheduled" ? '<button class="btn sm" data-action="ac-edit" data-cid="' + c.cid + '">Edit</button>' : "") +
                     (c.status === "draft" ? '<button class="btn sm" data-action="ac-status" data-cid="' + c.cid + '" data-to="scheduled">Schedule</button>' : "") +
                     (c.status === "draft" || c.status === "scheduled"
                       ? '<button class="btn sm primary" data-action="ac-status" data-cid="' + c.cid + '" data-to="live">Publish live</button>' : "") +
@@ -4287,22 +4323,32 @@
       var rubric = parseRubric(val("ac-rubric"));
       var title = val("ac-title"), brief = val("ac-brief");
       if (!title || !brief || !rubric.length) {
-        state.adminChErr = "A challenge needs a title, a brief and at least one rubric line.";
+        state.adminMsg = "A challenge needs a title, a brief and at least one rubric line.";
         return render();
       }
       var fields = {
         week: +val("ac-week") || nextWeek(), title: title, brief: brief,
         minWords: +val("ac-min") || 80, rubric: rubric
       };
+      var roleId = isNew ? (val("ac-role") || ROLES[0].id) : (chById(el.dataset.cid) || {}).roleId;
+      if (REAL) {
+        if (state.adminBusy) return;
+        state.adminBusy = true; state.adminMsg = "";
+        return apiPost("/api/challenges", Object.assign({ action: "save", cid: isNew ? undefined : el.dataset.cid, roleId: roleId }, fields)).then(function (r) {
+          state.adminBusy = false;
+          if (r.error) { state.adminMsg = r.error.message; return render(); }
+          applyChallengeDefs(r.data.challenges); chDefsAt = Date.now();
+          state.adminCh = null; render();
+        });
+      }
       if (isNew) {
-        var roleId = val("ac-role") || ROLES[0].id;
         CHALLENGES.push(Object.assign({ cid: roleId + "-w" + fields.week + "-" + uid().slice(1, 4),
           roleId: roleId, status: "draft" }, fields));
       } else {
         var c = chById(el.dataset.cid);
         if (c) Object.assign(c, fields);
       }
-      state.adminCh = null; state.adminChErr = "";
+      state.adminCh = null; state.adminMsg = "";
       render();
     },
 
@@ -4310,6 +4356,15 @@
       var c = chById(el.dataset.cid);
       if (!c) return;
       var to = el.dataset.to;
+      if (REAL) {
+        if (state.adminBusy) return;
+        state.adminBusy = true; state.adminMsg = "";
+        return apiPost("/api/challenges", { action: "status", cid: c.cid, to: to }).then(function (r) {
+          state.adminBusy = false;
+          if (r.error) { state.adminMsg = r.error.message; return render(); }
+          applyChallengeDefs(r.data.challenges); chDefsAt = Date.now(); render();
+        });
+      }
       if (to === "live") {
         // One live challenge per roadmap. The one it replaces is closed, not deleted.
         CHALLENGES.forEach(function (x) {

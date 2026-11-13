@@ -440,5 +440,25 @@ await step('certificates: students read their own, admins read all, nobody write
   need(blocked, 'a visitor read the certificates table');
 });
 
+await step('challenges: only the server can read or write them; one live per roadmap; bad rows are refused; the lock kind is accepted', async () => {
+  const ins = `insert into public.challenges (cid, role_id, week, status, title, brief, min_words, rubric) values `;
+  const rub = `'[{"label":"a","re":"b"}]'`;
+  await svc(ins + `('pm-t1', 'pm', 1, 'live', 'T', 'B', 40, ${rub})`);
+  await svc(ins + `('ba-t1', 'ba', 1, 'live', 'T', 'B', 40, ${rub})`);
+  need(await dbFails(ins + `('pm-t2', 'pm', 2, 'live', 'T', 'B', 40, ${rub})`), 'two live challenges on one roadmap accepted');
+  await svc(ins + `('pm-t3', 'pm', 3, 'draft', 'T', 'B', 40, ${rub})`);
+  need(await dbFails(ins + `('x1', 'xx', 1, 'draft', 'T', 'B', 40, ${rub})`), 'unknown roadmap accepted');
+  need(await dbFails(ins + `('x2', 'pm', 1, 'weird', 'T', 'B', 40, ${rub})`), 'unknown status accepted');
+  need(await dbFails(ins + `('x3', 'pm', 1, 'draft', 'T', 'B', 40, '[]')`), 'empty rubric accepted');
+  need(await dbFails(ins + `('x4', 'pm', 1, 'draft', 'T', 'B', 40, '{"a":1}')`), 'rubric that is not a list accepted');
+  need(await dbFails(ins + `('x5', 'pm', 0, 'draft', 'T', 'B', 40, ${rub})`), 'week 0 accepted');
+  need(await dbFails(ins + `('x6', 'pm', 1, 'draft', '', 'B', 40, ${rub})`), 'empty title accepted');
+  need(await fails(S1, `select * from public.challenges`), 'a student read the challenges table');
+  need(await fails(ADM, `select * from public.challenges`), 'an admin read the challenges table from the site');
+  need(await fails(ADM, ins + `('x7', 'pm', 1, 'draft', 'T', 'B', 40, ${rub})`), 'an admin wrote a challenge from the site');
+  await svc(`insert into public.exam_attempts (user_id, kind, target) values ($1, 'challenge', 'pm-t1')`, [S1]);
+  need(await dbFails(`insert into public.exam_attempts (user_id, kind, target) values ('${S1}', 'weird', 'x')`), 'unknown attempt kind accepted');
+});
+
 console.log(failed ? failed + ' failed' : 'all passed');
 process.exit(failed ? 1 : 0);

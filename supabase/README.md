@@ -28,6 +28,11 @@ One shared Supabase project. Database changes live here as numbered SQL files in
   to it (service role key). Safe to run twice. Run it after the website that uses it is deployed; until then certificate IDs
   show "issuing..." and the verification page finds nothing.
 
+- `011_challenges.sql`: the `challenges` table (weekly challenges written or changed by admins) and the `challenge` kind for
+  open attempts, which is how the server knows a student has the challenge page open. Server only: the site cannot read or
+  write the table. Safe to run twice. Run it after the website that uses it is deployed; until then the site uses the challenges
+  in `public/data6.js`, admins cannot save challenge changes, and the assistant lock for challenges is not enforced.
+
 Run them in order, one at a time, in the SQL editor.
 
 ## Exam and project scoring (server side)
@@ -51,6 +56,18 @@ the same answer, and one address can make 30 checks a minute. The holder's name 
 corrected on the certificate; the ID never changes. An admin can revoke a certificate on the student's page in the admin area
 (and restore it); the verification page then says it was revoked, and doing the exam again does not bring it back.
 Students use the Print or save as PDF button on the certificate page, which prints the certificate alone in light colours.
+
+## Weekly challenges
+
+The challenges in `public/data6.js` are the starting point. Admins create, edit, schedule, publish and close challenges on the
+admin page; the changes are saved by `api/challenges.js` into the `challenges` table and a row replaces the file's version of
+the same challenge. Publishing one closes the live one on that roadmap (nothing is deleted). A challenge can be edited only
+while it is a draft or scheduled: once it is live or closed, scores were made against its rubric, so write a new one.
+Students are sent the live challenges with the rubric labels only; the scoring patterns stay on the server for the new
+and changed challenges. Week 1 is deliberately easy (one realistic situation from each roadmap's first module); the harder
+challenges follow in later weeks. While a student has the challenge page open and has not submitted, the server records an
+open attempt and `api/ask.js` refuses the study assistant (same lock as exams, 30 minutes at most); leaving the page or
+submitting lifts it.
 
 ## Study assistant limits
 

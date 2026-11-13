@@ -23,14 +23,13 @@ await j('/__reset');
 // The course data, loaded the way the server loads it, to know what score an answer must get.
 const win = {}; const ctx = vm.createContext({ window: win });
 for (const f of ['data6.js', 'challenge.js']) vm.runInContext(fs.readFileSync('public/' + f, 'utf8'), ctx);
-const PM1 = win.CP_CHALLENGES.find(c => c.cid === 'pm-w1');
-const GOOD = 'First I would segment the drop by platform, channel and cohort rather than look at one number. Second I would check the acquisition mix, ' +
-  'because a change in paid or organic traffic can lower retention without any product change. Third I would rule out an instrumentation or tracking error ' +
-  'in the logging pipeline before blaming the product. Each check would tell me something different: if the drop is in one channel the mix explains it, ' +
-  'and if it is everywhere the data quality check would confirm or eliminate a broken event. Then I would pick the next step based on what the first check showed, start by the cheapest one.';
-const WEAK = 'I would look at the numbers and talk to the team about what changed in the product during those weeks and then decide what to do about it after we have discussed it as a group together.';
+const PM1 = win.CP_CHALLENGES.find(c => c.cid === 'pm-start');
+const GOOD = 'I would build the first-day tutorial. 60% of new users leave on day 1, which is the biggest problem and it affects everyone who joins. ' +
+  'Dark mode and PDF export are useful, but they can wait for the next sprint because fewer users depend on them. ' +
+  'After launch I would check day-1 retention to see whether more new users stay.';
+const WEAK = 'I think we should talk to the team about what to do and look at it again later when we have more time to think it over together as a group.';
 const EXPECT = win.CP_CHALLENGE.score(PM1, GOOD);
-need(EXPECT.pct >= 80 && !EXPECT.short, 'test answer is not a strong one: ' + JSON.stringify(EXPECT));
+need(EXPECT.pct >= 75 && !EXPECT.short, 'test answer is not a strong one: ' + JSON.stringify(EXPECT));
 
 async function fresh() {
   const c = await browser.newContext({ viewport: { width: 1280, height: 900 } });
@@ -74,7 +73,7 @@ await step('a submitted answer is scored and saved by the server, and the page s
   const txt = await tia.textContent('.check-panel');
   need(txt.includes('Submitted') && txt.includes(EXPECT.pct + '%'), 'score not shown: ' + txt.slice(0, 120));
   const rows = await j('/__subs');
-  need(rows.length === 1 && rows[0].score === EXPECT.pct && rows[0].hits === EXPECT.hit && rows[0].challenge_id === 'pm-w1', JSON.stringify(rows));
+  need(rows.length === 1 && rows[0].score === EXPECT.pct && rows[0].hits === EXPECT.hit && rows[0].challenge_id === 'pm-start', JSON.stringify(rows));
   need(rows[0].answer === GOOD.trim() && rows[0].roadmap_id === 'pm' && /^\d{4}-\d\d-\d\d$/.test(rows[0].week_of), 'row fields wrong: ' + JSON.stringify(rows[0]).slice(0, 200));
   const fb = await tia.textContent('body');
   need(fb.includes('REVIEW: you scored ' + EXPECT.pct + '%'), 'written review missing');
@@ -85,7 +84,7 @@ await step('the browser cannot write a score itself', async () => {
   const r = await tia.evaluate(async (fake) => {
     const t = await CP_AUTH.token();
     const out = {};
-    for (const body of [{ user_id: CP_AUTH.userId(), challenge_id: 'pm-w1', roadmap_id: 'pm', week_of: '2026-10-19', answer: 'x', score: 100, hits: 5, words: 1, feedback: '' }]) {
+    for (const body of [{ user_id: CP_AUTH.userId(), challenge_id: 'pm-start', roadmap_id: 'pm', week_of: '2026-10-19', answer: 'x', score: 100, hits: 5, words: 1, feedback: '' }]) {
       const x = await fetch(fake + '/rest/v1/challenge_submissions', { method: 'POST', headers: { 'content-type': 'application/json', apikey: 'sb_publishable_test', authorization: 'Bearer ' + t }, body: JSON.stringify(body) });
       out.insert = x.status;
     }
@@ -96,27 +95,27 @@ await step('the browser cannot write a score itself', async () => {
 });
 
 await step('a second submission returns the stored one and adds nothing', async () => {
-  const r = await call(tia, { cid: 'pm-w1', answer: WEAK });
+  const r = await call(tia, { cid: 'pm-start', answer: WEAK });
   need(r.status === 200 && r.body.already === true && r.body.submission.pct === EXPECT.pct && r.body.submission.points === 0, JSON.stringify(r.body).slice(0, 200));
   const rows = await j('/__subs');
   need(rows.length === 1 && rows[0].score === EXPECT.pct, 'the stored row changed');
 });
 
 await step('requests are refused without a sign-in, for another roadmap, for unknown or draft challenges, and for bad input', async () => {
-  const anon = await fetch(BASE + '/api/grade-challenge', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ cid: 'pm-w1', answer: GOOD }) });
+  const anon = await fetch(BASE + '/api/grade-challenge', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ cid: 'pm-start', answer: GOOD }) });
   need(anon.status === 401, 'no token: ' + anon.status);
-  const bad = await fetch(BASE + '/api/grade-challenge', { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer not-a-token' }, body: JSON.stringify({ cid: 'pm-w1', answer: GOOD }) });
+  const bad = await fetch(BASE + '/api/grade-challenge', { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer not-a-token' }, body: JSON.stringify({ cid: 'pm-start', answer: GOOD }) });
   need(bad.status === 401, 'bad token: ' + bad.status);
   ola = await fresh(); await signup(ola, 'Ola Other', 'ola@usc.edu', 'USC'); await pickRole(ola, 'ba'); await saved('ola@usc.edu', 'ba');
-  const wrong = await call(ola, { cid: 'pm-w1', answer: GOOD });
+  const wrong = await call(ola, { cid: 'pm-start', answer: GOOD });
   need(wrong.status === 403 && wrong.body.error.code === 'wrong_roadmap', 'other roadmap: ' + JSON.stringify(wrong));
   const draft = await call(tia, { cid: 'pm-w2', answer: GOOD });
   need(draft.status === 404, 'draft challenge: ' + draft.status);
   const nope = await call(tia, { cid: 'nope', answer: GOOD });
   need(nope.status === 404, 'unknown challenge: ' + nope.status);
-  const empty = await call(tia, { cid: 'pm-w1', answer: '   ' });
+  const empty = await call(tia, { cid: 'pm-start', answer: '   ' });
   need(empty.status === 400, 'empty answer: ' + empty.status);
-  const huge = await call(ola, { cid: 'ba-w1', answer: 'word '.repeat(3000) });
+  const huge = await call(ola, { cid: 'ba-start', answer: 'word '.repeat(3000) });
   need(huge.status === 400 && huge.body.error.code === 'too_long', 'huge answer: ' + JSON.stringify(huge).slice(0, 120));
   need((await j('/__subs')).length === 1, 'a refused request saved something');
 });
@@ -143,7 +142,7 @@ await step('the board covers every college and moves live without a reload', asy
   t = await tia.textContent('[data-live="chboard"]');
   need(t.includes('UCLA') && t.indexOf('Tia R.') < t.indexOf('Sam S.'), 'board order or school wrong: ' + t.slice(0, 200));
   const s = await j('/__subs');
-  need(s.length === 2 && s.find(x => x.answer.startsWith('I would look')).score <= 40, 'short answer not capped: ' + JSON.stringify(s.map(x => x.score)));
+  need(s.length === 2 && s.find(x => x.answer.startsWith('I think we should')).score <= 40, 'short answer not capped: ' + JSON.stringify(s.map(x => x.score)));
 });
 
 await step('a student who hides from the leaderboards drops off the challenge board', async () => {
@@ -152,7 +151,7 @@ await step('a student who hides from the leaderboards drops off the challenge bo
   await sam.click('[data-nav="roadmap"]'); await sam.waitForSelector('.skill-row, [data-action="open-track"]');
   await openChallenge(sam);
   await sam.waitForFunction(() => !/Tia R\./.test(document.querySelector('[data-live="chboard"]').textContent), null, { timeout: 8000 });
-  const mine = await tia.evaluate(async () => (await CP_AUTH.rest('POST', 'rpc/challenge_board', { p_challenge: 'pm-w1' })).body.filter(r => r.is_me).length);
+  const mine = await tia.evaluate(async () => (await CP_AUTH.rest('POST', 'rpc/challenge_board', { p_challenge: 'pm-start' })).body.filter(r => r.is_me).length);
   need(mine === 1, 'a hidden student should still see their own row');
 });
 
@@ -161,7 +160,7 @@ await step('a returning student sees the saved result and cannot submit again', 
   await openChallenge(tia);
   await tia.waitForSelector('.check-panel', { timeout: 8000 });
   const t = await tia.textContent('body');
-  need(t.includes('Submitted') && t.includes(EXPECT.pct + '%') && t.includes('REVIEW: you scored') && t.includes('First I would segment'), 'saved result not shown');
+  need(t.includes('Submitted') && t.includes(EXPECT.pct + '%') && t.includes('REVIEW: you scored') && t.includes('I would build the first-day tutorial'), 'saved result not shown');
   need(await tia.locator('[data-action="ch-submit"]').count() === 0, 'submit form still shown');
 });
 

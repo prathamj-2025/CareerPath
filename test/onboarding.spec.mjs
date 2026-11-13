@@ -495,7 +495,7 @@ await step("the student can reach this week's challenge", async () => {
   await page.click('[data-nav="challenge"]');
   await page.waitForSelector("#ch-text");
   const t = await text("#view");
-  if (!t.includes("Find the critical path and say what to protect")) throw new Error("wrong challenge for this roadmap");
+  if (!t.includes("Plan a customer webinar")) throw new Error("wrong challenge for this roadmap");
 });
 
 await step("the rubric is published before the answer is written", async () => {

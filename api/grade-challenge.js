@@ -14,6 +14,8 @@ import vm from "node:vm";
 import fs from "node:fs";
 import { supabase } from "./_env.js";
 import { completeText } from "./_ai.js";
+import { serviceRest } from "./_auth.js";
+import { challenges } from "./_challenges.js";
 
 const PUB = new URL("../public/", import.meta.url);
 let loaded = null;
@@ -24,7 +26,7 @@ function lib() {
   for (const f of ["data6.js", "challenge.js"]) {
     vm.runInContext(fs.readFileSync(new URL(f, PUB), "utf8"), ctx, { filename: f });
   }
-  loaded = { challenges: win.CP_CHALLENGES || [], ch: win.CP_CHALLENGE };
+  loaded = { ch: win.CP_CHALLENGE };
   return loaded;
 }
 
@@ -72,7 +74,9 @@ export default async function handler(req, res) {
   if (answer.length > 12000) return fail(res, 400, "too_long", "That answer is too long. Keep it under 12,000 characters.");
 
   const L = lib();
-  const c = L.challenges.filter((x) => x.cid === cid && x.status === "live")[0];
+  let all;
+  try { all = await challenges(serviceRest()); } catch (e) { return fail(res, 503, "unavailable", "The challenge could not be loaded. Try again in a moment."); }
+  const c = all.filter((x) => x.cid === cid && x.status === "live")[0];
   if (!c) return fail(res, 404, "no_challenge", "That challenge is not open.");
 
   const asUser = { apikey: env.key, authorization: "Bearer " + token };
@@ -133,6 +137,8 @@ export default async function handler(req, res) {
     if (again && again[0]) return res.status(200).json({ ok: true, already: true, submission: shape(c, again[0], 0) });
     return fail(res, 502, "save_failed", "Your answer could not be saved. Try again.");
   }
+  try { await fetch(env.url + "/rest/v1/exam_attempts?user_id=eq." + uid + "&kind=eq.challenge&submitted_at=is.null", { method: "DELETE", headers: asServer }); }
+  catch (e) { /* the lock expires by itself */ }
   // Points are added here, in one step, because the browser may no longer set them.
   const earned = L.ch.points(result.pct);
   if (earned) {

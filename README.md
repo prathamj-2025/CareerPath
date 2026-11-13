@@ -124,6 +124,9 @@ browser-only demo (set `CP_DEMO=1` to force that).
   `supabase/migrations/008_content_edits.sql`) and reach students without a redeploy. Run 008 after deploying this version.
 - Certificates are issued by the server with a random ID, checked on a public page (`verify.html`, `api/verify.js`,
   `api/certs.js`, `supabase/migrations/010_certificates.sql`). Admins can revoke one. Run 010 after deploying this version.
+- Weekly challenges written by admins are saved to the database (`api/challenges.js`,
+  `supabase/migrations/011_challenges.sql`), and the server refuses the study assistant while a student has the challenge
+  open. Week 1 is the easy starter set. Run 011 after deploying this version.
 - Skill assessments, module exams and practical projects are graded on the server (`api/exam.js`, `api/grade-project.js`).
   The answer keys live in `content/`, which is never served; `public/` has copies without keys, made by
   `npm run build:content`. Students cannot write points, stars or scores from the browser (`007_server_grading.sql`).
@@ -203,6 +206,7 @@ or `model`. Each should produce a different, actionable message in the assistant
 ```
 api/ask.js             Serverless function. Holds the API key, streams the reply back.
 api/grade-challenge.js Serverless function. Scores and saves a weekly challenge answer (secret key, server only).
+api/challenges.js      Weekly challenges: read, admin save and publish, and the open-challenge lock for the assistant.
 api/certs.js           Issues and lists certificates; admins revoke or restore. api/verify.js is the public check.
 public/verify.html     The public page where a certificate ID is checked.
 public/index.html      Markup and all styling.

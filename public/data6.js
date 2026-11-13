@@ -221,8 +221,69 @@
      is reachable. Status follows the same discipline as assessment questions:
      nothing scored goes live without a publish step. */
   window.CP_CHALLENGES = [
+    /* Week 1 is deliberately easy: one realistic situation from the first module of each roadmap, answerable in a few
+       sentences, so a student's first attempt feels doable. The harder challenges follow in later weeks. */
     {
-      cid: "pm-w1", roleId: "pm", week: 1, status: "live", minWords: 90,
+      cid: "pm-start", roleId: "pm", week: 1, status: "live", minWords: 40,
+      title: "Pick the one thing to build",
+      brief: "You are the product manager of a note-taking app. Three requests came in this month: " +
+        "(1) dark mode, which 120 users asked for; (2) export to PDF, which 45 users asked for, mostly paying customers; " +
+        "(3) a better first-day tutorial, because 60% of new users leave on day 1. " +
+        "There is time to build only one this sprint. Which one would you build, and why? " +
+        "Answer in 3 to 5 sentences, and say which number you would check after launch to see if it worked.",
+      rubric: [
+        { label: "Picks one option clearly",
+          re: "\\b(i|we)\\s*(would|'d|will|should)?\\s*(build|pick|choose|go with|prioriti[sz]e|ship|start with|select)|(build|pick|choose|go with|prioriti[sz]e|start with)\\s+(the\\s+)?(dark mode|pdf|export|tutorial|onboarding|first[- ]day)|my (pick|choice|recommendation|decision)" },
+        { label: "Ties the choice to a user problem or a number from the list",
+          re: "60\\s*%|\\b120\\b|\\b45\\b|paying|paid|drop.?off|leave|leaving|churn|most requested|biggest|largest|most users|new users" },
+        { label: "Says why the other options wait",
+          re: "others?|other (two|options|requests|ideas)|later|next sprint|wait|not now|defer|backlog|lower priority|nice.?to.?have|can come" },
+        { label: "Names a success measure to check after launch",
+          re: "retention|day.?1|day one|activation|completion|exports?|usage|measure|metric|track|check|rate|adoption|churn" }
+      ]
+    },
+    {
+      cid: "ba-start", roleId: "ba", week: 1, status: "live", minWords: 15,
+      title: "Top sellers last month",
+      brief: "A store manager asks for the 3 best-selling products last month. You have one table, " +
+        "orders(order_id, order_date, product, quantity). Write the SQL query that answers it. " +
+        "If you prefer, describe each step in words instead.",
+      rubric: [
+        { label: "Adds up the quantity sold",
+          re: "sum\\s*\\(\\s*(\\w+\\.)?quantity|total quantity|add up (the )?quantity|sum of (the )?quantity|sum (the )?quantity|total (units|sold)" },
+        { label: "Filters to last month's dates",
+          re: "order_date\\s*(>=|>|<=|<|between)|between\\s+['\\d]|date_trunc|last month|previous month|interval|month\\s*\\(|where\\s+.*date" },
+        { label: "Groups by product",
+          re: "group\\s+by\\s+(\\w+\\.)?product|group(ed)? (the )?(rows|orders|sales|results)? ?by (the )?product|for each product|per product|by product" },
+        { label: "Sorts from highest to lowest",
+          re: "order\\s+by[^;]*desc|descending|highest to lowest|largest first|biggest first|sort(ed)? .*desc|top selling|top sellers" },
+        { label: "Limits the result to 3",
+          re: "limit\\s*3|top\\s*\\(?\\s*3|first (three|3)|top (three|3)|fetch first 3|only (three|3)|rownum\\s*<=\\s*3|3 (best|top)" }
+      ]
+    },
+    {
+      cid: "pjm-start", roleId: "pjm", week: 1, status: "live", minWords: 40,
+      title: "Plan a customer webinar",
+      brief: "You are running a customer webinar and have these tasks: book the webinar platform (1 day); " +
+        "write the slides (3 days); send invitations (2 days, after the platform is booked); " +
+        "rehearse (1 day, after the slides are done). " +
+        "Which tasks can run at the same time? What is the shortest time before the webinar can be held? " +
+        "Name one risk and how you would handle it.",
+      rubric: [
+        { label: "Says the platform and the slides can start together",
+          re: "parallel|same time|simultaneous|at once|concurrent|together|side by side|at the same" },
+        { label: "Gets the shortest time right: 4 days",
+          re: "\\b4\\b|\\bfour\\b" },
+        { label: "Explains that slides then rehearsal is the longest path",
+          re: "slides?.{0,60}rehears|longest|critical path|3\\s*\\+\\s*1|three.{0,20}one|slides and rehears" },
+        { label: "Names a risk",
+          re: "risk|could go wrong|might|may |delay|late|run over|overrun|falls through|fails?|problem|illness|sick|no.?show" },
+        { label: "Says how the risk would be handled",
+          re: "mitigat|backup|back-?up|plan b|contingency|buffer|extra time|reserve|so that|to handle|would handle|in advance|ahead of time|early|if that happens|prepare|spare" }
+      ]
+    },
+    {
+      cid: "pm-w1", roleId: "pm", week: 3, status: "draft", minWords: 90,
       title: "Diagnose a drop in week-one retention",
       brief: "Week-one retention for a note-taking app fell from 42% to 31% over six weeks. " +
         "Signups are flat and no release went out in that window. Write how you would find the cause. " +
@@ -256,7 +317,7 @@
       ]
     },
     {
-      cid: "ba-w1", roleId: "ba", week: 1, status: "live", minWords: 90,
+      cid: "ba-w1", roleId: "ba", week: 3, status: "draft", minWords: 90,
       title: "Turn a vague request into testable requirements",
       brief: "A regional manager asks for \"a report that shows how the branches are doing, updated often.\" " +
         "Write the questions you would ask to make that buildable, then write three requirements that a " +
@@ -288,7 +349,7 @@
       ]
     },
     {
-      cid: "pjm-w1", roleId: "pjm", week: 1, status: "live", minWords: 90,
+      cid: "pjm-w1", roleId: "pjm", week: 3, status: "draft", minWords: 90,
       title: "Find the critical path and say what to protect",
       brief: "A six-activity project has these durations and dependencies: A (3 days, no predecessor), B (4 days, after A), " +
         "C (2 days, after A), D (5 days, after B), E (3 days, after C), F (2 days, after D and E). " +

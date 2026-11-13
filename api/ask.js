@@ -45,7 +45,7 @@ function tooFast(uid) {
 async function examOpen({ uid, rest }) {
   const since = new Date(Date.now() - EXAM_LOCK_MINUTES * 60e3).toISOString();
   const r = await rest("GET", "exam_attempts?user_id=eq." + uid + "&submitted_at=is.null&started_at=gte." + encodeURIComponent(since) + "&select=id,kind");
-  return r.ok && Array.isArray(r.data) && r.data.some((x) => x.kind === "skill" || x.kind === "module");
+  return r.ok && Array.isArray(r.data) && r.data.some((x) => x.kind === "skill" || x.kind === "module" || x.kind === "challenge");
 }
 
 async function overLimit({ uid, rest }) {
@@ -79,7 +79,7 @@ export default async function handler(req, res) {
     who = await authenticate(req, res);
     if (!who) return;
     if (tooFast(who.uid)) return fail(res, 429, "too_fast", "You are asking very quickly. Wait a moment and try again.");
-    if (await examOpen(who)) return fail(res, 403, "exam_locked", "The assistant is off while an exam is open. It comes back when you submit or leave the exam.");
+    if (await examOpen(who)) return fail(res, 403, "exam_locked", "The assistant is off while an exam or the weekly challenge is open. It comes back when you submit or leave.");
   }
 
   let body = req.body;

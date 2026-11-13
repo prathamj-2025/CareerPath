@@ -17,6 +17,7 @@ const progress = new Map();   // 'user|skill' -> row
 const modules = new Map();    // 'user|track' -> row
 const attempts = new Map();   // id -> exam_attempts row (written only with the service key)
 const content = { lessons: [], questions: [], missing: false };   // admin content edits (service key only)
+const chs = { rows: [], missing: false, noKind: false };   // 011: challenges (server only); noKind = exam_attempts not yet accepting 'challenge'
 const certs = new Map();      // id -> certificates row (migration 010; written only with the service key)
 const ai = new Map(); let aiOff = false;   // take_ai counters (migration 009)
 const subs = new Map();       // 'user|challenge' -> challenge_submissions row (written only with the service key)
@@ -115,7 +116,7 @@ const server = http.createServer(async (req, res) => {
   if (p === '/__admin') { const u = users.get(url.searchParams.get('email')); profiles.get(u.id).role = 'admin'; return send(200, {}); }
   if (p === '/__expire') { tokens.clear(); return send(200, {}); }   // access tokens die, refresh tokens live
   if (p === '/__profile') { const u = users.get(url.searchParams.get('email')); return send(200, profiles.get(u.id) || null); }
-  if (p === '/__reset') { rt.joins = []; rt.fanouts = []; rt.tokenUpdates = 0; rt.refuse = false; for (const c of sockets) c.ws.terminate(); users.clear(); profiles.clear(); tokens.clear(); refreshes.clear(); progress.clear(); modules.clear(); subs.clear(); attempts.clear(); certs.clear(); content.lessons = []; content.questions = []; content.missing = false; ai.clear(); aiOff = false; log.length = 0; return send(200, {}); }
+  if (p === '/__reset') { rt.joins = []; rt.fanouts = []; rt.tokenUpdates = 0; rt.refuse = false; for (const c of sockets) c.ws.terminate(); users.clear(); profiles.clear(); tokens.clear(); refreshes.clear(); progress.clear(); modules.clear(); subs.clear(); attempts.clear(); certs.clear(); chs.rows = []; chs.missing = false; chs.noKind = false; content.lessons = []; content.questions = []; content.missing = false; ai.clear(); aiOff = false; log.length = 0; return send(200, {}); }
   if (p === '/__progress') { const u = users.get(url.searchParams.get('email')); return send(200, { skills: [...progress.values()].filter(r => r.user_id === u.id), modules: [...modules.values()].filter(r => r.user_id === u.id) }); }
   if (p === '/__seed') {   // put saved progress on the server before the student signs in (as if from another device)
     const u = users.get(url.searchParams.get('email')); const b = body;
@@ -126,6 +127,9 @@ const server = http.createServer(async (req, res) => {
   }
   if (p === '/__subs') return send(200, [...subs.values()]);
   if (p === '/__attempts') { const u = users.get(url.searchParams.get('email')); return send(200, [...attempts.values()].filter(r => r.user_id === u.id)); }
+  if (p === '/__age') { const a = attempts.get(url.searchParams.get('id')); if (a) a.started_at = new Date(Date.now() - Number(url.searchParams.get('minutes')) * 60e3).toISOString(); return send(200, {}); }
+  if (p === '/__challenges') return send(200, chs.rows);
+  if (p === '/__challengesoff') { chs.missing = url.searchParams.get('on') === '1'; chs.noKind = chs.missing; return send(200, {}); }   // as if 011 was not run
   if (p === '/__certs') return send(200, [...certs.values()]);
   if (p === '/__log') return send(200, log);
   if (p === '/__rt') {
@@ -293,7 +297,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (!svc) return send(403, { code: '42501', message: 'permission denied for table exam_attempts' });
     if (req.method === 'POST') {
-      if (!['skill', 'module', 'project'].includes(body.kind)) return send(400, { code: '23514', message: 'check constraint' });
+      if (!['skill', 'module', 'project', ...(chs.noKind ? [] : ['challenge'])].includes(body.kind)) return send(400, { code: '23514', message: 'check constraint' });
       const row = { id: uuid(), started_at: new Date().toISOString(), submitted_at: null, answers: null, score: null, right: null, items: [], ...body };
       attempts.set(row.id, row);
       return (req.headers.prefer || '').includes('return=representation') ? send(201, [row]) : send(201);
@@ -332,6 +336,25 @@ const server = http.createServer(async (req, res) => {
     return send(403, { code: '42501', message: 'permission denied' });
   }
 
+  // ---- challenges (011): the server only ----
+  if (p === '/rest/v1/challenges') {
+    if (!isService(req)) return send(401, { code: '42501', message: 'permission denied for table challenges' });
+    if (chs.missing) return send(404, { code: 'PGRST205', message: 'Could not find the table' });
+    if (req.method === 'GET') return send(200, chs.rows.filter(r => matches(r, url)));
+    if (req.method === 'POST') {
+      const r = { created_at: new Date().toISOString(), ...body };
+      if (!['pm', 'ba', 'pjm'].includes(r.role_id) || !['draft', 'scheduled', 'live', 'closed'].includes(r.status) || !Array.isArray(r.rubric) || r.rubric.length < 1 || r.rubric.length > 12)
+        return send(400, { code: '23514', message: 'check constraint' });
+      const i = chs.rows.findIndex(x => x.cid === r.cid);
+      const next = i >= 0 ? chs.rows.map((x, k) => (k === i ? { ...x, ...r } : x)) : [...chs.rows, r];
+      const live = next.filter(x => x.status === 'live'), roles = live.map(x => x.role_id);
+      if (new Set(roles).size !== roles.length) return send(409, { code: '23505', message: 'duplicate key value violates unique constraint "challenges_one_live"' });
+      chs.rows = next;
+      return send(201);
+    }
+    return send(403, { code: '42501', message: 'permission denied' });
+  }
+
   // ---- weekly challenge submissions: students read their own; only the server (service key) writes ----
   if (p === '/rest/v1/challenge_submissions') {
     if (req.method === 'POST') {
@@ -344,6 +367,7 @@ const server = http.createServer(async (req, res) => {
       fanout('challenge:' + r.challenge_id);                                     // challenge_submissions_board_insert trigger
       return send(201, [row]);
     }
+    if (isService(req)) return send(200, [...subs.values()].filter(r => matches(r, url)));
     const id = who(req); if (!id) return send(401, { message: 'JWT expired', code: 'PGRST301' });
     const me = profiles.get(id);
     const eq = k => (url.searchParams.get(k) || '').replace(/^eq\./, '');
