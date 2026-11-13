@@ -1,11 +1,13 @@
 /* The weekly challenges as they stand now: the ones that ship with the site (public/data6.js) with the admins' changes from
    the database layered on top (supabase/migrations/011_challenges.sql). A row in the table replaces the file's version of
    the same challenge, or adds a new one. If the table is missing (011 not run yet) the file's challenges are used as they are.
-   The scoring patterns (the rubric's `re`) are sent only to admins; students get the labels. */
+   The scoring patterns (the rubric's `re`) and the reference answer are sent only to admins; students get the labels.
+   A row from before migration 012 has no reference answer; the one in content/challenge-refs.js is used then. */
 import vm from "node:vm";
 import fs from "node:fs";
 
 const PUB = new URL("../public/", import.meta.url);
+const SERVER = new URL("../content/", import.meta.url);
 const TTL_MS = Number(process.env.CONTENT_TTL_MS) || 8000;
 export const ROLE_IDS = ["pm", "ba", "pjm"];
 
@@ -15,17 +17,19 @@ export function base() {
   const win = {};
   const ctx = vm.createContext({ window: win });
   for (const f of ["data6.js", "challenge.js"]) vm.runInContext(fs.readFileSync(new URL(f, PUB), "utf8"), ctx, { filename: f });
-  baseCache = { list: (win.CP_CHALLENGES || []).map(plain), ch: win.CP_CHALLENGE };
+  vm.runInContext(fs.readFileSync(new URL("challenge-refs.js", SERVER), "utf8"), ctx, { filename: "challenge-refs.js" });   // reference answers: server only
+  const refs = win.CP_CHALLENGE_REFS || {};
+  baseCache = { list: (win.CP_CHALLENGES || []).map((c) => plain(c, refs[c.cid] || "")), ch: win.CP_CHALLENGE };
   return baseCache;
 }
-function plain(c) {
+function plain(c, reference) {
   return { cid: c.cid, roleId: c.roleId, week: c.week, status: c.status, title: c.title, brief: c.brief, minWords: c.minWords,
-    rubric: c.rubric.map((r) => ({ label: r.label, re: r.re })) };
+    reference: reference || "", rubric: c.rubric.map((r) => ({ label: r.label, re: r.re })) };
 }
 const fromRow = (r) => ({ cid: r.cid, roleId: r.role_id, week: r.week, status: r.status, title: r.title, brief: r.brief,
-  minWords: r.min_words, rubric: Array.isArray(r.rubric) ? r.rubric.map((x) => ({ label: String(x.label || ""), re: String(x.re || "") })) : [] });
+  minWords: r.min_words, reference: typeof r.reference === "string" ? r.reference : "", rubric: Array.isArray(r.rubric) ? r.rubric.map((x) => ({ label: String(x.label || ""), re: String(x.re || "") })) : [] });
 export const toRow = (c) => ({ cid: c.cid, role_id: c.roleId, week: c.week, status: c.status, title: c.title, brief: c.brief,
-  min_words: c.minWords, rubric: c.rubric });
+  min_words: c.minWords, rubric: c.rubric, reference: c.reference || "" });
 
 let cache = { list: null, at: 0 };
 export function invalidate() { cache = { list: null, at: 0 }; }
@@ -38,6 +42,7 @@ export async function challenges(rest) {
   if (rows.ok && Array.isArray(rows.data)) {
     rows.data.forEach((r) => {
       const c = fromRow(r), i = out.findIndex((x) => x.cid === c.cid);
+      if (i >= 0 && !c.reference) c.reference = out[i].reference || "";      // a row saved before 012 keeps the file's reference
       if (i >= 0) out[i] = c; else out.push(c);
     });
   } else if (cache.list) {

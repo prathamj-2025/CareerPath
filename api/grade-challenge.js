@@ -5,7 +5,9 @@
      1. asks Supabase who the token belongs to,
      2. checks the challenge is live and is on the student's own roadmap,
      3. refuses a second submission (the stored one is returned instead),
-     4. scores the answer with the fixed rubric (public/challenge.js, the same code the page uses),
+     4. scores the answer: the AI marker (api/_judge.js) decides, rubric line by rubric line, whether the answer does what the line
+      asks, by meaning and against the admin's reference answer; the server turns that into the percentage. If no model is
+      available the keyword rubric (public/challenge.js) scores it instead, so a student always gets a result,
      5. writes the AI feedback if a model is set up, with a plain fallback if not,
      6. saves one row with the service role key. That key is read from SUPABASE_SERVICE_ROLE_KEY in the host's
         environment settings and is never sent to the browser.
@@ -16,6 +18,7 @@ import { supabase } from "./_env.js";
 import { completeText } from "./_ai.js";
 import { serviceRest } from "./_auth.js";
 import { challenges } from "./_challenges.js";
+import { judge } from "./_judge.js";
 
 const PUB = new URL("../public/", import.meta.url);
 let loaded = null;
@@ -43,12 +46,12 @@ function weekOf(d) {
 
 function shape(c, row, points) {
   const L = lib().ch;
-  const res = L.score(c, row.answer);
+  const stored = Array.isArray(row.met) && row.met.length === c.rubric.length ? row.met.map(Boolean) : null;
   return {
     pct: row.score, hit: row.hits, of: c.rubric.length, words: row.words, short: row.words < c.minWords,
     when: String(row.created_at || "").slice(0, 10), feedback: row.feedback || "",
     source: row.feedback && row.feedback.indexOf("No written review is available") !== 0 ? "ai" : "rules",
-    points: points || 0, met: res.met, answer: row.answer
+    points: points || 0, met: stored || L.score(c, row.answer).met, judged: !!(stored && row.judged), answer: row.answer
   };
 }
 
@@ -111,7 +114,17 @@ export default async function handler(req, res) {
   if (have && have[0]) return res.status(200).json({ ok: true, already: true, submission: shape(c, have[0], 0) });
 
   // 4 and 5. Score, then feedback.
-  const result = L.ch.score(c, answer);
+  let result = L.ch.score(c, answer), judged = false;                 // the keyword check is the fallback
+  const marked = await judge({ kind: "challenge", question: c.title + "\n\n" + c.brief, reference: c.reference,
+    criteria: c.rubric.map((r) => r.label), answer: answer });
+  if (marked) {
+    const met = marked.criteria.map((x) => x.ok), hit = met.filter(Boolean).length, n = L.ch.words(answer);
+    let pct = Math.round(hit / met.length * 100);
+    const short = n < c.minWords;
+    if (short) pct = Math.min(pct, 40);
+    result = { pct: pct, met: met, hit: hit, of: met.length, words: n, short: short };
+    judged = true;
+  }
   let feedback = await completeText(L.ch.feedbackRules, [{ role: "user", content: L.ch.feedbackPrompt(c, result, answer) }], 18000);
   feedback = feedback.replace(/—/g, ", ").slice(0, 7900);
   if (!feedback) feedback = L.ch.noReviewText(result.of);
@@ -119,14 +132,17 @@ export default async function handler(req, res) {
   // 6. Save.
   let saved;
   try {
-    const r = await fetch(env.url + "/rest/v1/challenge_submissions", {
+    const row = {
+      user_id: uid, challenge_id: c.cid, roadmap_id: c.roleId, week_of: weekOf(new Date()),
+      answer: answer, words: Math.min(result.words, 5000), score: result.pct, hits: result.hit, feedback: feedback
+    };
+    const put = (b) => fetch(env.url + "/rest/v1/challenge_submissions", {
       method: "POST",
       headers: Object.assign({ prefer: "resolution=ignore-duplicates,return=representation" }, asServer),
-      body: JSON.stringify({
-        user_id: uid, challenge_id: c.cid, roadmap_id: c.roleId, week_of: weekOf(new Date()),
-        answer: answer, words: Math.min(result.words, 5000), score: result.pct, hits: result.hit, feedback: feedback
-      })
+      body: JSON.stringify(b)
     });
+    let r = await put(Object.assign({ met: result.met, judged: judged }, row));
+    if (!r.ok && r.status >= 400 && r.status < 500) r = await put(row);       // migration 012 not run yet: save without the extra columns
     if (!r.ok) return fail(res, 502, "save_failed", "Your answer could not be saved. Nothing was submitted, so try again.");
     saved = await r.json();
   } catch (e) {
@@ -146,5 +162,5 @@ export default async function handler(req, res) {
       await fetch(env.url + "/rest/v1/rpc/add_points", { method: "POST", headers: asServer, body: JSON.stringify({ p_user: uid, p_delta: earned }) });
     } catch (e) { /* the score is saved; a missed point total is fixed by support rather than failing the submission */ }
   }
-  return res.status(200).json({ ok: true, already: false, submission: shape(c, saved[0], earned) });
+  return res.status(200).json({ ok: true, already: false, submission: shape(c, Object.assign({}, saved[0], { met: result.met, judged: judged }), earned) });
 }

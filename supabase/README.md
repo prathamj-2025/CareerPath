@@ -33,6 +33,11 @@ One shared Supabase project. Database changes live here as numbered SQL files in
   write the table. Safe to run twice. Run it after the website that uses it is deployed; until then the site uses the challenges
   in `public/data6.js`, admins cannot save challenge changes, and the assistant lock for challenges is not enforced.
 
+- `012_ai_scoring.sql`: a `reference` column on `challenges` (the model answer the AI marker compares against, never sent to
+  students) and `met` and `judged` columns on `challenge_submissions` (the ticks the marker gave, and whether the AI or the
+  keyword check scored it). Only adds columns, safe to run twice. **Run it before pushing the website that uses it.** If it
+  is not run, scoring still works (the submission is saved without the new columns) but admins cannot save a reference answer.
+
 Run them in order, one at a time, in the SQL editor.
 
 ## Exam and project scoring (server side)

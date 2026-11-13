@@ -347,7 +347,7 @@
           }
           var x = b.submission;
           user.challenges[c.cid] = { text: b.submission.answer || text, pct: x.pct, met: x.met, hit: x.hit, of: x.of, words: x.words, short: x.short,
-            when: serverDate(x.when), feedback: x.feedback || "", source: x.source || "rules" };
+            when: serverDate(x.when), feedback: x.feedback || "", source: x.source || "rules", judged: !!x.judged };
           if (!b.already && x.points) user.points += x.points;
           state.ch = { cid: c.cid };
           render();
@@ -370,7 +370,8 @@
         var c = chById(row.challenge_id);
         if (!c) return;
         var res = CH.score(c, row.answer);
-        u.challenges[c.cid] = { text: row.answer, pct: row.score, met: res.met, hit: row.hits, of: c.rubric.length, words: row.words,
+        var stored = Array.isArray(row.met) && row.met.length === c.rubric.length ? row.met.map(Boolean) : null;
+        u.challenges[c.cid] = { text: row.answer, pct: row.score, met: stored || res.met, judged: !!(stored && row.judged), hit: row.hits, of: c.rubric.length, words: row.words,
           short: row.words < c.minWords, when: serverDate(String(row.created_at || "").slice(0, 10)), feedback: row.feedback || "",
           source: row.feedback && row.feedback.indexOf("No written review is available") !== 0 ? "ai" : "rules" };
       });
@@ -1908,8 +1909,10 @@
             return '<li class="crit ' + (met ? "met" : "unmet") + '"><span class="mark">' + (met ? "&#10003;" : "&#9675;") +
               "</span><span>" + esc(rb.label) + "</span></li>";
           }).join("") + "</ul>" +
-          '<p class="check-note tiny">The score comes from these fixed criteria, so it is the same for the same answer ' +
-          "every time. It reports whether you raised an idea, not how well you argued it.</p>" +
+          '<p class="check-note tiny">' + (sub.judged
+            ? "An AI marker read your answer against these criteria and judged each one by meaning, not exact words, so your own wording counts. The score is the share of criteria you met."
+            : "The score comes from these fixed criteria, so it is the same for the same answer " +
+              "every time. It reports whether you raised an idea, not how well you argued it.") + "</p>" +
         "</div>" +
         (sub.feedback
           ? '<div class="card" style="margin-top:12px"><div class="row" style="justify-content:space-between;margin-bottom:8px">' +
@@ -2314,6 +2317,7 @@
   function applyChallengeDefs(list) {
     var next = (list || []).map(function (c) {
       return { cid: c.cid, roleId: c.roleId, week: c.week, status: c.status, title: c.title, brief: c.brief, minWords: c.minWords,
+        reference: c.reference || "",
         rubric: (c.rubric || []).map(function (r) { return { label: r.label, re: r.re || "" }; }) };
     });
     CHALLENGES.splice(0, CHALLENGES.length);
@@ -2773,6 +2777,22 @@
     return { criteria: criteria, problems: problems, met: met, total: criteria.length, graded: graded, verdict: verdict };
   }
 
+  /* Real accounts: the server's AI marker reads the answer against the key points by meaning, so different wording
+     counts. If it cannot (no model, over the allowance, slow), the keyword check below still gives a result. */
+  function aiCheck(kind, skillId, i, text) {
+    if (!serverGrading()) return Promise.resolve(null);
+    return apiPost("/api/judge", { kind: kind, roleId: actor().roleId, skill: skillId, i: i, text: text }).then(function (r) {
+      if (r.error || !r.data || !r.data.ai || !r.data.result) return { reason: (r.data && r.data.reason) || "unavailable" };
+      var x = r.data.result;
+      x.source = "ai";
+      return x;
+    });
+  }
+  function fallbackNote(r) {
+    return r && r.reason === "limit" ? "You have used a lot of AI checks, so this used the quick keyword check instead."
+      : "The AI check was not available just now, so this used the quick keyword check instead.";
+  }
+
   var VERDICT = {
     correct: { tone: "ok", title: "Looks correct" },
     close: { tone: "warn", title: "Close, but something is missing" },
@@ -2800,15 +2820,21 @@
       '<ul class="crits">' +
         res.criteria.map(function (c) {
           return '<li class="crit ' + (c.ok ? "met" : "unmet") + '"><span class="mark">' +
-            (c.ok ? "&#10003;" : "&#8213;") + "</span><span>" + esc(c.label) + "</span></li>";
+            (c.ok ? "&#10003;" : "&#8213;") + "</span><span>" + esc(c.label) +
+            (c.why ? '<span class="tiny muted" style="display:block">' + esc(c.why) + "</span>" : "") + "</span></li>";
         }).join("") +
         res.problems.map(function (p) {
           return '<li class="crit problem"><span class="mark">&#10007;</span><span>' + esc(p) + "</span></li>";
         }).join("") +
       "</ul>" +
-      '<p class="tiny check-note">' + (res.graded
+      '<p class="tiny check-note">' + (res.source === "ai"
+        ? (res.graded
+          ? "An AI marker read your answer and judged each requirement by what it would do, so a different way of writing it still counts. It does not run the query against data."
+          : "An AI marker read your answer and judged each key point by meaning, not exact words, so your own wording counts. Read the model answer to compare the reasoning.")
+        : res.graded
         ? "This checks the structure of your query against what a correct answer has to contain. It does not run the query against data, so it can pass something that would still fail on a real table."
-        : "This checks whether you raised each idea, not how well you argued it. Read the model answer to judge the reasoning.") + "</p>" +
+        : "This checks whether you raised each idea, not how well you argued it. Read the model answer to judge the reasoning.") +
+        (res.note ? " " + esc(res.note) : "") + "</p>" +
     "</div>";
   }
 
@@ -2841,8 +2867,8 @@
             '" placeholder="' + esc(kind.placeholder) + '" spellcheck="false">' + esc(st.text) + "</textarea>" +
 
           '<div class="row" style="margin-top:10px">' +
-            '<button class="btn sm primary" data-action="practice-check" data-key="' + key + '">' +
-              (st.checked ? "Check again" : "Check my answer") + "</button>" +
+            '<button class="btn sm primary" data-action="practice-check" data-key="' + key + '"' + (st.checkBusy ? " disabled" : "") + ">" +
+              (st.checkBusy ? "Checking..." : st.checked ? "Check again" : "Check my answer") + "</button>" +
             (more > 0
               ? '<button class="btn sm" data-action="practice-hint" data-key="' + key + '">' +
                 (st.hints === 0 ? "Show a hint" : "Next hint") + " (" + more + " left)</button>"
@@ -2908,7 +2934,8 @@
       '<textarea class="ex-input" data-practice="' + esc(key) + '" rows="5" placeholder="Write your answer the way you would say it in an interview. Check it when you are done." spellcheck="true">' +
         esc(st.text) + "</textarea>" +
       '<div class="row" style="margin-top:10px">' +
-        '<button class="btn sm primary" data-action="scn-check" data-key="' + esc(key) + '">' + (st.checked ? "Check again" : "Check my answer") + "</button>" +
+        '<button class="btn sm primary" data-action="scn-check" data-key="' + esc(key) + '"' + (st.checkBusy ? " disabled" : "") + ">" +
+          (st.checkBusy ? "Checking..." : st.checked ? "Check again" : "Check my answer") + "</button>" +
         (canReview ? '<button class="btn sm" data-action="scn-review" data-key="' + esc(key) + '"' + (st.reviewBusy ? " disabled" : "") + ">" +
           (st.reviewBusy ? "Reviewing..." : st.review ? "Review again" : "Get a written review") + "</button>" : "") +
         ((st.hintList || []).length < 3
@@ -3852,6 +3879,11 @@
             (c ? esc(c.rubric.map(function (r) { return r.label + " | " + r.re; }).join("\n")) : "") + "</textarea>" +
           '<p class="tiny muted" style="margin-top:6px">Each line is <b>what a good answer must do</b>, then a pipe, then the ' +
           "pattern that recognizes it. Without a pattern, the words in the criterion longer than four letters are used.</p></div>" +
+        '<div class="field"><label for="ac-ref">Reference answer (students never see this)</label>' +
+          '<textarea id="ac-ref" class="ex-input" rows="6" placeholder="Write one strong answer. The AI marker uses it to judge the logic of each student answer.">' +
+            (c ? esc(c.reference || "") : "") + "</textarea>" +
+          '<p class="tiny muted" style="margin-top:6px">The AI marker reads each student answer against the criteria above and this example. ' +
+          "Other sound answers still earn credit, so it is a guide and not a script. The patterns after the pipe are only used if the AI is unavailable.</p></div>" +
         '<div class="row">' +
           '<button class="btn primary sm" data-action="ac-save" data-cid="' + (isNew ? "new" : c.cid) + '">Save as draft</button>' +
           '<button class="btn sm ghost" data-action="ac-cancel">Cancel</button>' +
@@ -4328,7 +4360,7 @@
       }
       var fields = {
         week: +val("ac-week") || nextWeek(), title: title, brief: brief,
-        minWords: +val("ac-min") || 80, rubric: rubric
+        minWords: +val("ac-min") || 80, rubric: rubric, reference: val("ac-ref")
       };
       var roleId = isNew ? (val("ac-role") || ROLES[0].id) : (chById(el.dataset.cid) || {}).roleId;
       if (REAL) {
@@ -4399,9 +4431,21 @@
       var s = skill(actor().roleId, parts.join("-"));
       var box = document.querySelector('[data-practice="' + key + '"]');
       if (box) st.text = box.value;
-      st.checked = runCheck(s.practice[i], st.text);
-      if (!st.checked.empty) st.tries++;
-      render();
+      if (st.checkBusy) return;
+      var local = runCheck(s.practice[i], st.text);
+      var done = function (res) {
+        st.checkBusy = false;
+        st.checked = res;
+        if (!res.empty) st.tries++;
+        render();
+      };
+      if (local.empty || local.none || !serverGrading()) return done(local);
+      st.checkBusy = true; render();
+      aiCheck("practice", s.id, i, st.text).then(function (ai) {
+        if (ai && ai.source === "ai") return done(ai);
+        local.note = fallbackNote(ai);
+        done(local);
+      });
     },
 
     "practice-hint": function (el) {
@@ -4431,13 +4475,25 @@
       if (box) st.text = box.value;
       var t = String(st.text || "").toLowerCase().replace(/\s+/g, " ").trim();
       if (!t) { st.checked = { empty: true }; return render(); }
+      if (st.checkBusy) return;
       var criteria = w.points.map(function (p) { return { label: p.label, ok: p.re.test(t) }; });
       var met = criteria.filter(function (c) { return c.ok; }).length;
-      st.checked = { criteria: criteria, problems: [], met: met, total: criteria.length, graded: false,
+      var local = { criteria: criteria, problems: [], met: met, total: criteria.length, graded: false,
         verdict: met === criteria.length ? "full" : met ? "partial" : "none-covered" };
-      st.tries = (st.tries || 0) + 1;
-      st.review = ""; st.reviewErr = "";
-      render();
+      var done = function (res) {
+        st.checkBusy = false;
+        st.checked = res;
+        st.tries = (st.tries || 0) + 1;
+        st.review = ""; st.reviewErr = "";
+        render();
+      };
+      if (!serverGrading()) return done(local);
+      st.checkBusy = true; render();
+      aiCheck("scenario", parts[0], +parts[1], st.text).then(function (ai) {
+        if (ai && ai.source === "ai") return done(ai);
+        local.note = fallbackNote(ai);
+        done(local);
+      });
     },
 
     "scn-show": function (el) {

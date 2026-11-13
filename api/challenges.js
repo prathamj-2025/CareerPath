@@ -1,11 +1,12 @@
 /* Weekly challenges.
 
    GET   anyone signed in. A student gets the live challenges (title, brief, minimum words and the rubric labels, never the
-         scoring patterns). An admin gets every challenge with its patterns.
+         scoring patterns or the reference answer). An admin gets every challenge with both.
    POST  students:  { action: "open", cid }   the student has the challenge page open and has not submitted: the study
                                               assistant is refused until they submit or leave (the same lock exams use)
                     { action: "leave" }       they left the page
-         admins:    { action: "save", cid?, roleId, week, title, brief, minWords, rubric: [{ label, re }] }
+         admins:    { action: "save", cid?, roleId, week, title, brief, minWords, reference?, rubric: [{ label, re }] }
+                                              `reference` is the model answer the AI marker compares against; students never see it
                                               a new challenge (saved as a draft) or a change to a draft or scheduled one
                     { action: "status", cid, to: "scheduled" | "live" | "closed" }
                                               publishing closes the one it replaces on that roadmap; a live or closed
@@ -26,6 +27,7 @@ function check(b) {
   if (!title || title.length > 200) return "The title must be 1 to 200 characters.";
   if (!brief || brief.length > 4000) return "The brief must be 1 to 4,000 characters.";
   if (!Number.isInteger(b.minWords) || b.minWords < 1 || b.minWords > 2000) return "The minimum words must be a number from 1 to 2,000.";
+  if (b.reference !== undefined && (typeof b.reference !== "string" || b.reference.length > 6000)) return "The reference answer must be under 6,000 characters.";
   if (!Array.isArray(b.rubric) || b.rubric.length < 1 || b.rubric.length > 12) return "Give 1 to 12 rubric lines.";
   for (const r of b.rubric) {
     const label = text(r && r.label), re = typeof (r && r.re) === "string" ? r.re.trim() : "";
@@ -68,7 +70,15 @@ export default async function handler(req, res) {
   if (!admin) return fail(res, 403, "admins_only", "Only admins can do this.");
   const now = new Date().toISOString();
   const saveFailed = () => fail(res, 502, "save_failed", "That could not be saved. Nothing changed, so try again.");
-  const upsert = (c, extra) => rest("POST", "challenges?on_conflict=cid", Object.assign(toRow(c), { updated_at: now }, extra || {}), "resolution=merge-duplicates,return=minimal");
+  const put = (row) => rest("POST", "challenges?on_conflict=cid", row, "resolution=merge-duplicates,return=minimal");
+  // Before migration 012 the table has no reference column; a status change must still work, so it is retried without it.
+  const upsert = async (c, extra, keepRef) => {
+    const row = Object.assign(toRow(c), { updated_at: now }, extra || {});
+    const r = await put(row);
+    if (r.ok || keepRef || !row.reference) return r;
+    delete row.reference;
+    return put(row);
+  };
   const done = async () => {
     invalidate();
     try { return res.status(200).json({ ok: true, admin: true, challenges: viewFor(await challenges(rest), true) }); }
@@ -79,6 +89,7 @@ export default async function handler(req, res) {
     const bad = check(b);
     if (bad) return fail(res, 400, "bad_request", bad);
     const fields = { roleId: b.roleId, week: b.week, title: text(b.title), brief: text(b.brief), minWords: b.minWords,
+      reference: typeof b.reference === "string" ? b.reference.trim() : undefined,
       rubric: b.rubric.map((r) => ({ label: text(r.label), re: r.re.trim() })) };
     const cid = typeof b.cid === "string" ? b.cid.slice(0, 80) : "";
     if (cid) {
@@ -87,13 +98,15 @@ export default async function handler(req, res) {
       if (cur.status === "live" || cur.status === "closed")
         return fail(res, 409, "locked", "A live or closed challenge cannot be changed, because scores were made against it. Write a new one instead.");
       if (fields.roleId !== cur.roleId) return fail(res, 400, "bad_request", "The roadmap of a challenge cannot be changed.");
-      const r = await upsert(Object.assign({}, cur, fields));
+      if (fields.reference === undefined) fields.reference = cur.reference || "";
+      const r = await upsert(Object.assign({}, cur, fields), null, true);
       return r.ok ? done() : saveFailed();
     }
     const taken = new Set(list.map((x) => x.cid));
     let id = "", tries = 0;
     do { id = fields.roleId + "-w" + fields.week + "-" + Math.random().toString(36).slice(2, 5); } while (taken.has(id) && ++tries < 20);
-    const r = await upsert(Object.assign({ cid: id, status: "draft" }, fields), { created_by: uid });
+    if (fields.reference === undefined) fields.reference = "";
+    const r = await upsert(Object.assign({ cid: id, status: "draft" }, fields), { created_by: uid }, true);
     return r.ok ? done() : saveFailed();
   }
 

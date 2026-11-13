@@ -1,6 +1,7 @@
 /* One non-streaming call to the same model provider api/ask.js uses (AI_API_KEY, AI_BASE_URL, AI_MODEL).
    Returns the reply text, or "" when the provider is not set up, is slow or fails, so callers can fall back. */
-export async function completeText(rules, messages, timeoutMs) {
+export async function completeText(rules, messages, timeoutMs, opts) {
+  opts = opts || {};
   const key = process.env.AI_API_KEY || process.env.OPENAI_API_KEY;
   if (!key) return "";
   const base = (process.env.AI_BASE_URL || process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/+$/, "");
@@ -16,8 +17,8 @@ export async function completeText(rules, messages, timeoutMs) {
         model: model,
         messages: [{ role: "system", content: rules }].concat(messages),
         stream: false,
-        temperature: 0.3,
-        max_tokens: Number(process.env.AI_MAX_TOKENS) || 2500,
+        temperature: typeof opts.temperature === "number" ? opts.temperature : 0.3,
+        max_tokens: opts.maxTokens || Number(process.env.AI_MAX_TOKENS) || 2500,
         ...(process.env.AI_REASONING_EFFORT ? { reasoning_effort: process.env.AI_REASONING_EFFORT } : {})
       })
     });

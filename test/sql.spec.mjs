@@ -460,5 +460,19 @@ await step('challenges: only the server can read or write them; one live per roa
   need(await dbFails(`insert into public.exam_attempts (user_id, kind, target) values ('${S1}', 'weird', 'x')`), 'unknown attempt kind accepted');
 });
 
+await step('AI scoring columns (012): a reference answer on challenges, the marker\'s ticks on submissions; students still cannot read the reference', async () => {
+  await svc(`update public.challenges set reference = 'A model answer.' where cid = 'pm-t1'`);
+  need((await svc(`select reference from public.challenges where cid = 'pm-t1'`)).rows[0].reference === 'A model answer.', 'reference not stored');
+  need((await svc(`select reference from public.challenges where cid = 'ba-t1'`)).rows[0].reference === '', 'reference should default to empty');
+  need(await dbFails(`update public.challenges set reference = '${'x'.repeat(6001)}' where cid = 'pm-t1'`), 'an over-long reference was accepted');
+  need(await fails(S1, `select reference from public.challenges`), 'a student read a reference answer');
+  await svc(`insert into public.challenge_submissions (user_id, challenge_id, roadmap_id, week_of, answer, words, score, hits, met, judged) values ($1, 'pm-t1', 'pm', '2026-10-19', 'an answer', 2, 50, 1, '[true,false]', true)`, [S1]);
+  const mine = await as(S1, `select met, judged from public.challenge_submissions where challenge_id = 'pm-t1'`);
+  need(JSON.stringify(mine.rows[0].met) === '[true,false]' && mine.rows[0].judged === true, 'a student cannot read their own ticks: ' + JSON.stringify(mine.rows));
+  await svc(`insert into public.challenge_submissions (user_id, challenge_id, roadmap_id, week_of, answer, words, score, hits) values ($1, 'ba-t1', 'ba', '2026-10-19', 'an answer', 2, 0, 0)`, [S2]);
+  const old = (await svc(`select met, judged from public.challenge_submissions where challenge_id = 'ba-t1'`)).rows[0];
+  need(old.met === null && old.judged === false, 'rows without the new fields should read null and false');
+});
+
 console.log(failed ? failed + ' failed' : 'all passed');
 process.exit(failed ? 1 : 0);

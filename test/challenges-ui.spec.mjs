@@ -65,10 +65,13 @@ await step('an admin writes a challenge, saves it as a draft, and the database h
   await adm.fill('#ac-brief', 'Your team ships a new search box. Name one metric that shows it worked and say why you chose it.');
   await adm.fill('#ac-min', '20');
   await adm.fill('#ac-rubric', 'Names one metric | metric|rate|conversion|click\nSays why | because|so that|since');
+  need((await adm.textContent('#view')).includes('Reference answer (students never see this)'), 'the reference answer field is missing');
+  await adm.fill('#ac-ref', 'The click-through rate on search results, because it shows people found what they wanted.');
   await adm.click('[data-action="ac-save"]');
   await adm.waitForSelector('text=Name one success metric');
   const rows = await j('/__challenges');
   need(rows.length === 1 && rows[0].title === 'Name one success metric' && rows[0].status === 'draft' && rows[0].rubric.length === 2, JSON.stringify(rows));
+  need(rows[0].reference.startsWith('The click-through rate'), 'the reference answer was not saved: ' + rows[0].reference);
   need(adm.errs.length === 0, adm.errs.join('; '));
 });
 

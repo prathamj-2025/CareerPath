@@ -1,7 +1,10 @@
 {
   "functions": {
     "api/grade-challenge.js": {
-      "includeFiles": "public/{data6,challenge}.js"
+      "includeFiles": "{public/{data6,challenge}.js,content/challenge-refs.js}"
+    },
+    "api/judge.js": {
+      "includeFiles": "{content/*.js,public/grading.js,public/project.js}"
     },
     "api/exam.js": {
       "includeFiles": "{content/*.js,public/grading.js,public/project.js}"
@@ -16,7 +19,7 @@
       "includeFiles": "{content/*.js,public/grading.js,public/project.js}"
     },
     "api/challenges.js": {
-      "includeFiles": "public/{data6,challenge}.js"
+      "includeFiles": "{public/{data6,challenge}.js,content/challenge-refs.js}"
     },
     "api/certs.js": {
       "includeFiles": "{content/*.js,public/grading.js,public/project.js}"

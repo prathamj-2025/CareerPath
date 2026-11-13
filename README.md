@@ -49,8 +49,13 @@ dataset (TuneBox); every query and code block was executed and its output pasted
 Course data lives in `public/lessons-pm.js` (`CP_PM_META`, `CP_PM_COURSE`, `CP_PM_TRACKS`).
 
 **Weekly challenge.** One open-ended brief per roadmap per week, scored against a published
-rubric, with written feedback from the assistant and its own leaderboard. The rubric sets the
-score so two identical answers always score the same; the model writes the feedback around it.
+rubric, with written feedback from the assistant and its own leaderboard. An AI marker
+(`api/_judge.js`) reads each answer against the rubric lines and an admin-written reference answer and says,
+line by line, whether the answer does what the line asks, by meaning and not by wording. The server turns
+those yes/no answers into the percentage, so the model never sets a number. The reference answer never reaches
+a student's browser. If no model is available the old keyword rubric scores the answer instead.
+The same marker checks the written practice in the modules (`api/judge.js`): practice exercises and lesson
+scenarios, with the keyword check as the fallback. Set `AI_JUDGE=off` to switch AI scoring off.
 
 **Admin side.** A separate role on the same application. Lessons publish directly.
 Assessment questions go through draft, review and publish, and the version they replace is
@@ -127,12 +132,14 @@ browser-only demo (set `CP_DEMO=1` to force that).
 - Weekly challenges written by admins are saved to the database (`api/challenges.js`,
   `supabase/migrations/011_challenges.sql`), and the server refuses the study assistant while a student has the challenge
   open. Week 1 is the easy starter set. Run 011 after deploying this version.
+- AI scoring of written answers (`api/_judge.js`, `api/judge.js`, `api/grade-challenge.js`,
+  `supabase/migrations/012_ai_scoring.sql`, reference answers in `content/challenge-refs.js`). Run 012 BEFORE pushing this version.
 - Skill assessments, module exams and practical projects are graded on the server (`api/exam.js`, `api/grade-project.js`).
   The answer keys live in `content/`, which is never served; `public/` has copies without keys, made by
   `npm run build:content`. Students cannot write points, stars or scores from the browser (`007_server_grading.sql`).
   Run 007 only after this version is deployed and `SUPABASE_SERVICE_ROLE_KEY` is set in Vercel.
 - Tests: `test/sql.spec.mjs` runs the migration files on an in-memory Postgres and checks the security rules.
-  `accounts`, `grading`, `content`, `content-ui`, `ask-guard`, `assistant-real`, `progress`, `community` and `challenge` specs run against `test/fakesupabase.mjs`, a small stand-in server.
+  `accounts`, `grading`, `content`, `content-ui`, `ask-guard`, `assistant-real`, `progress`, `community` and `challenge`, `judge` and `judge-ui` specs run against `test/fakesupabase.mjs`, a small stand-in server.
 
 ### Sign-in for the demo
 
@@ -272,10 +279,12 @@ risk, so lessons publish immediately. Questions do not.
 modules, practice and results, including an explanation of any question you got wrong. It
 is unavailable during an assessment.
 
-**The rubric scores the challenge, the model explains it.** A score that changes between two
+**The rubric scores the challenge, the model marks it line by line.** A score that changes between two
 identical submissions cannot sit on a leaderboard, so the criteria are fixed and published
-before the student writes. The model's job is to say what to do better, not to decide the
-number.
+before the student writes. The model answers one yes or no per criterion (at temperature 0, with a reference
+answer as an example and not a template) and the server computes the number, so the model never sets a score
+and a student's answer is treated as material to mark, never as instructions. A second call writes the feedback.
+Keyword patterns remain only as the fallback when no model is available.
 
 **Switching roadmaps deletes nothing.** The roadmap left behind is recorded with the stars
 earned on it, and can be resumed exactly where it stopped. Stars still do not transfer,

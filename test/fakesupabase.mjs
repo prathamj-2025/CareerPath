@@ -17,7 +17,7 @@ const progress = new Map();   // 'user|skill' -> row
 const modules = new Map();    // 'user|track' -> row
 const attempts = new Map();   // id -> exam_attempts row (written only with the service key)
 const content = { lessons: [], questions: [], missing: false };   // admin content edits (service key only)
-const chs = { rows: [], missing: false, noKind: false };   // 011: challenges (server only); noKind = exam_attempts not yet accepting 'challenge'
+const chs = { rows: [], missing: false, noKind: false, noCols: false };   // noCols: migration 012 not run (no reference, met, judged)   // 011: challenges (server only); noKind = exam_attempts not yet accepting 'challenge'
 const certs = new Map();      // id -> certificates row (migration 010; written only with the service key)
 const ai = new Map(); let aiOff = false;   // take_ai counters (migration 009)
 const subs = new Map();       // 'user|challenge' -> challenge_submissions row (written only with the service key)
@@ -129,6 +129,7 @@ const server = http.createServer(async (req, res) => {
   if (p === '/__attempts') { const u = users.get(url.searchParams.get('email')); return send(200, [...attempts.values()].filter(r => r.user_id === u.id)); }
   if (p === '/__age') { const a = attempts.get(url.searchParams.get('id')); if (a) a.started_at = new Date(Date.now() - Number(url.searchParams.get('minutes')) * 60e3).toISOString(); return send(200, {}); }
   if (p === '/__challenges') return send(200, chs.rows);
+  if (p === '/__nocols') { chs.noCols = url.searchParams.get('on') === '1'; return send(200, { noCols: chs.noCols }); }
   if (p === '/__challengesoff') { chs.missing = url.searchParams.get('on') === '1'; chs.noKind = chs.missing; return send(200, {}); }   // as if 011 was not run
   if (p === '/__certs') return send(200, [...certs.values()]);
   if (p === '/__log') return send(200, log);
@@ -342,6 +343,7 @@ const server = http.createServer(async (req, res) => {
     if (chs.missing) return send(404, { code: 'PGRST205', message: 'Could not find the table' });
     if (req.method === 'GET') return send(200, chs.rows.filter(r => matches(r, url)));
     if (req.method === 'POST') {
+      if (chs.noCols && 'reference' in body) return send(400, { code: 'PGRST204', message: "Could not find the 'reference' column of 'challenges' in the schema cache" });
       const r = { created_at: new Date().toISOString(), ...body };
       if (!['pm', 'ba', 'pjm'].includes(r.role_id) || !['draft', 'scheduled', 'live', 'closed'].includes(r.status) || !Array.isArray(r.rubric) || r.rubric.length < 1 || r.rubric.length > 12)
         return send(400, { code: '23514', message: 'check constraint' });
@@ -360,6 +362,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST') {
       if (req.headers.apikey !== SECRET) return send(401, { code: '42501', message: 'permission denied for table challenge_submissions' });
       const r = body; const key = r.user_id + '|' + r.challenge_id;
+      if (chs.noCols && ('met' in r || 'judged' in r)) return send(400, { code: 'PGRST204', message: "Could not find the 'met' column of 'challenge_submissions' in the schema cache" });
       if (subs.has(key)) return send(201, []);                                   // on conflict do nothing
       if (!profiles.has(r.user_id) || r.score < 0 || r.score > 100 || !r.answer) return send(400, { code: '23514', message: 'check constraint' });
       const row = { id: subs.size + 1, created_at: new Date().toISOString(), ...r };

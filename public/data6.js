@@ -239,7 +239,7 @@
         { label: "Says why the other options wait",
           re: "others?|other (two|options|requests|ideas)|later|next sprint|wait|not now|defer|backlog|lower priority|nice.?to.?have|can come" },
         { label: "Names a success measure to check after launch",
-          re: "retention|day.?1|day one|activation|completion|exports?|usage|measure|metric|track|check|rate|adoption|churn" }
+          re: "retention|day.?1|day one|activation|completion|usage|measure|metric|track|rate|adoption|churn" }
       ]
     },
     {
