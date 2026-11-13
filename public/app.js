@@ -887,6 +887,7 @@
       }
       state.userId = u.id; state.authError = ""; state.authNotice = null;
       contentAt = 0; loadContent(true);
+      if (u.role === "student") apiPost("/api/exam", { action: "cancel" });   // a reload loses an open exam, so close it
       if (u.role === "student") { loadProgress(u); loadChallenges(u); }
       var fresh = u.role === "student" && !u.roleId && !u.resume && !u.placement && !u.roleHistory.length;
       if (u.role === "admin") { loadAdminData(); return goPage(pageFor(u, "a-content")); }
@@ -1132,7 +1133,17 @@
     } catch (e) {}
     return { name: fallback };
   }
+  /* Leaving an exam without submitting closes the attempt on the server, which switches the study assistant back on
+     (the server keeps it off while an exam is open). A submit in progress is left alone. */
+  function leaveExam(to) {
+    var from = state.route && state.route.name;
+    if ((from !== "assess" && from !== "mexam") || ["assess", "mexam", "result", "mresult"].indexOf(to) > -1) return;
+    if (!REAL || state.preview || state.pendingExam) return;
+    state.exam = null; state.mexam = null;
+    apiPost("/api/exam", { action: "cancel" });
+  }
   function go(name, params) {
+    leaveExam(name);
     state.roleMenu = false;
     state.route = Object.assign({ name: name }, params || {});
     state.adminMsg = "";
@@ -4969,6 +4980,12 @@
     cancelled: "",
     upstream_error: "Something went wrong reaching the model. Try again.",
     // /api/ask
+    signed_out: "Your session expired. Sign in again to use the assistant.",
+    exam_locked: "The assistant is off while an exam is open. It comes back when you submit or leave the exam.",
+    too_fast: "You are asking very quickly. Wait a moment and try again.",
+    limit_hour: "You have asked a lot of questions this hour. Try again in a little while.",
+    limit_day: "You have reached today's limit for the assistant. It resets tomorrow.",
+    limit_global: "The assistant is very busy today. Please try again tomorrow.",
     no_backend: "The assistant needs its server function. On a deployment, check that api/ask is present.",
     no_key: "The server has no API key configured. Add OPENAI_API_KEY in the hosting settings and redeploy.",
     bad_key: "The API key was rejected. Check OPENAI_API_KEY in the hosting settings.",
@@ -4981,7 +4998,7 @@
 
   /* For a misconfiguration the server's own message names the exact fix, which is more
      use than generic copy while a deployment is being set up. */
-  var TUTOR_SHOW_DETAIL = ["no_key", "bad_key", "no_quota", "bad_model", "rate_limited", "upstream_error"];
+  var TUTOR_SHOW_DETAIL = ["exam_locked", "limit_hour", "limit_day", "limit_global", "too_fast", "no_key", "bad_key", "no_quota", "bad_model", "rate_limited", "upstream_error"];
 
   function tutorErrCopy(code, message) {
     if (TUTOR_SHOW_DETAIL.indexOf(code) > -1 && message) return message;
@@ -5004,11 +5021,12 @@
   /* ---- backend: /api/ask ---- */
 
   function askApi(o) {
-    return fetch("/api/ask", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ rules: o.rules, messages: o.convo }),
-      signal: o.signal
+    // On a deployment with real accounts the server wants to know who is asking (limits, and the exam lock).
+    var tok = REAL ? CP_AUTH.token().catch(function () { return ""; }) : Promise.resolve("");
+    return tok.then(function (t) {
+      var h = { "content-type": "application/json" };
+      if (t) h.authorization = "Bearer " + t;
+      return fetch("/api/ask", { method: "POST", headers: h, body: JSON.stringify({ rules: o.rules, messages: o.convo }), signal: o.signal });
     }).catch(function (e) {
       if (e && e.name === "AbortError") throw { code: "cancelled", message: "stopped" };
       throw { code: "upstream_unreachable", message: String(e && e.message || e) };

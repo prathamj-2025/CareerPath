@@ -402,5 +402,26 @@ await step('content: one live version and one draft per question, four options, 
   need(await dbFails(l + `('discovery-pm', 1, 1, 'live', '', 'body')`), 'empty lesson title accepted');
 });
 
+await step('assistant limits: take_ai counts per student and site-wide, and only the server can call it', async () => {
+  const take = async (u, h, d, g) => (await svc(`select public.take_ai($1, $2, $3, $4) as r`, [u, h, d, g])).rows[0].r;
+  const a = await take(S1, 3, 10, 100), b = await take(S1, 3, 10, 100), c = await take(S1, 3, 10, 100), over = await take(S1, 3, 10, 100);
+  need(a.ok && b.ok && c.ok && c.hour === 3, 'the first three were not allowed: ' + JSON.stringify(c));
+  need(!over.ok && over.why === 'hour', 'the fourth in an hour was allowed: ' + JSON.stringify(over));
+  const day = await take(S2, 100, 2, 100), day2 = await take(S2, 100, 2, 100), day3 = await take(S2, 100, 2, 100);
+  need(day.ok && day2.ok && !day3.ok && day3.why === 'day', 'daily limit: ' + JSON.stringify(day3));
+  const zero = '00000000-0000-0000-0000-000000000000';
+  const g = (await svc(`select n from public.ai_usage where user_id = $1 and kind = 'day'`, [zero])).rows[0].n;
+  need(g === 5, 'a student over their own limit used the site-wide allowance: ' + g);
+  const cap = await take(ADM, 100, 100, 5);
+  need(!cap.ok && cap.why === 'global', 'the site-wide limit did not stop a question: ' + JSON.stringify(cap));
+  need(await fails(S1, `select public.take_ai($1, 1, 1, 1)`, [S1]), 'a student called take_ai');
+  need(await fails(ADM, `select public.take_ai($1, 1, 1, 1)`, [ADM]), 'an admin called take_ai from the site');
+  need(await fails(S1, `select * from public.ai_usage`), 'a student read the usage table');
+  need(await dbFails(`select public.take_ai(null, 1, 1, 1)`), 'a missing user was accepted');
+  await db.exec(`set role anon`); let blocked = false;
+  try { await db.query(`select public.take_ai($1, 1, 1, 1)`, [S1]); } catch { blocked = true; } await db.exec(`reset role`);
+  need(blocked, 'a visitor called take_ai');
+});
+
 console.log(failed ? failed + ' failed' : 'all passed');
 process.exit(failed ? 1 : 0);

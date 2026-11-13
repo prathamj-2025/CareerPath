@@ -20,6 +20,10 @@ One shared Supabase project. Database changes live here as numbered SQL files in
   cannot read or write them, only `api/content.js` can, after checking the caller is an admin. Safe to run twice. Run it
   after the website that uses it is deployed; until then the site simply uses the files in `content/`.
 
+- `009_ai_usage.sql`: limits on the study assistant (`ai_usage` table and the `take_ai` function). Server only: the site cannot
+  read or call them. Safe to run twice. Run after the website that uses it is deployed; until then the assistant works but
+  only the per-minute limit and the exam lock apply.
+
 Run them in order, one at a time, in the SQL editor.
 
 ## Exam and project scoring (server side)
@@ -30,6 +34,14 @@ and `public/` holds copies with the keys removed. After you change anything in `
 and commit both folders; `test/grading.spec.mjs` fails if they disagree or if a key reaches `public/`.
 `api/keys.js` gives the keys to signed-in admins only, for the question bank and the admin preview. Uses the same
 `SUPABASE_SERVICE_ROLE_KEY` as below. Limits: 20 exam starts per hour and 10 graded attempts per exam per 24 hours.
+
+## Study assistant limits
+
+`api/ask.js` needs a sign-in on a deployment with real accounts, refuses questions while the student has an exam open
+(the page closes the attempt when the student leaves the exam or reloads, and an attempt older than 30 minutes no longer
+counts), and counts each question through `take_ai` (009). Defaults: 40 questions per student per hour, 200 per student per
+day, 10,000 across the site per day, and 10 per minute per student. Change them with `AI_HOURLY_LIMIT`, `AI_DAILY_LIMIT`
+and `AI_GLOBAL_DAILY` in Vercel. The weekly challenge lock is still enforced by the page and the assistant's instructions only.
 
 ## Editing course content (admins)
 

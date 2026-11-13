@@ -118,6 +118,8 @@ browser-only demo (set `CP_DEMO=1` to force that).
   names only, and a student can hide themselves on the Profile page. Students can also delete their account.
 - Admins read every student from the database. Those copies stay in memory and are never stored in the browser.
 - Weekly challenge answers are already scored on the server (`api/grade-challenge.js`, see `supabase/README.md`).
+- The study assistant needs a sign-in, is off while an exam is open, and is limited per student and per day
+  (`api/ask.js`, `supabase/migrations/009_ai_usage.sql`, see `supabase/README.md`).
 - Admins edit lessons and questions on the admin pages. Changes are saved to the database (`api/content.js`,
   `supabase/migrations/008_content_edits.sql`) and reach students without a redeploy. Run 008 after deploying this version.
 - Skill assessments, module exams and practical projects are graded on the server (`api/exam.js`, `api/grade-project.js`).
@@ -125,7 +127,7 @@ browser-only demo (set `CP_DEMO=1` to force that).
   `npm run build:content`. Students cannot write points, stars or scores from the browser (`007_server_grading.sql`).
   Run 007 only after this version is deployed and `SUPABASE_SERVICE_ROLE_KEY` is set in Vercel.
 - Tests: `test/sql.spec.mjs` runs the migration files on an in-memory Postgres and checks the security rules.
-  `accounts`, `grading`, `content`, `content-ui`, `progress`, `community` and `challenge` specs run against `test/fakesupabase.mjs`, a small stand-in server.
+  `accounts`, `grading`, `content`, `content-ui`, `ask-guard`, `assistant-real`, `progress`, `community` and `challenge` specs run against `test/fakesupabase.mjs`, a small stand-in server.
 
 ### Sign-in for the demo
 

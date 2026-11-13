@@ -33,7 +33,15 @@ export default async function handler(req, res) {
   const b = body(req);
   if (b.action === "start") return start(ctx, b, res);
   if (b.action === "submit") return submit(ctx, b, res);
+  if (b.action === "cancel") return cancel(ctx, b, res);
   return fail(res, 400, "bad_request", "Unknown action.");
+}
+
+/* The student left the exam without submitting (or reloaded the page, which loses the attempt). Close their open attempts,
+   so the study assistant, which is off while an exam is open, comes back. */
+async function cancel({ uid, rest }, b, res) {
+  const r = await rest("DELETE", "exam_attempts?user_id=eq." + uid + "&submitted_at=is.null&kind=in.(skill,module)");
+  return res.status(200).json({ ok: r.ok });
 }
 
 async function start({ uid, profile, rest }, b, res) {

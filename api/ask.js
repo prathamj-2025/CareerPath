@@ -19,6 +19,41 @@
  * existing deployment keeps running after this change.
  */
 
+import { authenticate } from "./_auth.js";
+
+/* Who may ask, and how much. On a deployment with real accounts (SUPABASE_SERVICE_ROLE_KEY set) a question needs a sign-in,
+   is refused while the student has an exam open, and is counted against limits per student (hour, day) and for the whole
+   site (day) by supabase/migrations/009_ai_usage.sql. Browser-only demo deployments have no accounts and stay open.
+     AI_HOURLY_LIMIT  default 40 questions per student per hour
+     AI_DAILY_LIMIT   default 200 per student per day
+     AI_GLOBAL_DAILY  default 10000 across the site per day
+   Until 009 is run, only the per-minute burst limit and the exam lock apply. */
+const HOURLY = Number(process.env.AI_HOURLY_LIMIT) || 40;
+const DAILY = Number(process.env.AI_DAILY_LIMIT) || 200;
+const GLOBAL_DAILY = Number(process.env.AI_GLOBAL_DAILY) || 10000;
+const BURST = 10;                  // questions per student per minute, per server instance
+const EXAM_LOCK_MINUTES = 30;      // an exam attempt left open this long no longer switches the assistant off
+const recent = new Map();
+
+function tooFast(uid) {
+  const now = Date.now(), list = (recent.get(uid) || []).filter((t) => now - t < 60000);
+  list.push(now); recent.set(uid, list);
+  if (recent.size > 5000) for (const [k, v] of recent) if (!v.some((t) => now - t < 60000)) recent.delete(k);
+  return list.length > BURST;
+}
+
+async function examOpen({ uid, rest }) {
+  const since = new Date(Date.now() - EXAM_LOCK_MINUTES * 60e3).toISOString();
+  const r = await rest("GET", "exam_attempts?user_id=eq." + uid + "&submitted_at=is.null&started_at=gte." + encodeURIComponent(since) + "&select=id,kind");
+  return r.ok && Array.isArray(r.data) && r.data.some((x) => x.kind === "skill" || x.kind === "module");
+}
+
+async function overLimit({ uid, rest }) {
+  const r = await rest("POST", "rpc/take_ai", { p_user: uid, p_hour: HOURLY, p_day: DAILY, p_global: GLOBAL_DAILY });
+  if (!r.ok || !r.data || typeof r.data !== "object") return "";     // 009 not run yet, or the database is busy: do not block the student
+  return r.data.ok ? "" : String(r.data.why || "day");
+}
+
 const MAX_TOTAL_CHARS = 60000;   // roughly the model's input budget for this use
 const MAX_TURNS = 12;
 const MAX_TURN_CHARS = 20000;
@@ -36,6 +71,15 @@ export default async function handler(req, res) {
   if (!key) {
     return fail(res, 500, "no_key",
       "AI_API_KEY is not set. Add it in Vercel under Settings, Environment Variables, then redeploy.");
+  }
+
+  // Real accounts: a signed-in student, not in the middle of an exam, not asking too fast.
+  let who = null;
+  if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    who = await authenticate(req, res);
+    if (!who) return;
+    if (tooFast(who.uid)) return fail(res, 429, "too_fast", "You are asking very quickly. Wait a moment and try again.");
+    if (await examOpen(who)) return fail(res, 403, "exam_locked", "The assistant is off while an exam is open. It comes back when you submit or leave the exam.");
   }
 
   let body = req.body;
@@ -66,6 +110,13 @@ export default async function handler(req, res) {
   const total = messages.reduce(function (a, m) { return a + m.content.length; }, 0);
   if (total > MAX_TOTAL_CHARS) {
     return fail(res, 413, "too_large", "That is too much text to send at once. Select a smaller piece.");
+  }
+
+  if (who) {
+    const why = await overLimit(who);
+    if (why === "hour") return fail(res, 429, "limit_hour", "You have asked a lot of questions this hour. Try again in a little while.");
+    if (why === "day") return fail(res, 429, "limit_day", "You have reached today's limit for the assistant. It resets tomorrow.");
+    if (why) return fail(res, 429, "limit_global", "The assistant is very busy today. Please try again tomorrow.");
   }
 
   const base = (process.env.AI_BASE_URL || process.env.OPENAI_BASE_URL ||

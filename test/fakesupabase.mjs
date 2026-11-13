@@ -17,6 +17,7 @@ const progress = new Map();   // 'user|skill' -> row
 const modules = new Map();    // 'user|track' -> row
 const attempts = new Map();   // id -> exam_attempts row (written only with the service key)
 const content = { lessons: [], questions: [], missing: false };   // admin content edits (service key only)
+const ai = new Map(); let aiOff = false;   // take_ai counters (migration 009)
 const subs = new Map();       // 'user|challenge' -> challenge_submissions row (written only with the service key)
 const SECRET = 'sb_secret_test';
 const log = [];               // every write, so tests can see what the site sent
@@ -113,7 +114,7 @@ const server = http.createServer(async (req, res) => {
   if (p === '/__admin') { const u = users.get(url.searchParams.get('email')); profiles.get(u.id).role = 'admin'; return send(200, {}); }
   if (p === '/__expire') { tokens.clear(); return send(200, {}); }   // access tokens die, refresh tokens live
   if (p === '/__profile') { const u = users.get(url.searchParams.get('email')); return send(200, profiles.get(u.id) || null); }
-  if (p === '/__reset') { rt.joins = []; rt.fanouts = []; rt.tokenUpdates = 0; rt.refuse = false; for (const c of sockets) c.ws.terminate(); users.clear(); profiles.clear(); tokens.clear(); refreshes.clear(); progress.clear(); modules.clear(); subs.clear(); attempts.clear(); content.lessons = []; content.questions = []; content.missing = false; log.length = 0; return send(200, {}); }
+  if (p === '/__reset') { rt.joins = []; rt.fanouts = []; rt.tokenUpdates = 0; rt.refuse = false; for (const c of sockets) c.ws.terminate(); users.clear(); profiles.clear(); tokens.clear(); refreshes.clear(); progress.clear(); modules.clear(); subs.clear(); attempts.clear(); content.lessons = []; content.questions = []; content.missing = false; ai.clear(); aiOff = false; log.length = 0; return send(200, {}); }
   if (p === '/__progress') { const u = users.get(url.searchParams.get('email')); return send(200, { skills: [...progress.values()].filter(r => r.user_id === u.id), modules: [...modules.values()].filter(r => r.user_id === u.id) }); }
   if (p === '/__seed') {   // put saved progress on the server before the student signs in (as if from another device)
     const u = users.get(url.searchParams.get('email')); const b = body;
@@ -222,6 +223,19 @@ const server = http.createServer(async (req, res) => {
     pr.points = Math.min(Math.max((pr.points || 0) + Number(body.p_delta || 0), 0), 999999);
     const t = boardOf(pr); if (t) fanout(t);
     return send(200, pr.points);
+  }
+  if (p === '/__aioff') { aiOff = url.searchParams.get('on') === '1'; return send(200, {}); }   // as if migration 009 was not run
+  if (p === '/rest/v1/rpc/take_ai') {                 // service role only
+    if (!isService(req)) return send(401, { code: '42501', message: 'permission denied for function take_ai' });
+    if (aiOff) return send(404, { code: 'PGRST202', message: 'Could not find the function' });
+    const now = new Date(), hs = now.toISOString().slice(0, 13), ds = now.toISOString().slice(0, 10), zero = '0';
+    const bump = k => { ai.set(k, (ai.get(k) || 0) + 1); return ai.get(k); };
+    const h = bump(body.p_user + '|h|' + hs), d = bump(body.p_user + '|d|' + ds);
+    if (h > body.p_hour) return send(200, { ok: false, why: 'hour', hour: h, day: d });
+    if (d > body.p_day) return send(200, { ok: false, why: 'day', hour: h, day: d });
+    const g = bump(zero + '|d|' + ds);
+    if (g > body.p_global) return send(200, { ok: false, why: 'global', hour: h, day: d, global: g });
+    return send(200, { ok: true, why: '', hour: h, day: d, global: g });
   }
   if (p === '/__contentoff') { content.missing = url.searchParams.get('on') === '1'; return send(200, {}); }   // as if migration 008 was not run
   if (p === '/__content') return send(200, content);
