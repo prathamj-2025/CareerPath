@@ -154,6 +154,12 @@ await step('before migration 012, a status change still works and a save with a 
   } finally { await jf('/__nocols?on=0'); }
 });
 
+await step('the served data6.js holds no scoring patterns', async () => {
+  const t = await (await fetch(ON + '/data6.js')).text();
+  need(/CP_CHALLENGES/.test(t) && /Picks one option clearly/.test(t), 'the challenge list (labels) is missing');
+  need(!t.includes('drop.?off') && !t.includes('total quantity') && !/\bre:\s*"/.test(t), 'scoring patterns are still served');
+});
+
 await step('no file the site serves contains a reference answer', async () => {
   for (const f of ['/challenge-refs.js', '/content/challenge-refs.js', '/data6.js', '/challenge.js', '/app.js', '/data4.js', '/data5.js']) {
     const r = await fetch(ON + f);

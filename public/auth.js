@@ -42,6 +42,8 @@
     if (r.status === 0) return { code: "network", text: "Could not reach the server. Check your connection and try again." };
     if (code === "invalid_credentials" || /invalid login/i.test(msg)) return { code: "invalid", text: "Wrong email or password." };
     if (code === "email_not_confirmed" || /not confirmed/i.test(msg)) return { code: "unconfirmed", text: "Please confirm your email first. We sent you a link." };
+    if (code === "captcha_failed" || /captcha/i.test(msg))
+      return { code: "captcha", text: "We could not check that you are human. Reload the page and try again." };
     if (code === "over_request_rate_limit" || code === "over_email_send_rate_limit" || r.status === 429)
       return { code: "rate", text: "Too many attempts. Please wait a minute and try again." };
     if (code === "weak_password" || /password/i.test(msg) && /(least|weak|short)/i.test(msg))
@@ -182,6 +184,57 @@
     rt.ws = null; rt.ready = false; rt.chans = {}; rt.tries = 0;
   }
 
+  /* The "are you human" check (Cloudflare Turnstile), only when /api/config carries a site key. One widget, created once,
+     outside the page that re-draws itself; it runs only when a sign-in call needs a token and shows a challenge only
+     if Cloudflare wants one. Resolves a token, or null when the check could not run. */
+  var turnstile = { id: null, loading: null, waiting: null, box: null };
+  function loadTurnstile() {
+    if (turnstile.loading) return turnstile.loading;
+    turnstile.loading = new Promise(function (resolve) {
+      if (window.turnstile) return resolve(true);
+      var sc = document.createElement("script");
+      sc.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+      sc.async = true; sc.onload = function () { resolve(!!window.turnstile); }; sc.onerror = function () { resolve(false); };
+      document.head.appendChild(sc);
+    });
+    return turnstile.loading;
+  }
+  function human() {
+    if (!cfg || !cfg.captcha) return Promise.resolve({ token: null, needed: false });
+    return loadTurnstile().then(function (ok) {
+      if (!ok) return { token: null, needed: true };
+      return new Promise(function (resolve) {
+        var done = false;
+        function finish(tok) { if (done) return; done = true; window.clearTimeout(timer); turnstile.waiting = null; resolve({ token: tok || null, needed: true }); }
+        var timer = window.setTimeout(function () { finish(null); }, 45000);
+        turnstile.waiting = finish;
+        if (turnstile.id === null) {
+          turnstile.box = document.createElement("div");
+          turnstile.box.id = "cp-captcha";
+          turnstile.box.style.cssText = "position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:2147483000";
+          document.body.appendChild(turnstile.box);
+          turnstile.id = window.turnstile.render(turnstile.box, {
+            sitekey: cfg.captcha, execution: "execute", appearance: "interaction-only",
+            callback: function (t) { if (turnstile.waiting) turnstile.waiting(t); },
+            "error-callback": function () { if (turnstile.waiting) turnstile.waiting(null); },
+            "timeout-callback": function () { if (turnstile.waiting) turnstile.waiting(null); }
+          });
+        } else {
+          window.turnstile.reset(turnstile.id);
+        }
+        window.turnstile.execute(turnstile.id);
+      });
+    });
+  }
+  /* Adds the token Supabase Auth expects. { error } when the check was needed and could not run. */
+  function guard(body) {
+    return human().then(function (h) {
+      if (h.needed && !h.token) return { error: { code: "captcha", text: "We could not check that you are human. Reload the page and try again." } };
+      if (h.token) body.gotrue_meta_security = { captcha_token: h.token };
+      return { body: body };
+    });
+  }
+
   var CP_AUTH = window.CP_AUTH = {
     enabled: false,
     googleOAuth: false,
@@ -191,10 +244,16 @@
       var timeout = new Promise(function (res) { setTimeout(function () { res(null); }, 3500); });
       var ask = fetch("/api/config").then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; });
       return Promise.race([ask, timeout]).then(function (c) {
+        if (c && c.analytics && /^https?:$/.test(window.location.protocol) && !document.getElementById("cp-va")) {
+          // Vercel's page-view counter: counts visits, no cookies, no names. Only when WEB_ANALYTICS=1 is set.
+          window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
+          var va = document.createElement("script"); va.id = "cp-va"; va.defer = true; va.src = "/_vercel/insights/script.js";
+          document.head.appendChild(va);
+        }
         if (!c || !c.supabaseUrl || !c.supabaseKey || !/^https?:$/.test(window.location.protocol)) {
           return { enabled: false, session: null, link: null, google: (c && c.googleClientId) || null };
         }
-        cfg = { url: String(c.supabaseUrl).replace(/\/+$/, ""), key: c.supabaseKey };
+        cfg = { url: String(c.supabaseUrl).replace(/\/+$/, ""), key: c.supabaseKey, captcha: c.captchaSiteKey || null };
         CP_AUTH.enabled = true; CP_AUTH.googleOAuth = !!c.googleOAuth;
         // An email link opened in a tab that already has the site open only changes the fragment: start over with it.
         window.addEventListener("hashchange", function () {
@@ -225,7 +284,11 @@
     session: function () { return session; },
 
     signUp: function (email, password, meta) {
-      return call("/auth/v1/signup", { method: "POST", body: { email: email, password: password, data: meta || {} } }).then(function (r) {
+      return guard({ email: email, password: password, data: meta || {} }).then(function (g) {
+        if (g.error) return { __stop: g.error };
+        return call("/auth/v1/signup", { method: "POST", body: g.body });
+      }).then(function (r) {
+        if (r.__stop) return { error: r.__stop };
         if (!r.ok) return { error: explain(r) };
         var b = r.body || {};
         if (b.access_token) return { session: keep(toSession(b)) };           // email confirmation is switched off
@@ -237,20 +300,29 @@
     },
 
     signIn: function (email, password) {
-      return call("/auth/v1/token?grant_type=password", { method: "POST", body: { email: email, password: password } }).then(function (r) {
+      return guard({ email: email, password: password }).then(function (g) {
+        if (g.error) return { __stop: g.error };
+        return call("/auth/v1/token?grant_type=password", { method: "POST", body: g.body });
+      }).then(function (r) {
+        if (r.__stop) return { error: r.__stop };
         if (!r.ok || !r.body || !r.body.access_token) return { error: explain(r) };
         return { session: keep(toSession(r.body)) };
       });
     },
 
     resend: function (email) {
-      return call("/auth/v1/resend", { method: "POST", body: { type: "signup", email: email, options: { emailRedirectTo: window.location.origin + "/" } } })
-        .then(function (r) { return r.ok ? { ok: true } : { error: explain(r) }; });
+      return guard({ type: "signup", email: email, options: { emailRedirectTo: window.location.origin + "/" } }).then(function (g) {
+        if (g.error) return { error: g.error };
+        return call("/auth/v1/resend", { method: "POST", body: g.body }).then(function (r) { return r.ok ? { ok: true } : { error: explain(r) }; });
+      });
     },
 
     recover: function (email) {
-      return call("/auth/v1/recover?redirect_to=" + encodeURIComponent(window.location.origin + "/"), { method: "POST", body: { email: email } })
-        .then(function (r) { return r.ok ? { ok: true } : { error: explain(r) }; });
+      return guard({ email: email }).then(function (g) {
+        if (g.error) return { error: g.error };
+        return call("/auth/v1/recover?redirect_to=" + encodeURIComponent(window.location.origin + "/"), { method: "POST", body: g.body })
+          .then(function (r) { return r.ok ? { ok: true } : { error: explain(r) }; });
+      });
     },
 
     updatePassword: function (password) {

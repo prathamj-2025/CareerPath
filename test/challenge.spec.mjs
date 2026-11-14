@@ -22,7 +22,7 @@ await j('/__reset');
 
 // The course data, loaded the way the server loads it, to know what score an answer must get.
 const win = {}; const ctx = vm.createContext({ window: win });
-for (const f of ['data6.js', 'challenge.js']) vm.runInContext(fs.readFileSync('public/' + f, 'utf8'), ctx);
+for (const f of ['content/data6.js', 'public/challenge.js']) vm.runInContext(fs.readFileSync(f, 'utf8'), ctx);
 const PM1 = win.CP_CHALLENGES.find(c => c.cid === 'pm-start');
 const GOOD = 'I would build the first-day tutorial. 60% of new users leave on day 1, which is the biggest problem and it affects everyone who joins. ' +
   'Dark mode and PDF export are useful, but they can wait for the next sprint because fewer users depend on them. ' +

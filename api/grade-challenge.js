@@ -21,14 +21,14 @@ import { challenges } from "./_challenges.js";
 import { judge } from "./_judge.js";
 
 const PUB = new URL("../public/", import.meta.url);
+const SERVER = new URL("../content/", import.meta.url);
 let loaded = null;
 function lib() {
   if (loaded) return loaded;
   const win = {};
   const ctx = vm.createContext({ window: win });
-  for (const f of ["data6.js", "challenge.js"]) {
-    vm.runInContext(fs.readFileSync(new URL(f, PUB), "utf8"), ctx, { filename: f });
-  }
+  vm.runInContext(fs.readFileSync(new URL("data6.js", SERVER), "utf8"), ctx, { filename: "data6.js" });     // rubric patterns: server only
+  vm.runInContext(fs.readFileSync(new URL("challenge.js", PUB), "utf8"), ctx, { filename: "challenge.js" });
   loaded = { ch: win.CP_CHALLENGE };
   return loaded;
 }

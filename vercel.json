@@ -1,7 +1,7 @@
 {
   "functions": {
     "api/grade-challenge.js": {
-      "includeFiles": "{public/{data6,challenge}.js,content/challenge-refs.js}"
+      "includeFiles": "{public/challenge.js,content/data6.js,content/challenge-refs.js}"
     },
     "api/judge.js": {
       "includeFiles": "{content/*.js,public/grading.js,public/project.js}"
@@ -19,10 +19,16 @@
       "includeFiles": "{content/*.js,public/grading.js,public/project.js}"
     },
     "api/challenges.js": {
-      "includeFiles": "{public/{data6,challenge}.js,content/challenge-refs.js}"
+      "includeFiles": "{public/challenge.js,content/data6.js,content/challenge-refs.js}"
     },
     "api/certs.js": {
       "includeFiles": "{content/*.js,public/grading.js,public/project.js}"
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/keepalive",
+      "schedule": "0 14 * * *"
+    }
+  ]
 }

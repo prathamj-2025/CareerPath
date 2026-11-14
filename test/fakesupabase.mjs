@@ -5,6 +5,8 @@ import http from 'node:http';
 import { WebSocketServer } from 'ws';
 const PORT = Number(process.env.FAKE_PORT || 3113);
 const users = new Map();      // email -> { id, email, password, confirmed, meta }
+const captcha = { on: false, seen: [] };    // when on, sign-up, password sign-in, resend and recover need the token 'good-token'
+function captchaOk(b) { if (!captcha.on) return true; const t = b && b.gotrue_meta_security && b.gotrue_meta_security.captcha_token; captcha.seen.push(t || null); return t === 'good-token'; }
 const profiles = new Map();   // id -> row
 const tokens = new Map();     // access token -> user id
 const refreshes = new Map();  // refresh token -> user id
@@ -116,7 +118,7 @@ const server = http.createServer(async (req, res) => {
   if (p === '/__admin') { const u = users.get(url.searchParams.get('email')); profiles.get(u.id).role = 'admin'; return send(200, {}); }
   if (p === '/__expire') { tokens.clear(); return send(200, {}); }   // access tokens die, refresh tokens live
   if (p === '/__profile') { const u = users.get(url.searchParams.get('email')); return send(200, profiles.get(u.id) || null); }
-  if (p === '/__reset') { rt.joins = []; rt.fanouts = []; rt.tokenUpdates = 0; rt.refuse = false; for (const c of sockets) c.ws.terminate(); users.clear(); profiles.clear(); tokens.clear(); refreshes.clear(); progress.clear(); modules.clear(); subs.clear(); attempts.clear(); certs.clear(); chs.rows = []; chs.missing = false; chs.noKind = false; content.lessons = []; content.questions = []; content.missing = false; ai.clear(); aiOff = false; log.length = 0; return send(200, {}); }
+  if (p === '/__reset') { rt.joins = []; rt.fanouts = []; rt.tokenUpdates = 0; rt.refuse = false; for (const c of sockets) c.ws.terminate(); users.clear(); profiles.clear(); tokens.clear(); refreshes.clear(); progress.clear(); modules.clear(); subs.clear(); attempts.clear(); certs.clear(); chs.rows = []; chs.missing = false; chs.noKind = false; content.lessons = []; content.questions = []; content.missing = false; ai.clear(); aiOff = false; log.length = 0; captcha.on = false; captcha.seen = []; return send(200, {}); }
   if (p === '/__progress') { const u = users.get(url.searchParams.get('email')); return send(200, { skills: [...progress.values()].filter(r => r.user_id === u.id), modules: [...modules.values()].filter(r => r.user_id === u.id) }); }
   if (p === '/__seed') {   // put saved progress on the server before the student signs in (as if from another device)
     const u = users.get(url.searchParams.get('email')); const b = body;
@@ -146,6 +148,11 @@ const server = http.createServer(async (req, res) => {
   if (p === '/__state') return send(200, { users: users.size, emails: [...users.keys()] });
 
   // ---- auth ----
+  if (p === '/__captcha') { captcha.on = url.searchParams.get('on') === '1'; return send(200, {}); }
+  if (p === '/__captchaseen') return send(200, captcha.seen);
+  const blocked = () => send(400, { error_code: 'captcha_failed', msg: 'captcha verification process failed' });
+  const needsCaptcha = (route, g) => (route === '/auth/v1/signup' || route === '/auth/v1/resend' || route === '/auth/v1/recover' || (route === '/auth/v1/token' && g === 'password'));
+  if (needsCaptcha(p, url.searchParams.get('grant_type')) && !captchaOk(body)) return blocked();
   if (p === '/auth/v1/signup') {
     if (String(body.password || '').length < 8) return send(422, { error_code: 'weak_password', msg: 'Password should be at least 8 characters.' });
     if (!/^\S+@\S+\.\S+$/.test(body.email || '')) return send(400, { error_code: 'validation_failed', msg: 'Unable to validate email address: invalid format' });

@@ -1188,7 +1188,36 @@
     state.exam = null; state.mexam = null;
     apiPost("/api/exam", { action: "cancel" });
   }
+  /* The browser's Back and Forward buttons move between the browsing pages. Each page you open is pushed as a history
+     entry (the address does not change, so a refresh still works). Exams, results and the first-run steps are not
+     entries: Back from an exam goes to the page before it. Entries carry the user id, so another account's trail is
+     ignored after sign-out and sign-in. Not used in the preview copy. */
+  function sameRoute(a, b) { return JSON.stringify(a || null) === JSON.stringify(b || null); }
+  function pushRoute(prevRoute) {
+    var u = me();
+    if (state.fromPop || state.preview || !u || KEEP_PAGES.indexOf(state.route.name) < 0) return;
+    try {
+      if (!history.state || !history.state.cp) {
+        // the entry the user arrived on: label it with the page they were on, so Back can return to it
+        var base = prevRoute && KEEP_PAGES.indexOf(prevRoute.name) > -1 ? prevRoute : { name: "roadmap" };
+        history.replaceState({ cp: 1, uid: u.id, route: base }, "");
+      }
+      var here = history.state;
+      if (here && here.cp && here.uid === u.id && sameRoute(here.route, state.route)) return;
+      history.pushState({ cp: 1, uid: u.id, route: JSON.parse(JSON.stringify(state.route)) }, "");
+    } catch (e) { /* history can be blocked; the in-page buttons still work */ }
+  }
+  window.addEventListener("popstate", function (e) {
+    var u = me(), st = e.state;
+    if (!u || state.preview || !st || !st.cp || st.uid !== u.id || !st.route) return;
+    if (KEEP_PAGES.indexOf(st.route.name) < 0) return;
+    var admin = u.role === "admin", isAdminPage = st.route.name.indexOf("a-") === 0;
+    if (admin !== isAdminPage && st.route.name !== "profile") return;     // an entry from another kind of account
+    state.fromPop = true;
+    try { goPage(st.route); } finally { state.fromPop = false; }
+  });
   function go(name, params) {
+    var prevRoute = state.route;
     leaveExam(name);
     syncChallengeLock(state.route && state.route.name, name);
     if (name === "challenge" || name === "a-challenges") loadChallengeDefs();
@@ -1199,6 +1228,7 @@
       certStore.list = null; certStore.failed = false;      // look again: a result may have just earned one
     }
     rememberPage();
+    pushRoute(prevRoute);
     window.scrollTo(0, 0);
     render();
   }

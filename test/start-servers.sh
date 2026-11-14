@@ -16,5 +16,7 @@ CP_DEMO=0 CONTENT_TTL_MS=400 AI_HOURLY_LIMIT=1000 AI_DAILY_LIMIT=1000 SUPABASE_U
 # 3117: the same with AI scoring on (the marker is the fake model), a small hourly allowance so the limit can be reached
 CP_DEMO=0 CONTENT_TTL_MS=400 AI_HOURLY_LIMIT=6 AI_DAILY_LIMIT=1000 SUPABASE_URL=http://localhost:3113 SUPABASE_PUBLISHABLE_KEY=sb_publishable_test SUPABASE_SERVICE_ROLE_KEY=sb_secret_test \
   AI_API_KEY=test-key AI_BASE_URL=http://localhost:3112 PORT=3117 nohup node test/devserver.mjs > /tmp/dev-real-judge.log 2>&1 &
+# 3118: the same service-key setup with a cron secret set (the keep-alive route must refuse callers without it)
+TURNSTILE_SITE_KEY=test-site-key CRON_SECRET=cron-secret-test CP_DEMO=0 SUPABASE_URL=http://localhost:3113 SUPABASE_PUBLISHABLE_KEY=sb_publishable_test SUPABASE_SERVICE_ROLE_KEY=sb_secret_test PORT=3118 nohup node test/devserver.mjs > /tmp/dev-real-cron.log 2>&1 &
 sleep 2
 echo started

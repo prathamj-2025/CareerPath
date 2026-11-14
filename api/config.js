@@ -9,6 +9,9 @@
  * Google provider is set up in Supabase).
  * SUPPORT_EMAIL is the address shown on the Help, FAQ and Contact pages. Set it in Vercel when the
  * CareerPath mailbox exists; no redeploy of the pages is needed.
+ * TURNSTILE_SITE_KEY (public by design) switches on the invisible "are you human" check on sign-up, sign-in, reset and
+ * resend. Turn it on in Supabase (Authentication > Attack Protection) with the matching secret; see supabase/README.md.
+ * WEB_ANALYTICS=1 loads Vercel's page-view counter (turn on Analytics in the Vercel project first; free on Hobby).
  * CP_DEMO=1 switches the real accounts off and returns to the browser-only demo (used by tests).
  */
 import { DEFAULT_URL, DEFAULT_KEY } from "./_env.js";
@@ -23,6 +26,8 @@ export default function handler(req, res) {
     supabaseUrl: demo ? null : (process.env.SUPABASE_URL || DEFAULT_URL),
     supabaseKey: demo ? null : (process.env.SUPABASE_PUBLISHABLE_KEY || DEFAULT_KEY),
     supportEmail: process.env.SUPPORT_EMAIL || DEFAULT_SUPPORT,
-    googleOAuth: !demo && process.env.SUPABASE_GOOGLE === "1"
+    googleOAuth: !demo && process.env.SUPABASE_GOOGLE === "1",
+    captchaSiteKey: demo ? null : (process.env.TURNSTILE_SITE_KEY || null),
+    analytics: process.env.WEB_ANALYTICS === "1"
   });
 }

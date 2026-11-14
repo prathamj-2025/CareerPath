@@ -31,7 +31,7 @@ One shared Supabase project. Database changes live here as numbered SQL files in
 - `011_challenges.sql`: the `challenges` table (weekly challenges written or changed by admins) and the `challenge` kind for
   open attempts, which is how the server knows a student has the challenge page open. Server only: the site cannot read or
   write the table. Safe to run twice. Run it after the website that uses it is deployed; until then the site uses the challenges
-  in `public/data6.js`, admins cannot save challenge changes, and the assistant lock for challenges is not enforced.
+  in `content/data6.js`, admins cannot save challenge changes, and the assistant lock for challenges is not enforced.
 
 - `012_ai_scoring.sql`: a `reference` column on `challenges` (the model answer the AI marker compares against, never sent to
   students) and `met` and `judged` columns on `challenge_submissions` (the ticks the marker gave, and whether the AI or the
@@ -64,7 +64,7 @@ Students use the Print or save as PDF button on the certificate page, which prin
 
 ## Weekly challenges
 
-The challenges in `public/data6.js` are the starting point. Admins create, edit, schedule, publish and close challenges on the
+The challenges in `content/data6.js` (served to students with the scoring patterns removed) are the starting point. Admins create, edit, schedule, publish and close challenges on the
 admin page; the changes are saved by `api/challenges.js` into the `challenges` table and a row replaces the file's version of
 the same challenge. Publishing one closes the live one on that roadmap (nothing is deleted). A challenge can be edited only
 while it is a draft or scheduled: once it is live or closed, scores were made against its rubric, so write a new one.
@@ -111,3 +111,25 @@ Rules for everyone working here
 - Reference `public.profiles(id)` for the student. Use `public.is_admin()` for admin-only rules.
 - Never put the service role key in the repo, the website or a chat. Only the Project URL and
   the anon public key are allowed in the website.
+
+## Sign-up abuse protection
+
+Two layers, both free. Neither needs a migration.
+
+**1. Rate limits (Supabase, no code).** In the Supabase dashboard open Authentication, then Rate Limits. Keep the defaults, or lower
+"Sign-ups and sign-ins" and "Emails sent" for a small class. Supabase counts these per IP address.
+
+**2. An "are you human" check (Cloudflare Turnstile).** Invisible for almost everyone; Cloudflare shows a small challenge only
+when it is unsure. The site has the code already; it stays off until you do all three steps, **in this order**:
+
+1. In Cloudflare, open Turnstile (a free account is enough), add a widget for the site's domain, and copy the **Site Key** and the **Secret Key**.
+2. In Vercel, Settings, Environment Variables: add `TURNSTILE_SITE_KEY` with the Site Key (the public one). Redeploy.
+3. Only after that deploy is live: in Supabase, Authentication, Attack Protection, switch on **Enable Captcha protection**, choose
+   **Cloudflare Turnstile**, and paste the **Secret Key**.
+
+Why that order: once Supabase requires the check, any page that does not send the token cannot sign anyone up or in. Turning
+Supabase on last means the site is already sending it. To switch it off, do the reverse: Supabase first, then remove the Vercel variable.
+
+The check covers sign-up, password sign-in, resend-confirmation and password reset. "Continue with Google" does not use it
+(Google does its own checking). If the check cannot load (an ad blocker, for example), the person sees "We could not check that
+you are human. Reload the page and try again." and nothing is sent to the database.

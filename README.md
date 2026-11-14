@@ -183,6 +183,27 @@ Both appear as clickable cards on the sign-in screen.
 The key is only ever read inside `api/ask.js`, which runs on Vercel's servers. It is never
 sent to the browser and is not in this repository.
 
+### Keeping the free database awake
+
+Supabase pauses a free project after about a week with no activity. `vercel.json` has a daily cron that calls
+`/api/keepalive`, which reads one row and returns only `{ ok, status }`. Nothing to set up. Optionally add
+`CRON_SECRET` (any long random string) in Vercel: Vercel then sends it on its own cron calls and the route refuses
+everyone else. To check it by hand, open `https://<your-site>/api/keepalive`; `{"ok":true,"status":200}` means the
+database answered. Vercel's free (Hobby) plan allows one cron run per day, which is all this needs.
+
+### Error reports and page counts
+
+`public/monitor.js` reports uncaught browser errors to `/api/report`, which writes one line to the function log (Vercel, your
+project, Logs, search `client-error`). Nothing is stored and no names, emails or answers are sent: the error text, file and line,
+a short stack, the page path and the browser name. At most five distinct errors per page load and twenty per address per hour.
+Optional page-view counts: turn on Analytics in the Vercel project (free on the Hobby plan), then add `WEB_ANALYTICS` = `1` in
+Environment Variables and redeploy. The privacy page already describes both.
+
+### Sign-up protection
+
+Supabase's own rate limits plus an optional invisible Cloudflare Turnstile check on sign-up and sign-in. It stays off until
+`TURNSTILE_SITE_KEY` is set and the secret is added in Supabase; follow the order in `supabase/README.md` (Sign-up abuse protection).
+
 ### Switching provider
 
 `api/ask.js` speaks the OpenAI chat-completions format, which OpenAI, Gemini and several
@@ -225,7 +246,8 @@ public/data2.js        Business Analyst track.
 public/lessons-pjm.js Project Manager course (built by tools/build_lessons_pjm.py).
 public/data4.js        Practice exercises: prompts, schemas, hints, model answers.
 public/data5.js        Answer-checking rules for practice exercises.
-public/data6.js        Resume vocabulary, the five guided questions and the weekly challenge library.
+content/data6.js       Resume vocabulary, the five guided questions and the weekly challenge library, with each rubric line's scoring pattern (server only).
+public/data6.js        The same file as the site serves it: built by `npm run build:content`, with every rubric `re` pattern removed.
 public/onboard.js      Resume parsing, resume check, skill detection, guided questions, recommendation.
 public/vendor/         pdf.js 3.11.174 (Apache-2.0), loaded the first time a PDF is chosen so real-world PDFs can be read.
 test/app.spec.mjs      Student and admin flows.
@@ -265,6 +287,11 @@ Docs and LibreOffice export. A scanned or image-only resume has no text to find,
 says so and offers a paste box instead of failing quietly.
 
 ## Design decisions worth defending
+
+**The browser's Back and Forward buttons work.** Each browsing page you open (roadmap, track, skill, lesson, leaderboard, history, profile,
+admin pages) is a history entry, with the address unchanged so a refresh still works. Exams, results and the first-run steps are
+not entries: Back from an exam returns to the page before the skill. Entries carry the user id, so another account's trail is
+ignored. Not used in the preview copy.
 
 **Progress is earned, not declared.** There is no way for a student or an admin to set a
 star level. This is the difference between CareerPath and a self-reported skills list.

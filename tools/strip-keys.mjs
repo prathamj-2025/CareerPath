@@ -13,18 +13,21 @@ import path from "node:path";
 import * as acorn from "acorn";
 
 const ROOT = new URL("../", import.meta.url).pathname;
-export const FILES = ["data.js", "data2.js", "data4.js", "data5.js", "lessons-pm.js", "lessons-ba.js", "lessons-pjm.js"];
-const SECRET = new Set(["a", "why"]);
+export const FILES = ["data.js", "data2.js", "data4.js", "data5.js", "data6.js", "lessons-pm.js", "lessons-ba.js", "lessons-pjm.js"];
+/* What never leaves the server, by the list it sits in: the answer and explanation of every assessment question, and the
+   scoring pattern (re) of every weekly-challenge rubric line, which would otherwise tell a student exactly which words to write. */
+const SECRET_IN = { assessment: new Set(["a", "why"]), rubric: new Set(["re"]) };
 
 const keyName = (p) => (p.key.type === "Identifier" ? p.key.name : p.key.type === "Literal" ? String(p.key.value) : "");
 
-/* Source text with the secret properties of every `assessment` question cut out. */
+/* Source text with the secret properties of every `assessment` question and every `rubric` line cut out. */
 export function strip(src) {
   const ast = acorn.parse(src, { ecmaVersion: "latest", sourceType: "script" });
   const cuts = [];
   (function walk(n) {
     if (!n || typeof n.type !== "string") return;
-    if (n.type === "Property" && keyName(n) === "assessment" && n.value.type === "ArrayExpression") {
+    if (n.type === "Property" && SECRET_IN[keyName(n)] && n.value.type === "ArrayExpression") {
+      const SECRET = SECRET_IN[keyName(n)];
       for (const item of n.value.elements) {
         if (!item || item.type !== "ObjectExpression") continue;
         const props = item.properties;
@@ -84,5 +87,9 @@ if (import.meta.url === "file://" + process.argv[1]) {
   full.CP_ROLES.forEach((r) => r.skills.forEach((s) => s.assessment.forEach((q) => { total++; if (typeof q.a !== "number" || !q.why) missing++; })));
   pub.CP_ROLES.forEach((r) => r.skills.forEach((s) => s.assessment.forEach((q) => { if (q.a !== undefined || q.why !== undefined) leaked++; })));
   console.log(total + " assessment questions; " + missing + " without a key in content/; " + leaked + " still carrying a key in public/");
-  if (leaked || missing) process.exit(1);
+  let patterns = 0, patternsLeft = 0;
+  (full.CP_CHALLENGES || []).forEach((c) => c.rubric.forEach((r) => { if (r.re) patterns++; }));
+  (pub.CP_CHALLENGES || []).forEach((c) => c.rubric.forEach((r) => { if ("re" in r) patternsLeft++; }));
+  console.log(patterns + " challenge rubric patterns in content/; " + patternsLeft + " still in public/");
+  if (leaked || missing || patternsLeft || !patterns) process.exit(1);
 }

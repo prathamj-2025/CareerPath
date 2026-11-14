@@ -1,4 +1,4 @@
-/* The weekly challenges as they stand now: the ones that ship with the site (public/data6.js) with the admins' changes from
+/* The weekly challenges as they stand now: the ones that ship with the site (content/data6.js) with the admins' changes from
    the database layered on top (supabase/migrations/011_challenges.sql). A row in the table replaces the file's version of
    the same challenge, or adds a new one. If the table is missing (011 not run yet) the file's challenges are used as they are.
    The scoring patterns (the rubric's `re`) and the reference answer are sent only to admins; students get the labels.
@@ -16,7 +16,8 @@ export function base() {
   if (baseCache) return baseCache;
   const win = {};
   const ctx = vm.createContext({ window: win });
-  for (const f of ["data6.js", "challenge.js"]) vm.runInContext(fs.readFileSync(new URL(f, PUB), "utf8"), ctx, { filename: f });
+  vm.runInContext(fs.readFileSync(new URL("data6.js", SERVER), "utf8"), ctx, { filename: "data6.js" });   // the rubric patterns: server only
+  vm.runInContext(fs.readFileSync(new URL("challenge.js", PUB), "utf8"), ctx, { filename: "challenge.js" });
   vm.runInContext(fs.readFileSync(new URL("challenge-refs.js", SERVER), "utf8"), ctx, { filename: "challenge-refs.js" });   // reference answers: server only
   const refs = win.CP_CHALLENGE_REFS || {};
   baseCache = { list: (win.CP_CHALLENGES || []).map((c) => plain(c, refs[c.cid] || "")), ch: win.CP_CHALLENGE };

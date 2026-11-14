@@ -232,14 +232,10 @@
         "There is time to build only one this sprint. Which one would you build, and why? " +
         "Answer in 3 to 5 sentences, and say which number you would check after launch to see if it worked.",
       rubric: [
-        { label: "Picks one option clearly",
-          re: "\\b(i|we)\\s*(would|'d|will|should)?\\s*(build|pick|choose|go with|prioriti[sz]e|ship|start with|select)|(build|pick|choose|go with|prioriti[sz]e|start with)\\s+(the\\s+)?(dark mode|pdf|export|tutorial|onboarding|first[- ]day)|my (pick|choice|recommendation|decision)" },
-        { label: "Ties the choice to a user problem or a number from the list",
-          re: "60\\s*%|\\b120\\b|\\b45\\b|paying|paid|drop.?off|leave|leaving|churn|most requested|biggest|largest|most users|new users" },
-        { label: "Says why the other options wait",
-          re: "others?|other (two|options|requests|ideas)|later|next sprint|wait|not now|defer|backlog|lower priority|nice.?to.?have|can come" },
-        { label: "Names a success measure to check after launch",
-          re: "retention|day.?1|day one|activation|completion|usage|measure|metric|track|rate|adoption|churn" }
+        { label: "Picks one option clearly" },
+        { label: "Ties the choice to a user problem or a number from the list" },
+        { label: "Says why the other options wait" },
+        { label: "Names a success measure to check after launch" }
       ]
     },
     {
@@ -249,16 +245,11 @@
         "orders(order_id, order_date, product, quantity). Write the SQL query that answers it. " +
         "If you prefer, describe each step in words instead.",
       rubric: [
-        { label: "Adds up the quantity sold",
-          re: "sum\\s*\\(\\s*(\\w+\\.)?quantity|total quantity|add up (the )?quantity|sum of (the )?quantity|sum (the )?quantity|total (units|sold)" },
-        { label: "Filters to last month's dates",
-          re: "order_date\\s*(>=|>|<=|<|between)|between\\s+['\\d]|date_trunc|last month|previous month|interval|month\\s*\\(|where\\s+.*date" },
-        { label: "Groups by product",
-          re: "group\\s+by\\s+(\\w+\\.)?product|group(ed)? (the )?(rows|orders|sales|results)? ?by (the )?product|for each product|per product|by product" },
-        { label: "Sorts from highest to lowest",
-          re: "order\\s+by[^;]*desc|descending|highest to lowest|largest first|biggest first|sort(ed)? .*desc|top selling|top sellers" },
-        { label: "Limits the result to 3",
-          re: "limit\\s*3|top\\s*\\(?\\s*3|first (three|3)|top (three|3)|fetch first 3|only (three|3)|rownum\\s*<=\\s*3|3 (best|top)" }
+        { label: "Adds up the quantity sold" },
+        { label: "Filters to last month's dates" },
+        { label: "Groups by product" },
+        { label: "Sorts from highest to lowest" },
+        { label: "Limits the result to 3" }
       ]
     },
     {
@@ -270,16 +261,11 @@
         "Which tasks can run at the same time? What is the shortest time before the webinar can be held? " +
         "Name one risk and how you would handle it.",
       rubric: [
-        { label: "Says the platform and the slides can start together",
-          re: "parallel|same time|simultaneous|at once|concurrent|together|side by side|at the same" },
-        { label: "Gets the shortest time right: 4 days",
-          re: "\\b4\\b|\\bfour\\b" },
-        { label: "Explains that slides then rehearsal is the longest path",
-          re: "slides?.{0,60}rehears|longest|critical path|3\\s*\\+\\s*1|three.{0,20}one|slides and rehears" },
-        { label: "Names a risk",
-          re: "risk|could go wrong|might|may |delay|late|run over|overrun|falls through|fails?|problem|illness|sick|no.?show" },
-        { label: "Says how the risk would be handled",
-          re: "mitigat|backup|back-?up|plan b|contingency|buffer|extra time|reserve|so that|to handle|would handle|in advance|ahead of time|early|if that happens|prepare|spare" }
+        { label: "Says the platform and the slides can start together" },
+        { label: "Gets the shortest time right: 4 days" },
+        { label: "Explains that slides then rehearsal is the longest path" },
+        { label: "Names a risk" },
+        { label: "Says how the risk would be handled" }
       ]
     },
     {
@@ -289,16 +275,11 @@
         "Signups are flat and no release went out in that window. Write how you would find the cause. " +
         "Name the first three things you would look at, in order, and say what each one would rule in or out.",
       rubric: [
-        { label: "Segments the drop rather than treating it as one number",
-          re: "segment|cohort|breakdown|by platform|by channel|by device|slice" },
-        { label: "Checks acquisition mix as an explanation",
-          re: "channel|acquisition|source|paid|organic|traffic mix|marketing" },
-        { label: "Considers instrumentation or tracking error before product causes",
-          re: "instrument|tracking|logging|event|analytics break|data quality|pipeline" },
-        { label: "States what each check would rule in or out",
-          re: "rule out|rule in|if .*then|would tell|confirm|eliminate|distinguish" },
-        { label: "Gives an ordered plan rather than a list of ideas",
-          re: "first|second|third|then|next|start by|order" }
+        { label: "Segments the drop rather than treating it as one number" },
+        { label: "Checks acquisition mix as an explanation" },
+        { label: "Considers instrumentation or tracking error before product causes" },
+        { label: "States what each check would rule in or out" },
+        { label: "Gives an ordered plan rather than a list of ideas" }
       ]
     },
     {
@@ -307,13 +288,10 @@
       brief: "Your team wants to test moving the paywall from day 14 to day 7. Define the primary metric, " +
         "two guardrail metrics, and the result that would make you ship despite a fall in one of them.",
       rubric: [
-        { label: "Names one primary metric, not several", re: "primary metric|north star|primary:" },
-        { label: "Guardrails protect against a known side effect",
-          re: "guardrail|churn|uninstall|refund|support ticket|nps|retention" },
-        { label: "States a decision rule before seeing the data",
-          re: "ship if|decision rule|threshold|would ship|stop if|only if" },
-        { label: "Acknowledges a trade-off rather than claiming a pure win",
-          re: "trade-?off|accept|worth|cost of|even if|despite" }
+        { label: "Names one primary metric, not several" },
+        { label: "Guardrails protect against a known side effect" },
+        { label: "States a decision rule before seeing the data" },
+        { label: "Acknowledges a trade-off rather than claiming a pure win" }
       ]
     },
     {
@@ -323,15 +301,11 @@
         "Write the questions you would ask to make that buildable, then write three requirements that a " +
         "developer could implement and a tester could verify.",
       rubric: [
-        { label: "Asks who the report is for and what decision it drives",
-          re: "who |audience|decision|use it|purpose|act on" },
-        { label: "Pins down \"how the branches are doing\" to named measures",
-          re: "metric|measure|revenue|volume|target|kpi|define" },
-        { label: "Pins down \"updated often\" to a frequency or latency",
-          re: "daily|hourly|weekly|real.?time|refresh|latency|frequency|sla" },
-        { label: "Requirements are verifiable rather than aspirational",
-          re: "shall|must|given|when |then |acceptance|verif|testable|criteria" },
-        { label: "Covers access or permissions", re: "permission|access|role|who can see|security|confidential" }
+        { label: "Asks who the report is for and what decision it drives" },
+        { label: "Pins down \"how the branches are doing\" to named measures" },
+        { label: "Pins down \"updated often\" to a frequency or latency" },
+        { label: "Requirements are verifiable rather than aspirational" },
+        { label: "Covers access or permissions" }
       ]
     },
     {
@@ -340,12 +314,10 @@
       brief: "Purchase orders take eleven days from request to approval. Four teams touch the request. " +
         "Describe how you would map the as-is process and identify where the eleven days actually go.",
       rubric: [
-        { label: "Measures time per step rather than guessing",
-          re: "cycle time|timestamp|measure|duration|time per|log|data" },
-        { label: "Separates work time from wait time", re: "wait|queue|idle|handoff|hand-off|delay|touch time" },
-        { label: "Names who owns each step", re: "swimlane|owner|role|responsib|raci|team" },
-        { label: "Proposes a to-be change tied to the measured bottleneck",
-          re: "to-?be|remove|parallel|automate|threshold|delegate|combine" }
+        { label: "Measures time per step rather than guessing" },
+        { label: "Separates work time from wait time" },
+        { label: "Names who owns each step" },
+        { label: "Proposes a to-be change tied to the measured bottleneck" }
       ]
     },
     {
@@ -355,13 +327,11 @@
         "C (2 days, after A), D (5 days, after B), E (3 days, after C), F (2 days, after D and E). " +
         "Work out the critical path and the project length, say how much float activity E has, and explain what you would watch most closely.",
       rubric: [
-        { label: "Identifies the critical path A, B, D, F",
-          re: "a.{0,6}b.{0,6}d.{0,6}f|critical path" },
-        { label: "States the project duration of 14 days", re: "14" },
-        { label: "Explains float for the non-critical path", re: "float|slack|can slip|can be delayed|buffer" },
-        { label: "Says delays on the critical path delay the whole project",
-          re: "delay.*(project|finish|end)|any slip|directly|no float|zero float" },
-        { label: "Names what to monitor or protect", re: "monitor|watch|protect|track|focus|prioriti|risk" }
+        { label: "Identifies the critical path A, B, D, F" },
+        { label: "States the project duration of 14 days" },
+        { label: "Explains float for the non-critical path" },
+        { label: "Says delays on the critical path delay the whole project" },
+        { label: "Names what to monitor or protect" }
       ]
     },
     {
@@ -370,11 +340,11 @@
       brief: "Halfway through a 20-week project, planned value is 100,000 USD, earned value is 80,000 USD and actual cost is 95,000 USD. " +
         "Calculate the schedule and cost performance indexes, explain them in plain English and tell your sponsor what you recommend.",
       rubric: [
-        { label: "Calculates SPI as 0.8 and CPI as about 0.84", re: "0\\.8|0\\.84|80%|84%" },
-        { label: "Explains behind schedule and over budget in plain English", re: "behind|late|over budget|overspend|spending more|less value" },
-        { label: "Forecasts the outcome rather than only reporting it", re: "forecast|eac|estimate at completion|likely|at this rate|finish" },
-        { label: "Recommends a concrete action", re: "recommend|propose|options|reduce scope|add|re-?baseline|recover|escalat" },
-        { label: "Asks the sponsor for a decision", re: "decision|approve|sponsor|choose|agree" }
+        { label: "Calculates SPI as 0.8 and CPI as about 0.84" },
+        { label: "Explains behind schedule and over budget in plain English" },
+        { label: "Forecasts the outcome rather than only reporting it" },
+        { label: "Recommends a concrete action" },
+        { label: "Asks the sponsor for a decision" }
       ]
     }
   ];
