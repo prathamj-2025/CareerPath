@@ -69,6 +69,15 @@ await step('after a reload the same ticks and note come back from the saved row'
   need(t.includes('75%') && t.includes('An AI marker read your answer') && (await pm.$$('.check-panel .crit.met')).length === 3, 'saved result differs: ' + t.slice(0, 160));
 });
 
+await step('if a submission is cleared in the database, the page stops showing it after a reload and the answer box returns', async () => {
+  await j('/__subsclear');
+  await pm.reload(); await pm.waitForSelector('[data-nav="challenge"]');
+  await pm.waitForTimeout(1500);
+  await pm.click('[data-nav="challenge"]');
+  await pm.waitForSelector('#ch-text', { timeout: 8000 });
+  need(!(await pm.textContent('#view')).includes('Submitted'), 'a cleared submission is still shown');
+});
+
 await step('a lesson scenario is marked by the AI, each key point with a short reason, and falls back with a note when it cannot', async () => {
   await openSkill(pm, 'foundations-pm', 'pm-fundamentals'); await pm.waitForSelector('.scn textarea');
   await pm.fill('.scn textarea', 'It depends on the problem. MET:1,3');

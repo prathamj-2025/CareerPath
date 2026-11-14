@@ -126,6 +126,7 @@ const server = http.createServer(async (req, res) => {
     return send(200, {});
   }
   if (p === '/__subs') return send(200, [...subs.values()]);
+  if (p === '/__subsclear') { subs.clear(); return send(200, { ok: true }); }
   if (p === '/__attempts') { const u = users.get(url.searchParams.get('email')); return send(200, [...attempts.values()].filter(r => r.user_id === u.id)); }
   if (p === '/__age') { const a = attempts.get(url.searchParams.get('id')); if (a) a.started_at = new Date(Date.now() - Number(url.searchParams.get('minutes')) * 60e3).toISOString(); return send(200, {}); }
   if (p === '/__challenges') return send(200, chs.rows);

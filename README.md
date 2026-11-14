@@ -56,6 +56,8 @@ those yes/no answers into the percentage, so the model never sets a number. The 
 a student's browser. If no model is available the old keyword rubric scores the answer instead.
 The same marker checks the written practice in the modules (`api/judge.js`): practice exercises and lesson
 scenarios, with the keyword check as the fallback. Set `AI_JUDGE=off` to switch AI scoring off.
+The practical project reviewer (`api/grade-project.js`) tries a second time if the model's reply cannot be read, and logs the
+unreadable reply to the host's function logs so a recurring problem can be diagnosed.
 
 **Admin side.** A separate role on the same application. Lessons publish directly.
 Assessment questions go through draft, review and publish, and the version they replace is

@@ -33,7 +33,8 @@
     "\"criteria\": [{\"label\": \"<what a strong version has to do, under 8 words>\", \"ok\": <true or false>, \"note\": \"<one sentence, specific to their text>\"}], " +
     "\"next\": [\"<one concrete fix>\", \"<optional second fix>\"]}\n" +
     "Give four to six criteria drawn from the brief and the field's real standards. Give one or two fixes in \"next\", ordered by impact. " +
-    "Plain language, no em dashes, no markdown, no code fences. Do not rewrite the project for the student and do not include a model answer.";
+    "Plain language, no em dashes, no markdown, no code fences. Do not rewrite the project for the student and do not include a model answer. " +
+    "Refer only to what the student actually wrote. Never credit them with a number, name or claim that is not in their text, and do not borrow details from the brief.";
 
   function rules(dateText) {
     return RULES + (dateText ? "\n\nToday's date is " + dateText + "." : "");
@@ -50,13 +51,20 @@
     return String(s == null ? "" : s).replace(/—|–/g, "-").replace(/\s+/g, " ").trim().slice(0, max);
   }
 
+  /* Models sometimes return almost-JSON: a trailing comma, or a raw line break inside a string. Fix only those two things,
+     then parse. Anything still wrong returns null, so a bad reply is never accepted. */
+  function parseLoose(t) {
+    try { return JSON.parse(t); } catch (e) { /* try the repairs */ }
+    try { return JSON.parse(t.replace(/[\u0000-\u001f]+/g, " ").replace(/,\s*([}\]])/g, "$1")); } catch (e) { return null; }
+  }
+
   /* Strict parse. Anything unexpected returns null, and the caller shows an error instead of accepting the project. */
   function read(text) {
     var raw = String(text || "");
     var a = raw.indexOf("{"), b = raw.lastIndexOf("}");
     if (a < 0 || b <= a) return null;
-    var d;
-    try { d = JSON.parse(raw.slice(a, b + 1)); } catch (e) { return null; }
+    var d = parseLoose(raw.slice(a, b + 1));
+    if (!d) return null;
     if (!d || typeof d !== "object") return null;
     var score = Math.round(Number(d.score));
     if (!isFinite(score) || score < 0 || score > 100) return null;

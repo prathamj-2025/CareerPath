@@ -366,6 +366,10 @@
     CP_AUTH.rest("GET", "challenge_submissions?select=*&user_id=eq." + encodeURIComponent(u.id)).then(function (r) {
       if (state.userId !== u.id && state.finishUser !== u.id) return;
       if (r.error) { if ((tries || 0) < 4) setTimeout(function () { loadChallenges(u, (tries || 0) + 1); }, 8000); return; }
+      // The database is the truth. A copy kept in this browser from an earlier visit must not outlive the row it came from
+      // (an admin can clear a submission), unless an answer is being sent right now and has not been saved yet.
+      var here = {}; (r.body || []).forEach(function (row) { here[row.challenge_id] = true; });
+      if (!(state.ch && state.ch.busy)) Object.keys(u.challenges || {}).forEach(function (cid) { if (!here[cid]) delete u.challenges[cid]; });
       (r.body || []).forEach(function (row) {
         var c = chById(row.challenge_id);
         if (!c) return;
@@ -2987,7 +2991,7 @@
           "</span><span><b>" + esc(c.label) + ".</b> " + esc(c.note) + "</span></li>";
       }).join("") + "</ul>" +
       ((sub.next || []).length
-        ? '<p class="tiny check-note"><b>' + (sub.accepted ? "To make it stronger:" : "Fix first:") + "</b> " + (sub.next || []).map(esc).join(" ") + "</p>"
+        ? '<p class="tiny check-note"><b>' + (sub.accepted ? "To make it stronger:" : "Fix first:") + "</b> " + (sub.next || []).map(function (t) { t = String(t).trim(); return esc(/[.!?]$/.test(t) ? t : t + "."); }).join(" ") + "</p>"
         : "") +
     "</div>";
   }
@@ -3039,7 +3043,8 @@
     "The score is only a coverage check and is already fixed. Your job is to explain the answer's quality so the student can improve it.\n\n" +
     "Write three or four sentences. Say what the answer did well, name the single most important thing missing or weakest, " +
     "and give one concrete suggestion. Plain language, no headings, no bullet lists, no em dashes. " +
-    "Do not rewrite the answer for them and do not repeat the key points verbatim.\n\n";
+    "Do not rewrite the answer for them and do not repeat the key points verbatim. " +
+    "Refer only to what the student actually wrote: never credit them with a number, name or idea that is not in their answer.\n\n";
 
   function quizBlock(s) {
     var q = state.quiz;

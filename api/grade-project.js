@@ -41,9 +41,17 @@ export default async function handler(req, res) {
   if (recent.ok && Array.isArray(recent.data) && recent.data.length >= MAX_PER_HOUR)
     return fail(res, 429, "too_many", "You have requested a lot of reviews in the last hour. Revise your project and try again later.");
 
-  const raw = await completeText(P.rules(today()), [{ role: "user", content: P.prompt(role.name, sk.name, sk.project, text) }], 40000);
+  // One automatic second try if the model's reply cannot be read, so a student does not have to resubmit by hand.
+  const ask = () => completeText(P.rules(today()), [{ role: "user", content: P.prompt(role.name, sk.name, sk.project, text) }], 40000);
+  let raw = await ask();
   if (!raw) return fail(res, 503, "reviewer_unavailable", "The reviewer is not available right now, so the project was not submitted. Your text is still here; try again in a moment.");
-  const r = P.read(raw);
+  let r = P.read(raw);
+  if (!r) {
+    console.error("project reviewer reply could not be read (first try):", String(raw).slice(0, 600).replace(/\s+/g, " "));
+    const again = await ask();
+    r = again ? P.read(again) : null;
+    if (!r) console.error("project reviewer reply could not be read (second try):", String(again || "").slice(0, 600).replace(/\s+/g, " "));
+  }
   if (!r) return fail(res, 502, "unreadable", "The review came back in a form that could not be read, so nothing was recorded. Try submitting again.");
 
   const accepted = r.score >= P.PASS;

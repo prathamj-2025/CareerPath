@@ -3,8 +3,10 @@
 import http from 'node:http';
 
 const PORT = Number(process.env.PORT || 3112);
+const flakySeen = new Set();
 
 http.createServer(async (req, res) => {
+  if (req.method === 'GET' && req.url === '/__lastbody') { res.setHeader('content-type', 'application/json'); res.end(JSON.stringify(globalThis.__lastBody || null)); return; }
   if (req.method === 'GET' && req.url === '/__lastjudge') { res.setHeader('content-type', 'application/json'); res.end(JSON.stringify(globalThis.__lastJudge || null)); return; }
   const chunks = [];
   for await (const c of req) chunks.push(c);
@@ -54,6 +56,8 @@ http.createServer(async (req, res) => {
     const m = /SUBMISSION\\n([\s\S]*?)\\nSUBMISSION>>>/.exec(sent);
     const text = m ? m[1] : '';
     if (/BADJSON/.test(text)) return 'I think this is fine, maybe a 90.';
+    if (/FLAKY/.test(text) && !flakySeen.has(text)) { flakySeen.add(text); return '{"score": 80, "summary": "Cut off mid-'; }   // the first reply is unreadable, the retry is fine
+    if (/COMMAS/.test(text)) return '{"score": 82, "summary": "Specific and well reasoned.",\n "criteria": [{"label": "Follows the brief", "ok": true, "note": "Covers it.",}, {"label": "Specific evidence", "ok": true, "note": "Concrete.",},],\n "next": ["Add one number.",],}';
     const score = /GOODPROJECT/.test(text) ? 82 : /IGNORE/.test(text) ? 15 : 55;
     return JSON.stringify({ score, summary: score >= 70 ? 'Specific and well reasoned. The recommendation is clear.' : 'The idea is right but it stays generic. Add numbers and a decision.',
       criteria: [{ label: 'Follows the brief', ok: score >= 70, note: 'Covers the parts the brief asked for.' }, { label: 'Specific evidence', ok: score >= 70, note: 'Uses concrete detail.' },
