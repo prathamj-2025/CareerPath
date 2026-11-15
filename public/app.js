@@ -1640,7 +1640,7 @@
         '<div class="row" style="gap:4px">' +
           (admin ? '<span class="pill mono">Admin</span>' : roleSwitchHTML(user)) +
           themeBtn() +
-          '<button class="btn sm ghost" data-action="logout">Out</button>' +
+          '<button class="btn sm ghost" data-action="logout" aria-label="Sign out" title="Sign out"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg></button>' +
         "</div>" +
       "</div>" +
       '<div class="mb-nav">' +
@@ -3129,12 +3129,12 @@
         qs.map(function (q, j) { return '<i class="' + (j < e.idx ? "on" : "") + '"></i>'; }).join("") +
       "</div>" +
       '<div class="q-card"><div class="progress-head">' +
-        '<span class="pill">Level ' + item.lvl + '</span><span class="tiny muted ver">' + esc(item.qid) + " v" + item.v + "</span></div>" +
+        '<span class="pill">Level ' + item.lvl + "</span></div>" +
         '<p class="q-stem">' + esc(item.q) + '</p><div class="opts">' +
         item.opts.map(function (o, j) {
           return '<button class="opt" data-action="exam-answer" data-i="' + j + '"><span class="key">' + "ABCD"[j] + "</span><span>" + esc(o) + "</span></button>";
         }).join("") + "</div></div>" +
-      '<p class="tiny muted" style="margin-top:14px">Answers are final once selected. Each attempt records the question version it was scored against.</p>';
+      '<p class="tiny muted" style="margin-top:14px">Answers are final once selected.</p>';
   }
 
   function r0(user) { return role(user.roleId); }
@@ -3242,7 +3242,7 @@
             return '<button class="skill-row" data-action="open-cert" data-skill="' + c.skill.id + '">' +
               '<span><span class="skill-name">' + esc(c.skill.name) + '</span><span class="skill-lens" style="display:block">' +
                 (c.track ? "Module exam " + c.p.best + "%" : LEVELS[c.p.stars].label) + " &middot; " + certIdText(user, c.skill.id) + "</span></span>" +
-              '<span class="skill-right">' + starHTML(c.p.stars) + '<span class="pill accent">View</span></span></button>';
+              '<span class="skill-right">' + (c.track ? "" : starHTML(c.p.stars)) + '<span class="pill accent">View</span></span></button>';
           }).join("") + "</div>");
   }
 
@@ -4636,7 +4636,14 @@
       var box = document.querySelector('[data-practice="' + key + '"]');
       if (box) st.text = box.value;
       st.hintList = st.hintList || [];
-      var fallback = [
+      /* After a check, the hints aim at the key points the answer has not covered yet, one at a time, without giving them away. */
+      var missed = ((st.checked && st.checked.criteria) || []).filter(function (c) { return !c.ok; }).map(function (c) { return c.label; });
+      var target = missed[Math.min(st.hintList.length, missed.length - 1)];
+      var fallback = missed.length ? [
+        "Your answer has not covered this yet: \"" + missed[0] + "\". Re-read the lesson \"" + lesson.title + "\" for the idea behind it, then add a sentence about it.",
+        "Look at the key point \"" + (missed[1] || missed[0]) + "\". Say what you would do about it and why, in your own words.",
+        "Write one more sentence for each key point still missing, then check again. Be specific: a number, a named person or team, or a trade-off."
+      ] : [
         "Start from the decision the question asks for, then give the reason. Re-read the lesson \"" + lesson.title + "\" for the idea this question tests.",
         "Make it specific. A number, a named person or team, or a trade-off you are accepting is what separates a strong answer from a generic one.",
         "Write your own attempt now, even a rough one, then check it. The check shows how many of the " + sc.written.points.length + " key ideas you covered."
@@ -4644,7 +4651,8 @@
       if (!tutor.ready || tutor.denied) { st.hintList.push(fallback[Math.min(st.hintList.length, 2)]); return render(); }
       st.hintBusy = true; render();
       askModel({ rules: PRJ.hintRules, signal: null, onText: null, convo: [{ role: "user", content:
-        PRJ.hintPrompt((role(actor().roleId) || {}).name, lesson.title, sc.setup + "\n" + sc.written.prompt, st.text, st.hintList) }] })
+        PRJ.hintPrompt((role(actor().roleId) || {}).name, lesson.title, sc.setup + "\n" + sc.written.prompt +
+          (target ? "\n\nThe last check found this key point missing from the student's answer. Point them toward it with a question or a nudge, without stating the answer: " + target : ""), st.text, st.hintList) }] })
         .then(function (res) { st.hintBusy = false; st.hintList.push(String(res.text || "").replace(/\u2014/g, "-").trim().slice(0, 500) || fallback[Math.min(st.hintList.length, 2)]); render(); })
         .catch(function () { st.hintBusy = false; st.hintList.push(fallback[Math.min(st.hintList.length, 2)]); render(); });
     },

@@ -555,7 +555,7 @@ await step('student sees the admin-published question change', async () => {
   await page.waitForTimeout(200);
   const t = await page.textContent('.q-card');
   if (!t.includes('DRAFTED QUESTION TEXT')) throw new Error('published edit not live for student');
-  if (!/v2/.test(t)) throw new Error('version stamp missing on exam question');
+  if (/-q\d+ v\d|-n\d+ v\d|\bv2\b/.test(t)) throw new Error('an internal question ID or version is shown to the student: ' + t.slice(0, 120));
 });
 
 await step('signup still creates a student, never an admin', async () => {
