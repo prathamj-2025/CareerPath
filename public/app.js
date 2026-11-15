@@ -46,6 +46,7 @@
     adminSkill: null,     // { roleId, skillId }
     adminEdit: null,      // qid being edited, or "new"
     adminLesson: null,    // lesson index being edited
+    adminNewLesson: false, // the "add a lesson" form is open
     adminProject: false,  // project brief open for editing
     adminPractice: null,  // practice exercise index being edited
     adminHistory: null,   // qid whose version history is open
@@ -2322,9 +2323,12 @@
       r.skills.forEach(function (sk) {
         var c = skills[sk.id]; if (!c) return;
         n++;
+        if (c.count != null) { while (sk.lessons.length > c.count && sk.lessons[sk.lessons.length - 1].added) sk.lessons.pop(); }
         Object.keys(c.lessons || {}).forEach(function (i) {
-          var l = sk.lessons[i]; if (!l) return;
+          var l = sk.lessons[i];
+          if (!l) { if (+i !== sk.lessons.length) return; l = sk.lessons[i] = { added: true }; }   // a lesson an admin added
           l.title = c.lessons[i].title; l.body = c.lessons[i].body;
+          if (c.lessons[i].minutes) l.minutes = c.lessons[i].minutes;
         });
         sk.assessment = (c.assessment || []).map(function (q) {
           var o = { qid: q.qid, v: q.v, lvl: q.lvl, q: q.q, opts: q.opts.slice() };
@@ -3566,12 +3570,31 @@
           return '<div style="border:1px solid var(--line);border-radius:9px;padding:13px">' +
             '<div class="row" style="justify-content:space-between;align-items:flex-start;gap:12px">' +
               '<p style="font-weight:500"><span class="pill" style="margin-right:6px">' + (i + 1) + "</span>" + esc(l.title) + "</p>" +
-              '<button class="btn sm" data-action="al-edit" data-i="' + i + '">Edit</button></div>' +
-            '<p class="tiny muted" style="margin-top:8px">' + esc(l.body.slice(0, 160)) + "&hellip;</p>" +
+              '<div class="row" style="gap:6px;flex-wrap:nowrap"><button class="btn sm" data-action="al-edit" data-i="' + i + '">Edit</button>' +
+              (l.added && i === s.lessons.length - 1 ? '<button class="btn sm" data-action="al-remove" data-i="' + i + '">Remove</button>' : "") + "</div></div>" +
+            '<p class="tiny muted" style="margin-top:8px">' + (l.added ? '<span class="pill" style="margin-right:6px">Added by an admin</span>' : "") + esc(l.body.slice(0, 160)) + "&hellip;</p>" +
             versionList(s, "lesson", i, (s.history && s.history.lessons && s.history.lessons[i]) || [], function (h) { return h.title + " - " + h.body.slice(0, 100); }) + "</div>";
         }).join("") +
-      "</div>" +
+      "</div>" + addLessonBox(s) +
       projectEditor(s) + practiceEditors(s);
+  }
+
+  /* A new lesson goes after the last one. Lessons that shipped cannot be removed (students' progress refers to them by position),
+     but one an admin added can be taken away again while it is the last, and brought back from its earlier versions. */
+  function addLessonBox(s) {
+    if (state.adminNewLesson) {
+      return '<div style="border:1px solid var(--accent);border-radius:9px;padding:15px;margin-top:10px"><div class="stack" style="gap:10px">' +
+        '<div class="field"><label for="an-t">New lesson title</label><input id="an-t"></div>' +
+        '<div class="field"><label for="an-b">Lesson text</label><textarea id="an-b" rows="12" ' + taStyle() + '></textarea>' +
+          '<p class="tiny muted" style="margin-top:6px">Plain text. A blank line starts a new paragraph, a line starting with &gt; is a highlighted point, rows like | a | b | make a table, and three backticks around code make a code block. It goes after lesson ' + s.lessons.length + " and is live as soon as you publish. It has no scenario or revision sheet.</p></div>" +
+        '<div class="row"><button class="btn primary sm" data-action="an-save">Publish lesson</button><button class="btn sm" data-action="an-cancel">Cancel</button></div>' +
+        "</div></div>";
+    }
+    var gone = (s.history && s.history.lessons && s.history.lessons[s.lessons.length]) || [];
+    var atMax = s.lessons.length >= 30;
+    return '<div style="margin-top:10px">' +
+      (atMax ? '<p class="tiny muted">A skill can have at most 30 lessons.</p>' : '<button class="btn sm" data-action="an-open">+ Add a lesson</button>') +
+      (gone.length ? versionList(s, "lesson", s.lessons.length, gone, function (h) { return "Removed lesson: " + h.title; }).replace("Earlier versions", "Removed lessons you can bring back") : "") + "</div>";
   }
 
   /* Earlier versions of one thing an admin can put back. Putting one back saves it as a new live version, so nothing is lost. */
@@ -4252,7 +4275,7 @@
       render();
     },
 
-    nav: function (el) { state.adminEdit = null; state.adminLesson = null; state.adminProject = false; state.adminPractice = null; go(el.dataset.nav); },
+    nav: function (el) { state.adminEdit = null; state.adminLesson = null; state.adminProject = false; state.adminPractice = null; state.adminNewLesson = false; go(el.dataset.nav); },
 
     // The logo always goes to the student's home: the roadmap, or the role picker until one is chosen.
     home: function () {
@@ -4876,6 +4899,23 @@
       render();
     },
 
+    "an-open": function () { state.adminNewLesson = true; render(); },
+    "an-cancel": function () { state.adminNewLesson = false; render(); },
+    "an-save": function () {
+      var s = skill(state.adminSkill.roleId, state.adminSkill.skillId);
+      var t = val("an-t"), b = val("an-b");
+      if (!t || !b) return;
+      if (REAL) return adminCall({ action: "lesson-add", skill: s.id, title: t, body: b }, function () { state.adminNewLesson = false; render(); });
+      s.lessons.push({ title: t, body: b, minutes: Math.max(1, Math.round(b.split(/\s+/).length / 200)), added: true });
+      state.adminNewLesson = false; render();
+    },
+    "al-remove": function (el) {
+      var s = skill(state.adminSkill.roleId, state.adminSkill.skillId);
+      var i = +el.dataset.i;
+      if (!s.lessons[i] || !s.lessons[i].added || i !== s.lessons.length - 1) return;
+      if (REAL) return adminCall({ action: "lesson-remove", skill: s.id, idx: i });
+      s.lessons.pop(); render();
+    },
     "ap-edit": function () { state.adminProject = true; render(); },
     "ap-cancel": function () { state.adminProject = false; render(); },
     "ap-save": function () {

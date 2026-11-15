@@ -11,6 +11,8 @@
            override-save { kind: "project", skill, fields: { title, brief } }
                         { kind: "practice", skill, i, fields: { prompt, hints[], answer } }
                                                              publishes at once; the old version is kept (013_content_overrides.sql)
+           lesson-add    { skill, title, body }           a new lesson after the last one; publishes at once
+           lesson-remove { skill, idx }                   takes away the LAST lesson, only if an admin added it; it can be restored
            restore      { kind: "lesson"|"project"|"practice", skill, idx|i, version }
                                                              puts an earlier version back as a new live version
          Every call answers with the admin view of the content so the page can redraw.
@@ -18,7 +20,7 @@
    The tables behind this (supabase/migrations/008_content_edits.sql) cannot be reached from the browser at all: the server
    checks the caller is an admin, checks the content, then writes with the service role key. */
 import { authenticate, body, fail } from "./_auth.js";
-import { content, baseContent, invalidate, questionOf, skillOf, viewFor } from "./_content.js";
+import { content, baseContent, invalidate, questionOf, skillOf, viewFor, MAX_LESSONS } from "./_content.js";
 
 const MIN_QUESTIONS = 5;   // a skill assessment must keep at least this many live questions
 
@@ -70,7 +72,11 @@ export default async function handler(req, res) {
      version it replaces is kept too. */
   if (b.action === "restore") {
     const v = Number.isInteger(b.version) ? b.version : -1;
-    if (b.kind === "lesson") {
+    if (b.kind === "lesson" && found && b.idx === found.skill.lessons.length) {       // a lesson that was removed comes back at the end
+      const row = rows.lessons.filter((r) => r.skill_id === found.skill.id && r.idx === b.idx && r.version === v && r.status === "archived")[0];
+      if (!row) return fail(res, 404, "no_version", "That earlier version was not found.");
+      b = { action: "lesson-add", skill: b.skill, title: row.title, body: row.body };
+    } else if (b.kind === "lesson") {
       const row = found && Number.isInteger(b.idx) ? rows.lessons.filter((r) => r.skill_id === found.skill.id && r.idx === b.idx && r.version === v && r.status === "archived")[0] : null;
       if (!row) return fail(res, 404, "no_version", "That earlier version was not found.");
       b = { action: "lesson-save", skill: b.skill, idx: b.idx, title: row.title, body: row.body };
@@ -127,6 +133,29 @@ export default async function handler(req, res) {
       return needs013();
     }
     return done();
+  }
+
+  if (b.action === "lesson-add") {
+    if (!found) return fail(res, 404, "no_skill", "That skill does not exist.");
+    const title = text(b.title, 200), bodyText = typeof b.body === "string" ? b.body.trim() : "";
+    if (!title || title.length > 200) return fail(res, 400, "bad_request", "The title must be 1 to 200 characters.");
+    if (!bodyText || bodyText.length > 30000) return fail(res, 400, "bad_request", "The lesson text must be 1 to 30,000 characters.");
+    const idx = found.skill.lessons.length;
+    if (idx >= MAX_LESSONS) return fail(res, 400, "too_many", "A skill can have at most " + MAX_LESSONS + " lessons.");
+    const mine = rows.lessons.filter((r) => r.skill_id === found.skill.id && r.idx === idx);
+    const next = Math.max(0, ...mine.map((r) => r.version)) + 1;
+    const made = await rest("POST", "content_lessons", { skill_id: found.skill.id, idx, version: next, status: "live", title, body: bodyText, edited_by: uid }, "return=minimal");
+    return made.ok ? done() : saveFailed();
+  }
+
+  if (b.action === "lesson-remove") {
+    if (!found) return fail(res, 404, "no_skill", "That skill does not exist.");
+    const baseLen = baseContent().roles.filter((r) => r.id === found.role.id)[0].skills.filter((x) => x.id === found.skill.id)[0].lessons.length;
+    if (!Number.isInteger(b.idx) || b.idx !== found.skill.lessons.length - 1 || b.idx < baseLen) {
+      return fail(res, 400, "bad_request", "Only the last lesson can be removed, and only if it was added here. Lessons that shipped can be edited but not removed.");
+    }
+    const arch = await rest("PATCH", "content_lessons?skill_id=eq." + encodeURIComponent(found.skill.id) + "&idx=eq." + b.idx + "&status=eq.live", { status: "archived" }, "return=minimal");
+    return arch.ok ? done() : saveFailed();
   }
 
   if (b.action === "lesson-save") {

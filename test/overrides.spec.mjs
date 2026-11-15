@@ -126,6 +126,53 @@ await step('a lesson can be edited and then restored to the shipped text', async
   need(r.data.skills[SK].history.lessons[0].length === 2, 'replaced lesson version not kept');
 });
 
+await step('an admin adds a lesson at the end, edits it, removes it, and brings it back', async () => {
+  const A = (b) => call(admin, '/api/content', Object.assign({ skill: SK }, b));
+  const n0 = (await A({ action: 'lesson-save', idx: 0, title: 'Edited title', body: 'Edited body text for the first lesson.' })).data.skills[SK].count;
+  need(n0 >= 2, 'base lesson count missing: ' + n0);
+  need((await call(stu, '/api/content', null)).status === 200, 'student read failed');
+  need((await call(stu, '/api/content', { action: 'lesson-add', skill: SK, title: 'x', body: 'y' })).status === 403, 'a student added a lesson');
+  need((await A({ action: 'lesson-add', title: '', body: 'text' })).status === 400, 'empty title accepted');
+  need((await A({ action: 'lesson-add', title: 'T', body: '' })).status === 400, 'empty body accepted');
+  const body = 'A new lesson written by an admin. '.repeat(30);
+  const add = await A({ action: 'lesson-add', title: 'A brand new lesson', body });
+  const v = add.data.skills[SK];
+  need(add.status === 200 && v.count === n0 + 1 && v.lessons[n0] && v.lessons[n0].title === 'A brand new lesson' && v.lessons[n0].minutes >= 1, JSON.stringify(v.lessons[n0]) + ' count ' + v.count);
+  await waitCache();
+  const sv = (await call(stu, '/api/content')).data.skills[SK];
+  need(sv.count === n0 + 1 && sv.lessons[n0].body === body.trim(), 'student does not see the new lesson');
+  const ed = await A({ action: 'lesson-save', idx: n0, title: 'Renamed new lesson', body: 'Second text of the new lesson.' });
+  need(ed.status === 200 && ed.data.skills[SK].lessons[n0].title === 'Renamed new lesson' && ed.data.skills[SK].count === n0 + 1, 'edit of an added lesson failed: ' + JSON.stringify(ed.data).slice(0, 160));
+  need((await A({ action: 'lesson-remove', idx: 0 })).status === 400, 'a shipped lesson was removed');
+  need((await A({ action: 'lesson-remove', idx: n0 - 1 })).status === 400, 'a lesson that is not last was removed');
+  need((await call(stu, '/api/content', { action: 'lesson-remove', skill: SK, idx: n0 })).status === 403, 'a student removed a lesson');
+  const rm = await A({ action: 'lesson-remove', idx: n0 });
+  need(rm.status === 200 && rm.data.skills[SK].count === n0, 'remove failed: ' + JSON.stringify(rm.data).slice(0, 160));
+  await waitCache();
+  need((await call(stu, '/api/content')).data.skills[SK].count === n0, 'student still sees the removed lesson');
+  const hist = rm.data.skills[SK].history.lessons[n0];
+  need(hist && hist.length >= 2, 'removed lesson has no history: ' + JSON.stringify(hist).slice(0, 160));
+  const back = await A({ action: 'restore', kind: 'lesson', idx: n0, version: hist[0].v });
+  need(back.status === 200 && back.data.skills[SK].count === n0 + 1 && back.data.skills[SK].lessons[n0].title === hist[0].title, 'removed lesson did not come back');
+  const again = await A({ action: 'lesson-remove', idx: n0 });
+  need(again.status === 200, 'second remove failed');
+  const readd = await A({ action: 'lesson-add', title: 'Another one', body: 'Different text.' });
+  need(readd.status === 200 && readd.data.skills[SK].count === n0 + 1 && readd.data.skills[SK].lessons[n0].title === 'Another one', 'adding after a removal failed: ' + JSON.stringify(readd.data).slice(0, 160));
+  await A({ action: 'lesson-remove', idx: n0 });
+});
+
+await step('a skill cannot grow past 30 lessons', async () => {
+  const A = (b) => call(admin, '/api/content', Object.assign({ skill: SK }, b));
+  let last;
+  for (let i = 0; i < 40; i++) { last = await A({ action: 'lesson-add', title: 'L' + i, body: 'Text ' + i }); if (last.status !== 200) break; }
+  need(last.status === 400 && last.data.error.code === 'too_many', 'no cap: ' + last.status + ' ' + JSON.stringify(last.data).slice(0, 120));
+  for (let i = 0; i < 40; i++) { const c = (await A({ action: 'lesson-add', title: 'x', body: 'y' })); if (c.status === 400) break; }
+  // take the added ones away again, last first
+  let v = (await call(admin, '/api/content')).data.skills[SK];
+  while (v.lessons[v.count - 1] && v.lessons[v.count - 1].minutes) { const r = await A({ action: 'lesson-remove', idx: v.count - 1 }); if (r.status !== 200) break; v = r.data.skills[SK]; }
+  need(v.count < 30, 'could not clean up');
+});
+
 await step('before migration 013 everything else still works and a save says what to do', async () => {
   await jf('/__overridesoff?on=1'); await waitCache();
   try {

@@ -21,6 +21,7 @@ const attempts = new Map();   // id -> exam_attempts row (written only with the 
 const content = { lessons: [], questions: [], overrides: [], missing: false, overridesMissing: false };   // admin content edits (service key only)
 const chs = { rows: [], missing: false, noKind: false, noCols: false };   // noCols: migration 012 not run (no reference, met, judged)   // 011: challenges (server only); noKind = exam_attempts not yet accepting 'challenge'
 const certs = new Map();      // id -> certificates row (migration 010; written only with the service key)
+const bursts = new Map(); let burstOff = false;   // take_burst counters (migration 014)
 const ai = new Map(); let aiOff = false;   // take_ai counters (migration 009)
 const subs = new Map();       // 'user|challenge' -> challenge_submissions row (written only with the service key)
 const SECRET = 'sb_secret_test';
@@ -118,7 +119,7 @@ const server = http.createServer(async (req, res) => {
   if (p === '/__admin') { const u = users.get(url.searchParams.get('email')); profiles.get(u.id).role = 'admin'; return send(200, {}); }
   if (p === '/__expire') { tokens.clear(); return send(200, {}); }   // access tokens die, refresh tokens live
   if (p === '/__profile') { const u = users.get(url.searchParams.get('email')); return send(200, profiles.get(u.id) || null); }
-  if (p === '/__reset') { rt.joins = []; rt.fanouts = []; rt.tokenUpdates = 0; rt.refuse = false; for (const c of sockets) c.ws.terminate(); users.clear(); profiles.clear(); tokens.clear(); refreshes.clear(); progress.clear(); modules.clear(); subs.clear(); attempts.clear(); certs.clear(); chs.rows = []; chs.missing = false; chs.noKind = false; content.lessons = []; content.questions = []; content.overrides = []; content.missing = false; content.overridesMissing = false; ai.clear(); aiOff = false; log.length = 0; captcha.on = false; captcha.seen = []; return send(200, {}); }
+  if (p === '/__reset') { rt.joins = []; rt.fanouts = []; rt.tokenUpdates = 0; rt.refuse = false; for (const c of sockets) c.ws.terminate(); users.clear(); profiles.clear(); tokens.clear(); refreshes.clear(); progress.clear(); modules.clear(); subs.clear(); attempts.clear(); certs.clear(); chs.rows = []; chs.missing = false; chs.noKind = false; content.lessons = []; content.questions = []; content.overrides = []; content.missing = false; content.overridesMissing = false; ai.clear(); aiOff = false; bursts.clear(); burstOff = false; log.length = 0; captcha.on = false; captcha.seen = []; return send(200, {}); }
   if (p === '/__progress') { const u = users.get(url.searchParams.get('email')); return send(200, { skills: [...progress.values()].filter(r => r.user_id === u.id), modules: [...modules.values()].filter(r => r.user_id === u.id) }); }
   if (p === '/__seed') {   // put saved progress on the server before the student signs in (as if from another device)
     const u = users.get(url.searchParams.get('email')); const b = body;
@@ -238,6 +239,15 @@ const server = http.createServer(async (req, res) => {
     pr.points = Math.min(Math.max((pr.points || 0) + Number(body.p_delta || 0), 0), 999999);
     const t = boardOf(pr); if (t) fanout(t);
     return send(200, pr.points);
+  }
+  if (p === '/__burstoff') { burstOff = url.searchParams.get('on') === '1'; return send(200, {}); }   // as if migration 014 was not run
+  if (p === '/__bursts') return send(200, Object.fromEntries(bursts));
+  if (p === '/rest/v1/rpc/take_burst') {              // service role only
+    if (!isService(req)) return send(401, { code: '42501', message: 'permission denied for function take_burst' });
+    if (burstOff) return send(404, { code: 'PGRST202', message: 'Could not find the function' });
+    const w = Number(body.p_window), ws = Math.floor(Date.now() / 1000 / w) * w, k = body.p_key + '|' + ws;
+    const n = (bursts.get(k) || 0) + 1; bursts.set(k, n);
+    return send(200, { ok: n <= body.p_max, n });
   }
   if (p === '/__aioff') { aiOff = url.searchParams.get('on') === '1'; return send(200, {}); }   // as if migration 009 was not run
   if (p === '/rest/v1/rpc/take_ai') {                 // service role only

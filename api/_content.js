@@ -46,6 +46,7 @@ const fromRow = (r) => ({ qid: r.qid, v: r.version, lvl: r.lvl, q: r.q, opts: r.
 export function applyOverlay(baseRoles, lessonRows, questionRows, overrideRows) {
   const liveLesson = {};
   (lessonRows || []).filter((r) => r.status === "live").forEach((r) => { (liveLesson[r.skill_id] = liveLesson[r.skill_id] || {})[r.idx] = r; });
+  const lessonSkills = new Set((lessonRows || []).map((r) => r.skill_id));   // any row at all, so a removed added lesson still shows as a change
   const qBy = {};
   (questionRows || []).forEach((r) => { (qBy[r.skill_id] = qBy[r.skill_id] || []).push(r); });
   const projectBy = {}, practiceBy = {};
@@ -59,7 +60,7 @@ export function applyOverlay(baseRoles, lessonRows, questionRows, overrideRows) 
     let touched = false;
     const skills = role.skills.map((sk) => {
       const L = liveLesson[sk.id], Q = qBy[sk.id], PJ = projectBy[sk.id], PR = practiceBy[sk.id];
-      if (!L && !Q && !PJ && !PR) return sk;
+      if (!L && !Q && !PJ && !PR && !lessonSkills.has(sk.id)) return sk;
       touched = true; changed.add(sk.id);
       const out = Object.assign({}, sk, { lessons: sk.lessons.slice(), drafts: [], archive: [] });
       if (PJ && PJ.data) out.project = Object.assign({}, sk.project || {}, { title: String(PJ.data.title || ""), brief: String(PJ.data.brief || "") });
@@ -75,6 +76,8 @@ export function applyOverlay(baseRoles, lessonRows, questionRows, overrideRows) 
         Object.keys(L).forEach((i) => {
           if (out.lessons[i]) out.lessons[i] = Object.assign({}, out.lessons[i], { title: L[i].title, body: L[i].body, v: L[i].version });
         });
+        // Lessons an admin added sit after the shipped ones, one after another with no gaps.
+        for (let i = sk.lessons.length; L[i]; i++) out.lessons.push({ title: L[i].title, body: L[i].body, minutes: minutesOf(L[i].body), v: L[i].version, added: true });
       }
       if (Q) {
         const live = {}, gone = new Set(), fresh = [];
@@ -97,6 +100,8 @@ export function applyOverlay(baseRoles, lessonRows, questionRows, overrideRows) 
   });
   return { roles, changed };
 }
+export const MAX_LESSONS = 30;   // per skill, shipped and added together
+export function minutesOf(body) { return Math.max(1, Math.round(String(body || "").trim().split(/\s+/).length / 200)); }
 function fieldsOf(r) { return { q: r.q, opts: r.opts, a: r.answer, lvl: r.lvl, why: r.why || "" }; }
 
 let rowCache = { at: 0, lessons: [], questions: [], overrides: [], loaded: false };
@@ -189,8 +194,8 @@ export function viewFor(C, admin) {
     if (!C.changed.has(s.id)) return;
     const base = baseContent().roles.filter((x) => x.id === r.id)[0].skills.filter((x) => x.id === s.id)[0];
     const lessons = {};
-    s.lessons.forEach((l, i) => { if (l !== base.lessons[i]) lessons[i] = { title: l.title, body: l.body, v: l.v || 1 }; });
-    const v = { lessons, assessment: s.assessment.map((q) => (admin ? { qid: q.qid, v: q.v, lvl: q.lvl, q: q.q, opts: q.opts, a: q.a, why: q.why } : { qid: q.qid, v: q.v, lvl: q.lvl, q: q.q, opts: q.opts })) };
+    s.lessons.forEach((l, i) => { if (l !== base.lessons[i]) lessons[i] = { title: l.title, body: l.body, v: l.v || 1, minutes: l.added ? l.minutes : undefined }; });
+    const v = { count: s.lessons.length, lessons, assessment: s.assessment.map((q) => (admin ? { qid: q.qid, v: q.v, lvl: q.lvl, q: q.q, opts: q.opts, a: q.a, why: q.why } : { qid: q.qid, v: q.v, lvl: q.lvl, q: q.q, opts: q.opts })) };
     if (s.project !== base.project) v.project = { title: s.project.title, brief: s.project.brief };
     const prac = {};
     (s.practice || []).forEach((ex, i) => { if (ex !== (base.practice || [])[i]) prac[i] = { prompt: ex.prompt, hints: ex.hints || [], answer: ex.kind === "query" ? ex.solution : ex.answer }; });

@@ -1,16 +1,9 @@
 /* Public check of a certificate ID. No sign-in. Anyone with an ID can see who it was issued to and for what, and nothing else:
    no email, no student id, no progress. Unknown IDs and badly formed ones get the same answer, so the page cannot be used
-   to probe for valid IDs, and a caller is limited to thirty checks a minute per address and server instance. */
+   to probe for valid IDs, and a caller is limited to thirty checks a minute per address, counted across all running copies (api/_burst.js). */
 import { serviceRest } from "./_auth.js";
 import { ID_PATTERN } from "./_certs.js";
-
-const hits = new Map();
-function tooFast(ip) {
-  const now = Date.now(), list = (hits.get(ip) || []).filter((t) => now - t < 60e3);
-  list.push(now); hits.set(ip, list);
-  if (hits.size > 5000) hits.clear();
-  return list.length > 30;
-}
+import { overBurst, addressKey } from "./_burst.js";
 
 export default async function handler(req, res) {
   res.setHeader("cache-control", "no-store");
@@ -18,8 +11,8 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") { res.status(204).end(); return; }
   if (req.method !== "GET") return res.status(405).json({ error: { code: "method_not_allowed", message: "Use GET." } });
   const ip = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim() || "local";
-  if (tooFast(ip)) return res.status(429).json({ error: { code: "too_fast", message: "Too many checks. Wait a minute and try again." } });
   const rest = serviceRest();
+  if (await overBurst(rest, "verify:" + addressKey(ip), 30, 60)) return res.status(429).json({ error: { code: "too_fast", message: "Too many checks. Wait a minute and try again." } });
   if (!rest) return res.status(503).json({ error: { code: "not_configured", message: "Verification is not set up on this site yet." } });
 
   const url = new URL(req.url, "http://x");

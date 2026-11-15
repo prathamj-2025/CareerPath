@@ -148,6 +148,15 @@ browser-only demo (set `CP_DEMO=1` to force that).
   rules stay in the files), and put any earlier version of a lesson, brief or exercise back
   (`api/content.js`, `supabase/migrations/013_content_overrides.sql`). Run 013 after deploying this version; until then
   lesson and question edits work as before and a project or practice save says to run 013.
+- Request limits (study assistant 10 a minute, written-answer marker 10 a minute, certificate check 30 a minute per address, error
+  reports 20 an hour per address) are counted in one shared table so they hold across every running copy of the site
+  (`api/_burst.js`, `supabase/migrations/014_rate_limits.sql`). Run 014 after deploying this version; until then each copy counts
+  for itself, as before.
+- Admins can add a lesson after the last one in a skill (up to 30 lessons per skill) and remove one they added while it is the last;
+  a removed lesson can be brought back from its earlier versions. Lessons that shipped can be edited but not removed, because
+  students' progress refers to lessons by position. New lessons have no scenario or revision sheet. Adding a whole new skill is
+  deliberately not offered: a skill carries an assessment, a project, a place in a module and the certificate rules, which belong in the files.
+  No new SQL: added lessons use the existing `content_lessons` table (008).
 - AI scoring of written answers (`api/_judge.js`, `api/judge.js`, `api/grade-challenge.js`,
   `supabase/migrations/012_ai_scoring.sql`, reference answers in `content/challenge-refs.js`). Run 012 BEFORE pushing this version.
 - Skill assessments, module exams and practical projects are graded on the server (`api/exam.js`, `api/grade-project.js`).

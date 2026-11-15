@@ -3,30 +3,24 @@
  * error text, the script file and line, a short stack, the page path and the browser name.
  *
  * Abuse limits: POST only, small body, each line is cut to a fixed length, and each address may send a handful per hour
- * (counted in memory, so it is best effort and resets when the function restarts).
+ * (counted across all running copies when 014_rate_limits.sql has been run, in memory otherwise).
  */
+import { serviceRest } from "./_auth.js";
+import { overBurst, addressKey } from "./_burst.js";
+
 const MAX_BODY = 6000;
 const PER_HOUR = 20;
-const seen = new Map();   // ip -> { n, reset }
 
 function clip(v, n) { return String(v == null ? "" : v).replace(/[\u0000-\u001f\u007f]+/g, " ").slice(0, n); }
 
-function limited(ip) {
-  const now = Date.now();
-  let e = seen.get(ip);
-  if (!e || e.reset < now) { e = { n: 0, reset: now + 3600000 }; seen.set(ip, e); }
-  if (seen.size > 5000) { for (const [k, v] of seen) if (v.reset < now) seen.delete(k); }
-  return ++e.n > PER_HOUR;
-}
-
-export default function handler(req, res) {
+export default async function handler(req, res) {
   res.setHeader("cache-control", "no-store");
   if (req.method !== "POST") { res.status(405).json({ ok: false }); return; }
   let b = req.body;
   if (typeof b === "string") { if (b.length > MAX_BODY) { res.status(413).json({ ok: false }); return; } try { b = JSON.parse(b); } catch (e) { b = null; } }
   if (!b || typeof b !== "object") { res.status(400).json({ ok: false }); return; }
   const ip = clip(String(req.headers["x-forwarded-for"] || "").split(",")[0].trim() || "unknown", 60);
-  if (limited(ip)) { res.status(429).json({ ok: false }); return; }
+  if (await overBurst(serviceRest(), "report:" + addressKey(ip), PER_HOUR, 3600)) { res.status(429).json({ ok: false }); return; }
   const line = {
     msg: clip(b.msg, 300), src: clip(b.src, 200), line: Number(b.line) || 0, col: Number(b.col) || 0,
     stack: clip(b.stack, 1200), page: clip(b.page, 100), kind: b.kind === "promise" ? "promise" : "error",

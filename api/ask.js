@@ -20,6 +20,7 @@
  */
 
 import { authenticate } from "./_auth.js";
+import { overBurst } from "./_burst.js";
 
 /* Who may ask, and how much. On a deployment with real accounts (SUPABASE_SERVICE_ROLE_KEY set) a question needs a sign-in,
    is refused while the student has an exam open, and is counted against limits per student (hour, day) and for the whole
@@ -31,17 +32,8 @@ import { authenticate } from "./_auth.js";
 const HOURLY = Number(process.env.AI_HOURLY_LIMIT) || 40;
 const DAILY = Number(process.env.AI_DAILY_LIMIT) || 200;
 const GLOBAL_DAILY = Number(process.env.AI_GLOBAL_DAILY) || 10000;
-const BURST = 10;                  // questions per student per minute, per server instance
+const BURST = 10;                  // questions per student per minute, shared across running copies (014_rate_limits.sql)
 const EXAM_LOCK_MINUTES = 30;      // an exam attempt left open this long no longer switches the assistant off
-const recent = new Map();
-
-function tooFast(uid) {
-  const now = Date.now(), list = (recent.get(uid) || []).filter((t) => now - t < 60000);
-  list.push(now); recent.set(uid, list);
-  if (recent.size > 5000) for (const [k, v] of recent) if (!v.some((t) => now - t < 60000)) recent.delete(k);
-  return list.length > BURST;
-}
-
 async function examOpen({ uid, rest }) {
   const since = new Date(Date.now() - EXAM_LOCK_MINUTES * 60e3).toISOString();
   const r = await rest("GET", "exam_attempts?user_id=eq." + uid + "&submitted_at=is.null&started_at=gte." + encodeURIComponent(since) + "&select=id,kind");
@@ -78,7 +70,7 @@ export default async function handler(req, res) {
   if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
     who = await authenticate(req, res);
     if (!who) return;
-    if (tooFast(who.uid)) return fail(res, 429, "too_fast", "You are asking very quickly. Wait a moment and try again.");
+    if (await overBurst(who.rest, "ask:" + who.uid, BURST, 60)) return fail(res, 429, "too_fast", "You are asking very quickly. Wait a moment and try again.");
     if (await examOpen(who)) return fail(res, 403, "exam_locked", "The assistant is off while an exam or the weekly challenge is open. It comes back when you submit or leave.");
   }
 

@@ -74,6 +74,24 @@ await step('an empty brief is not sent, and an earlier version can be restored f
   need(page.errs.length === 0, 'page errors: ' + page.errs.join('; '));
 });
 
+await step('an admin adds a lesson on the admin screen and a student sees it; removing it brings the count back', async () => {
+  const before = await page.$$eval('[data-action="al-edit"]', e => e.length);
+  await page.click('[data-action="an-open"]');
+  await page.fill('#an-t', 'A lesson added on the page');
+  await page.fill('#an-b', 'The text of the lesson added on the page.');
+  await page.click('[data-action="an-save"]');
+  await page.waitForSelector('text=A lesson added on the page');
+  need((await page.$$eval('[data-action="al-edit"]', e => e.length)) === before + 1, 'the new lesson is not listed');
+  need(await page.$('text=Added by an admin'), 'no marker on the added lesson');
+  need((await j('/__content')).lessons.some(r => r.skill_id === SK && r.idx === before && r.status === 'live' && r.title === 'A lesson added on the page'), 'not saved to the database');
+  await page.click('[data-action="al-remove"]');
+  await page.waitForFunction(n => document.querySelectorAll('[data-action="al-edit"]').length === n, before);
+  await page.click('summary:has-text("Removed lessons you can bring back")');
+  await page.click('[data-action="ar-restore"][data-kind="lesson"]');
+  await page.waitForSelector('text=A lesson added on the page');
+  need(page.errs.length === 0, 'page errors: ' + page.errs.join('; '));
+});
+
 await browser.close();
 console.log(failed ? failed + ' failed' : 'all passed');
 process.exit(failed ? 1 : 0);

@@ -13,19 +13,12 @@
 import { authenticate, body, fail } from "./_auth.js";
 import { baseContent } from "./_content.js";
 import { judge, judgeOff } from "./_judge.js";
+import { overBurst } from "./_burst.js";
 
 const HOURLY = Number(process.env.AI_HOURLY_LIMIT) || 40;
 const DAILY = Number(process.env.AI_DAILY_LIMIT) || 200;
 const GLOBAL_DAILY = Number(process.env.AI_GLOBAL_DAILY) || 10000;
-const BURST = 10;                              // checks per student per minute, per server instance
-const recent = new Map();
-
-function tooFast(uid) {
-  const now = Date.now(), list = (recent.get(uid) || []).filter((t) => now - t < 60000);
-  list.push(now); recent.set(uid, list);
-  if (recent.size > 5000) for (const [k, v] of recent) if (!v.some((t) => now - t < 60000)) recent.delete(k);
-  return list.length > BURST;
-}
+const BURST = 10;                              // checks per student per minute, shared across running copies (014_rate_limits.sql)
 
 function findSkill(roleId, skillId) {
   const C = baseContent();
@@ -72,7 +65,7 @@ export default async function handler(req, res) {
   const off = (reason) => res.status(200).json({ ok: true, ai: false, reason: reason });
   if (judgeOff()) return off("disabled");
   if (!(process.env.AI_API_KEY || process.env.OPENAI_API_KEY)) return off("no_ai");
-  if (tooFast(ctx.uid)) return off("busy");
+  if (await overBurst(ctx.rest, "judge:" + ctx.uid, BURST, 60)) return off("busy");
   const lim = await ctx.rest("POST", "rpc/take_ai", { p_user: ctx.uid, p_hour: HOURLY, p_day: DAILY, p_global: GLOBAL_DAILY });
   if (lim.ok && lim.data && typeof lim.data === "object" && !lim.data.ok) return off("limit");
 

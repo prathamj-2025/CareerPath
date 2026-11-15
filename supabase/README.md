@@ -43,6 +43,12 @@ One shared Supabase project. Database changes live here as numbered SQL files in
   Server only: the site cannot read or write it. Safe to run twice. Run it after the website that uses it is deployed; until
   then the project and practice edit buttons say to run 013 when you save, and everything else works as before.
 
+- `014_rate_limits.sql`: the `rate_hits` table and the `take_burst` function, one shared counter for the per-minute and per-hour
+  request limits (study assistant, written-answer marker, public certificate check, error reports). Before this, each running
+  copy of the site counted for itself. Keys hold a student id or a one-way hash of an address, never an email or a name, and
+  rows older than a day are deleted. Server only. Safe to run twice. Run it after the website that uses it is deployed; until
+  then the old per-copy limits apply and nothing else changes.
+
 Run them in order, one at a time, in the SQL editor.
 
 ## Exam and project scoring (server side)

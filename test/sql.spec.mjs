@@ -488,5 +488,21 @@ await step('project and practice edits (013): one live version each, earlier ver
   need(await fails(ADM, ins + `('project', 'y', 1, 'live', '{}')`), 'an admin wrote an override from the site');
 });
 
+await step('shared request limits (014): take_burst counts per key and window, refuses past the maximum, and only the server can call it', async () => {
+  const take = async (k, w, m) => (await svc(`select public.take_burst($1, $2, $3) as r`, [k, w, m])).rows[0].r;
+  const a = []; for (let i = 0; i < 5; i++) a.push(await take('verify:abc', 3600, 3));
+  need(a.map(x => x.ok).join() === 'true,true,true,false,false' && a[4].n === 5, JSON.stringify(a));
+  need((await take('verify:other', 3600, 3)).ok === true, 'another key was refused');
+  need((await take('verify:abc', 60, 3)).ok === true, 'a different window length shares the count');
+  need(await dbFails(`select public.take_burst('', 60, 3)`), 'an empty key was accepted');
+  need(await dbFails(`select public.take_burst('${'k'.repeat(121)}', 60, 3)`), 'a long key was accepted');
+  need(await dbFails(`select public.take_burst('x', 0, 3)`), 'a zero window was accepted');
+  need(await dbFails(`select public.take_burst('x', 90000, 3)`), 'a window over a day was accepted');
+  need(await fails(S1, `select public.take_burst('x', 60, 3)`), 'a student called take_burst');
+  need(await fails(ADM, `select public.take_burst('x', 60, 3)`), 'an admin called take_burst from the site');
+  need(await fails(S1, `select * from public.rate_hits`), 'a student read the rate table');
+  need(await fails(ADM, `select * from public.rate_hits`), 'an admin read the rate table from the site');
+});
+
 console.log(failed ? failed + ' failed' : 'all passed');
 process.exit(failed ? 1 : 0);

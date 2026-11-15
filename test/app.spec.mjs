@@ -380,6 +380,23 @@ await step('lessons publish directly, no queue', async () => {
   if (drafts !== 0) throw new Error('lesson edit wrongly created a draft');
 });
 
+await step('an admin adds a lesson at the end and removes it again (demo)', async () => {
+  const n0 = await page.evaluate(() => window.CP_ROLES[0].skills[0].lessons.length);
+  await page.click('[data-action="an-open"]');
+  await page.fill('#an-t', 'A lesson added by the admin');
+  await page.fill('#an-b', 'Body of the added lesson.\n\nSecond paragraph.');
+  await page.click('[data-action="an-save"]');
+  await page.waitForTimeout(200);
+  const n1 = await page.evaluate(() => window.CP_ROLES[0].skills[0].lessons.length);
+  if (n1 !== n0 + 1) throw new Error('lesson not added: ' + n0 + ' -> ' + n1);
+  if (!(await page.textContent('#view')).includes('A lesson added by the admin')) throw new Error('added lesson not listed');
+  if (!(await page.$('[data-action="al-remove"]'))) throw new Error('no remove button on the added lesson');
+  if ((await page.$$('[data-action="al-remove"]')).length !== 1) throw new Error('shipped lessons must not have a remove button');
+  await page.click('[data-action="al-remove"]');
+  await page.waitForTimeout(200);
+  if ((await page.evaluate(() => window.CP_ROLES[0].skills[0].lessons.length)) !== n0) throw new Error('lesson not removed');
+});
+
 /* ---------- preview mode ---------- */
 
 await step('preview opens the student course view with a banner', async () => {
