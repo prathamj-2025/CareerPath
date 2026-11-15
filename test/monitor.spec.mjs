@@ -11,7 +11,7 @@ const step = async (label, fn) => {
   catch (e) { failed++; console.log('FAIL ' + label + ' :: ' + e.message); }
 };
 const need = (c, m) => { if (!c) throw new Error(m); };
-const post = (body, ip, raw) => fetch(BASE + '/api/report', { method: 'POST', headers: { 'content-type': 'application/json', 'x-forwarded-for': ip || '9.9.9.9' }, body: raw || JSON.stringify(body) });
+const post = (body, ip, raw) => fetch(BASE + '/api/config?task=report', { method: 'POST', headers: { 'content-type': 'application/json', 'x-forwarded-for': ip || '9.9.9.9' }, body: raw || JSON.stringify(body) });
 const stamp = Date.now().toString(36);
 
 await step('a valid report is accepted with no content back', async () => {
@@ -19,7 +19,7 @@ await step('a valid report is accepted with no content back', async () => {
   need(r.status === 204, 'status ' + r.status);
 });
 await step('only POST is allowed, and junk or empty reports are refused', async () => {
-  need((await fetch(BASE + '/api/report')).status === 405, 'GET allowed');
+  need((await fetch(BASE + '/api/config?task=report')).status === 405, 'GET allowed');
   need((await post(null, '2.2.2.2', 'not json')).status === 400, 'junk accepted');
   need((await post({ msg: '' }, '2.2.2.2')).status === 400, 'empty msg accepted');
   need((await post({ msg: 'x'.repeat(10), pad: 'y'.repeat(7000) }, '2.2.2.2', JSON.stringify({ msg: 'x', pad: 'y'.repeat(7000) }))).status === 413, 'huge body accepted');
@@ -35,7 +35,7 @@ async function pageWith(url, cfg) {
   const ctx = await browser.newContext();
   const page = await ctx.newPage();
   page.reports = []; page.vaRequests = 0;
-  await page.route('**/api/report', async r => { page.reports.push(JSON.parse(r.request().postData() || '{}')); await r.fulfill({ status: 204, body: '' }); });
+  await page.route('**/api/config?task=report', async r => { page.reports.push(JSON.parse(r.request().postData() || '{}')); await r.fulfill({ status: 204, body: '' }); });
   await page.route('**/_vercel/insights/script.js', r => { page.vaRequests++; return r.fulfill({ contentType: 'text/javascript', body: '/* counter */' }); });
   if (cfg) await page.route('**/api/config', r => r.fulfill({ json: cfg }));
   await page.goto(url); await page.waitForTimeout(500);

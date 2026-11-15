@@ -1,6 +1,6 @@
 /* The keep-alive route: reads one row so the free database never pauses, returns no data, honours an optional cron secret,
    and is scheduled once a day in vercel.json. Start servers with test/start-servers.sh. */
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 
 const KEY = process.env.REAL_URL || 'http://localhost:3115';          // service key set
 const NOKEY = process.env.NOKEY_URL || 'http://localhost:3114';       // no service key
@@ -11,7 +11,7 @@ const step = async (label, fn) => {
   catch (e) { failed++; console.log('FAIL ' + label + ' :: ' + e.message); }
 };
 const need = (c, m) => { if (!c) throw new Error(m); };
-const get = async (base, headers) => { const r = await fetch(base + '/api/keepalive', { headers }); let d = null; try { d = await r.json(); } catch (e) {} return { s: r.status, d }; };
+const get = async (base, headers) => { const r = await fetch(base + '/api/config?task=keepalive', { headers }); let d = null; try { d = await r.json(); } catch (e) {} return { s: r.status, d }; };
 
 await step('with the service key it reads the database and answers ok, with nothing else in the reply', async () => {
   const r = await get(KEY);
@@ -32,14 +32,18 @@ await step('with the right cron secret it runs', async () => {
 });
 await step('vercel.json schedules it once a day', async () => {
   const v = JSON.parse(readFileSync(new URL('../vercel.json', import.meta.url), 'utf8'));
-  const c = (v.crons || []).find(x => x.path === '/api/keepalive');
+  const c = (v.crons || []).find(x => x.path === '/api/config?task=keepalive');
   need(c, 'no cron entry');
   need(/^\d+ \d+ \* \* \*$/.test(c.schedule), 'not a once-a-day schedule: ' + c.schedule);
+});
+await step('the api folder stays within the 12 functions Vercel allows on the free plan', async () => {
+  const n = readdirSync(new URL('../api/', import.meta.url)).filter(f => f.endsWith('.js') && !f.startsWith('_'));
+  need(n.length <= 12, n.length + ' functions: ' + n.join(', '));
 });
 await step('the database being down is reported, not hidden', async () => {
   // point a throwaway copy of the handler at a dead address
   process.env.SUPABASE_URL = 'http://localhost:1'; process.env.SUPABASE_SERVICE_ROLE_KEY = 'sb_secret_x';
-  const { default: h } = await import('../api/keepalive.js?dead');
+  const { default: h } = await import('../api/_keepalive.js?dead');
   let code = 0, body = null;
   await h({ headers: {} }, { setHeader() {}, status(c) { code = c; return this; }, json(b) { body = b; } });
   need(code === 502 && body.ok === false, code + ' ' + JSON.stringify(body));

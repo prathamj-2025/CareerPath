@@ -1,0 +1,123 @@
+[
+ {
+  "id": "ba-fundamentals",
+  "name": "Business Analysis Fundamentals",
+  "cert": "Business Analysis Fundamentals",
+  "lens": "The role, strategy, elicitation and planning your analysis",
+  "summary": "The core of the job: what business analysis is, how to find the real need and justify a change, how to draw out requirements from people and how to plan the analysis work.",
+  "groups": [
+   {
+    "label": "Core modules",
+    "required": true,
+    "skills": [
+     "foundations-ba",
+     "strategy-ba",
+     "elicitation-ba",
+     "planning-ba"
+    ]
+   }
+  ],
+  "questions": 24
+ },
+ {
+  "id": "ba-requirements",
+  "name": "Requirements, Modeling and Design",
+  "cert": "Requirements, Modeling and Design",
+  "lens": "Write, model and specify what must be built",
+  "summary": "Write requirements that can be built and tested, capture behavior in stories and use cases, specify quality attributes, model systems and processes, define rules and data, and show ideas with wireframes.",
+  "groups": [
+   {
+    "label": "Requirements",
+    "required": true,
+    "skills": [
+     "requirements-ba",
+     "userstories-ba",
+     "nfr-ba"
+    ]
+   },
+   {
+    "label": "Models and rules",
+    "required": true,
+    "skills": [
+     "modeling-ba",
+     "process-ba",
+     "rules-ba",
+     "prototyping-ba"
+    ]
+   }
+  ],
+  "questions": 25
+ },
+ {
+  "id": "ba-delivery",
+  "name": "Solutions, Validation and Delivery",
+  "cert": "Solutions, Validation and Delivery",
+  "lens": "Choose, deliver, test and prove the solution",
+  "summary": "Evaluate solution options, keep requirements under control, support agile and plan-driven delivery, verify and validate, and carry the change through to benefits.",
+  "groups": [
+   {
+    "label": "Solution and change",
+    "required": true,
+    "skills": [
+     "solution-ba",
+     "traceability-ba"
+    ]
+   },
+   {
+    "label": "Delivery",
+    "required": true,
+    "skills": [
+     "agile-ba",
+     "predictive-ba",
+     "testing-ba",
+     "implementation-ba"
+    ]
+   }
+  ],
+  "questions": 24
+ },
+ {
+  "id": "ba-data",
+  "name": "Data and Technology for Analysts",
+  "cert": "Data and Technology for Analysts",
+  "lens": "SQL, spreadsheets, analysis, dashboards and technology",
+  "summary": "Query and check data with SQL, analyze with spreadsheets, turn data into trustworthy findings, build clear dashboards and understand the technology behind the systems you analyze.",
+  "groups": [
+   {
+    "label": "Core modules",
+    "required": true,
+    "skills": [
+     "sql-ba",
+     "excel-ba",
+     "data-ba",
+     "bi-ba",
+     "tech-ba"
+    ]
+   }
+  ],
+  "questions": 24,
+  "data": true
+ },
+ {
+  "id": "ba-career",
+  "name": "Interview-Ready Business Analyst",
+  "cert": null,
+  "lens": "People, communication, tools, AI, certifications and interviews",
+  "summary": "Turn what you have learned into practical skills and a portfolio: stakeholders, communication, tools, AI, certifications and interview practice. Practice only, so there is no certificate for this module.",
+  "groups": [
+   {
+    "label": "Practice",
+    "required": true,
+    "skills": [
+     "stakeholder-ba",
+     "communication-ba",
+     "tools-ba",
+     "ai-ba",
+     "certs-ba",
+     "career-ba"
+    ]
+   }
+  ],
+  "questions": 0
+ }
+]

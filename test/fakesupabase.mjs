@@ -18,7 +18,7 @@ const ALLOWED = new Set(['name', 'school', 'major', 'grad_year', 'picture_url', 
 const progress = new Map();   // 'user|skill' -> row
 const modules = new Map();    // 'user|track' -> row
 const attempts = new Map();   // id -> exam_attempts row (written only with the service key)
-const content = { lessons: [], questions: [], missing: false };   // admin content edits (service key only)
+const content = { lessons: [], questions: [], overrides: [], missing: false, overridesMissing: false };   // admin content edits (service key only)
 const chs = { rows: [], missing: false, noKind: false, noCols: false };   // noCols: migration 012 not run (no reference, met, judged)   // 011: challenges (server only); noKind = exam_attempts not yet accepting 'challenge'
 const certs = new Map();      // id -> certificates row (migration 010; written only with the service key)
 const ai = new Map(); let aiOff = false;   // take_ai counters (migration 009)
@@ -118,7 +118,7 @@ const server = http.createServer(async (req, res) => {
   if (p === '/__admin') { const u = users.get(url.searchParams.get('email')); profiles.get(u.id).role = 'admin'; return send(200, {}); }
   if (p === '/__expire') { tokens.clear(); return send(200, {}); }   // access tokens die, refresh tokens live
   if (p === '/__profile') { const u = users.get(url.searchParams.get('email')); return send(200, profiles.get(u.id) || null); }
-  if (p === '/__reset') { rt.joins = []; rt.fanouts = []; rt.tokenUpdates = 0; rt.refuse = false; for (const c of sockets) c.ws.terminate(); users.clear(); profiles.clear(); tokens.clear(); refreshes.clear(); progress.clear(); modules.clear(); subs.clear(); attempts.clear(); certs.clear(); chs.rows = []; chs.missing = false; chs.noKind = false; content.lessons = []; content.questions = []; content.missing = false; ai.clear(); aiOff = false; log.length = 0; captcha.on = false; captcha.seen = []; return send(200, {}); }
+  if (p === '/__reset') { rt.joins = []; rt.fanouts = []; rt.tokenUpdates = 0; rt.refuse = false; for (const c of sockets) c.ws.terminate(); users.clear(); profiles.clear(); tokens.clear(); refreshes.clear(); progress.clear(); modules.clear(); subs.clear(); attempts.clear(); certs.clear(); chs.rows = []; chs.missing = false; chs.noKind = false; content.lessons = []; content.questions = []; content.overrides = []; content.missing = false; content.overridesMissing = false; ai.clear(); aiOff = false; log.length = 0; captcha.on = false; captcha.seen = []; return send(200, {}); }
   if (p === '/__progress') { const u = users.get(url.searchParams.get('email')); return send(200, { skills: [...progress.values()].filter(r => r.user_id === u.id), modules: [...modules.values()].filter(r => r.user_id === u.id) }); }
   if (p === '/__seed') {   // put saved progress on the server before the student signs in (as if from another device)
     const u = users.get(url.searchParams.get('email')); const b = body;
@@ -251,6 +251,43 @@ const server = http.createServer(async (req, res) => {
     const g = bump(zero + '|d|' + ds);
     if (g > body.p_global) return send(200, { ok: false, why: 'global', hour: h, day: d, global: g });
     return send(200, { ok: true, why: '', hour: h, day: d, global: g });
+  }
+  if (p === '/__overridesoff') { content.overridesMissing = url.searchParams.get('on') === '1'; return send(200, {}); }   // as if migration 013 was not run
+  if (p === '/rest/v1/content_overrides') {   // 013: the server only
+    if (!isService(req)) return send(401, { code: '42501', message: 'permission denied for table content_overrides' });
+    if (content.overridesMissing) return send(404, { code: 'PGRST205', message: 'Could not find the table' });
+    const list = content.overrides;
+    const pk = r => [r.kind, r.key, r.version].join('|');
+    const clash = rows => {
+      const seen = new Set(), live = new Set();
+      for (const r of rows) {
+        if (seen.has(pk(r))) return 'pk'; seen.add(pk(r));
+        if (!['project', 'practice'].includes(r.kind) || !['live', 'archived'].includes(r.status) || !(r.version >= 1) || typeof r.data !== 'object') return 'check';
+        if (r.status === 'live') { const k = r.kind + '|' + r.key; if (live.has(k)) return 'live'; live.add(k); }
+      }
+      return '';
+    };
+    if (req.method === 'GET') {
+      const off = Number(url.searchParams.get('offset') || 0), lim = Number(url.searchParams.get('limit') || 1000);
+      return send(200, list.filter(r => matches(r, url)).slice(off, off + lim));
+    }
+    if (req.method === 'POST') {
+      const rows = (Array.isArray(body) ? body : [body]).map(r => ({ edited_at: new Date().toISOString(), ...r }));
+      const ignore = (req.headers.prefer || '').includes('ignore-duplicates');
+      for (const r of rows) {
+        if (ignore && list.some(x => pk(x) === pk(r))) continue;
+        const bad = clash([...list, r]); if (bad) return send(409, { code: '23505', message: 'violation ' + bad });
+        list.push(r);
+      }
+      return send(201);
+    }
+    if (req.method === 'PATCH') {
+      const hit = list.filter(r => matches(r, url));
+      const next = list.map(r => (hit.includes(r) ? { ...r, ...body } : r));
+      const bad = clash(next); if (bad) return send(409, { code: '23505', message: 'violation ' + bad });
+      list.splice(0, list.length, ...next);
+      return send(204);
+    }
   }
   if (p === '/__contentoff') { content.missing = url.searchParams.get('on') === '1'; return send(200, {}); }   // as if migration 008 was not run
   if (p === '/__content') return send(200, content);

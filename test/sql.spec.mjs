@@ -474,5 +474,19 @@ await step('AI scoring columns (012): a reference answer on challenges, the mark
   need(old.met === null && old.judged === false, 'rows without the new fields should read null and false');
 });
 
+await step('project and practice edits (013): one live version each, earlier versions kept, locked to the server', async () => {
+  const ins = `insert into public.content_overrides (kind, key, version, status, data) values `;
+  await svc(ins + `('project', 'sql-ba', 1, 'archived', '{"title":"A","brief":"B"}'), ('project', 'sql-ba', 2, 'live', '{"title":"C","brief":"D"}')`);
+  need(await dbFails(ins + `('project', 'sql-ba', 3, 'live', '{"title":"E","brief":"F"}')`), 'two live versions accepted');
+  need(await dbFails(ins + `('project', 'sql-ba', 2, 'archived', '{"title":"E","brief":"F"}')`), 'a repeated version number was accepted');
+  need(await dbFails(ins + `('essay', 'x', 1, 'live', '{}')`), 'an unknown kind was accepted');
+  need(await dbFails(ins + `('project', 'x', 1, 'draft', '{}')`), 'an unknown status was accepted');
+  need(await dbFails(ins + `('project', 'x', 0, 'live', '{}')`), 'version 0 was accepted');
+  await svc(ins + `('practice', 'sql-ba#0', 1, 'live', '{"prompt":"p","hints":["a","b"],"answer":"c"}')`);
+  need(await fails(S1, `select * from public.content_overrides`), 'a student read the overrides table');
+  need(await fails(ADM, `select * from public.content_overrides`), 'an admin read the overrides table from the site');
+  need(await fails(ADM, ins + `('project', 'y', 1, 'live', '{}')`), 'an admin wrote an override from the site');
+});
+
 console.log(failed ? failed + ' failed' : 'all passed');
 process.exit(failed ? 1 : 0);

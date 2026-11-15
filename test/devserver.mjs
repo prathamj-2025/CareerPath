@@ -17,9 +17,7 @@ import certsHandler from '../api/certs.js';
 import judgeHandler from '../api/judge.js';
 import challengesHandler from '../api/challenges.js';
 import verifyHandler from '../api/verify.js';
-import keepaliveHandler from '../api/keepalive.js';
-import reportHandler from '../api/report.js';
-const API = { '/api/ask': handler, '/api/config': configHandler, '/api/google-auth': googleAuthHandler, '/api/grade-challenge': gradeHandler, '/api/exam': examHandler, '/api/grade-project': projectHandler, '/api/keys': keysHandler, '/api/content': contentHandler, '/api/certs': certsHandler, '/api/challenges': challengesHandler, '/api/verify': verifyHandler, '/api/judge': judgeHandler, '/api/keepalive': keepaliveHandler, '/api/report': reportHandler };
+const API = { '/api/ask': handler, '/api/config': configHandler, '/api/google-auth': googleAuthHandler, '/api/grade-challenge': gradeHandler, '/api/exam': examHandler, '/api/grade-project': projectHandler, '/api/keys': keysHandler, '/api/content': contentHandler, '/api/certs': certsHandler, '/api/challenges': challengesHandler, '/api/verify': verifyHandler, '/api/judge': judgeHandler };
 
 const PORT = Number(process.env.PORT || 3111);
 const ROOT = path.join(import.meta.dirname, '..', 'public');

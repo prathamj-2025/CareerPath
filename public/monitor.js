@@ -1,5 +1,5 @@
 /* Reports uncaught browser errors so a broken page is noticed without waiting for a student to write in.
- * Sends the error text, script file and line, a short stack, the page path and browser name to /api/report, which writes one
+ * Sends the error text, script file and line, a short stack, the page path and browser name to /api/config?task=report, which writes one
  * log line (Vercel > Logs, search "client-error"). It sends no names, emails or answers. At most 5 distinct errors per page
  * load. Never throws, never blocks the page. Local files and the test pages do not report. */
 (function () {
@@ -17,8 +17,8 @@
         stack: String(stack || "").replace(/(https?:\/\/[^\s)]+?)[?#][^\s)]*/g, "$1").slice(0, 1200),
         page: path(), ua: String(navigator.userAgent || "").slice(0, 160)
       });
-      if (navigator.sendBeacon && navigator.sendBeacon("/api/report", new Blob([body], { type: "application/json" }))) return;
-      fetch("/api/report", { method: "POST", headers: { "content-type": "application/json" }, body: body, keepalive: true }).catch(function () {});
+      if (navigator.sendBeacon && navigator.sendBeacon("/api/config?task=report", new Blob([body], { type: "application/json" }))) return;
+      fetch("/api/config?task=report", { method: "POST", headers: { "content-type": "application/json" }, body: body, keepalive: true }).catch(function () {});
     } catch (e) { /* reporting must never cause an error of its own */ }
   }
   window.addEventListener("error", function (e) {

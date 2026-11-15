@@ -127,7 +127,9 @@ await step('SQL practice is attempt-first with schema, hints and answer', async 
   await page.waitForTimeout(150);
   await page.click('[data-action="pick-role"][data-role="ba"]');
   await page.waitForTimeout(200);
-  await page.click('.skill-row:nth-child(1)');
+  await page.click('[data-action="open-track"][data-track="ba-data"]');      // SQL is in the Data and Technology module
+  await page.waitForTimeout(150);
+  await page.click('.skill-row[data-skill="sql-ba"]');
   await page.waitForTimeout(150);
   await page.click('[data-action="start-learn"]');
   await page.waitForTimeout(150);
@@ -141,7 +143,7 @@ await step('SQL practice is attempt-first with schema, hints and answer', async 
   const schema = await page.textContent('.ex-schema pre');
   if (schema.trim().length < 10) throw new Error('schema looks wrong: ' + schema.slice(0, 40));
 
-  const box = await page.$('.ex-input');
+  const box = await page.$('.ex .ex-input');
   if (!box) throw new Error('no attempt box');
   await box.fill('SELECT count(*) FROM events');
   await page.waitForTimeout(80);
@@ -152,7 +154,7 @@ await step('SQL practice is attempt-first with schema, hints and answer', async 
   await page.click('.ex [data-action="practice-hint"]');
   await page.waitForTimeout(150);
   if ((await page.$$('.ex:first-of-type .hint')).length !== 1) throw new Error('expected exactly one hint');
-  if (await page.inputValue('.ex-input') !== 'SELECT count(*) FROM events')
+  if (await page.inputValue('.ex .ex-input') !== 'SELECT count(*) FROM events')
     throw new Error('attempt lost when the hint was revealed');
 
   await page.click('.ex [data-action="practice-hint"]');
@@ -174,35 +176,35 @@ await step('SQL practice is attempt-first with schema, hints and answer', async 
 });
 
 await step('checking a wrong query reports what is missing', async () => {
-  await page.fill('.ex-input', 'SELECT 1');
+  await page.fill('.ex .ex-input', 'SELECT 1');
   await page.click('.ex [data-action="practice-check"]');
   await page.waitForTimeout(200);
-  const panel = await page.$('.check-panel');
+  const panel = await page.$('.ex .check-panel');
   if (!panel) throw new Error('no check panel');
   const cls = await panel.getAttribute('class');
   if (!/bad|warn/.test(cls)) throw new Error('wrong query judged as: ' + cls);
-  if (!(await page.$$('.crit.unmet')).length) throw new Error('did not say what is missing');
-  const note = await page.textContent('.check-note');
+  if (!(await page.$$('.ex .crit.unmet')).length) throw new Error('did not say what is missing');
+  const note = await page.textContent('.ex .check-note');
   if (!/does not run the query/.test(note)) throw new Error('honesty note missing');
 });
 
 await step('checking a correct query passes', async () => {
-  const model = await page.evaluate(() => window.CP_ROLES.find(r => r.id === 'ba').skills[0].practice[0].solution);
-  await page.fill('.ex-input', model);
+  const model = await page.evaluate(() => window.CP_ROLES.find(r => r.id === 'ba').skills.find(s => s.id === 'sql-ba').practice[0].solution);
+  await page.fill('.ex .ex-input', model);
   await page.click('.ex [data-action="practice-check"]');
   await page.waitForTimeout(200);
-  const cls = await (await page.$('.check-panel')).getAttribute('class');
+  const cls = await (await page.$('.ex .check-panel')).getAttribute('class');
   if (!/ok/.test(cls)) throw new Error('model query judged as: ' + cls);
-  const title = await page.textContent('.check-panel b');
+  const title = await page.textContent('.ex .check-panel b');
   if (!/Looks correct/.test(title)) throw new Error('verdict = ' + title);
-  if ((await page.$$('.crit.unmet')).length) throw new Error('unmet criteria on a correct answer');
+  if ((await page.$$('.ex .crit.unmet')).length) throw new Error('unmet criteria on a correct answer');
 });
 
 await step('empty attempt is refused rather than passed', async () => {
-  await page.fill('.ex-input', '');
+  await page.fill('.ex .ex-input', '');
   await page.click('.ex [data-action="practice-check"]');
   await page.waitForTimeout(200);
-  const t = await page.textContent('.check-panel');
+  const t = await page.textContent('.ex .check-panel');
   if (!/Write an attempt first/.test(t)) throw new Error('empty attempt: ' + t.slice(0, 60));
 });
 
@@ -211,7 +213,9 @@ await page.screenshot({ path: 'shot-practice.png', fullPage: true });
 await step('judgement skills keep a written answer with hints', async () => {
   await page.click('[data-nav="roadmap"]');
   await page.waitForTimeout(150);
-  await page.click('.skill-row:nth-child(2)');
+  await page.click('[data-action="open-track"][data-track="ba-requirements"]');
+  await page.waitForTimeout(150);
+  await page.click('.skill-row[data-skill="requirements-ba"]');
   await page.waitForTimeout(150);
   await page.click('[data-action="start-learn"]');
   await page.waitForTimeout(150);
@@ -224,17 +228,17 @@ await step('judgement skills keep a written answer with hints', async () => {
   if (!(await page.$('[data-action="practice-hint"]'))) throw new Error('no hints on written exercise');
 
   const modelText = await page.evaluate(() => {
-    const ex = window.CP_ROLES.find(r => r.id === 'ba').skills[1].practice[0];
+    const ex = window.CP_ROLES.find(r => r.id === 'ba').skills.find(s => s.id === 'requirements-ba').practice[0];
     return ex.solution || ex.answer;
   });
-  await page.fill('.ex-input', modelText);
+  await page.fill('.ex .ex-input', modelText);
   await page.click('.ex [data-action="practice-check"]');
   await page.waitForTimeout(200);
-  const t = await page.textContent('.check-panel');
+  const t = await page.textContent('.ex .check-panel');
   if (!/key points/.test(t)) throw new Error('written check should count key points: ' + t.slice(0, 80));
-  const note = await page.textContent('.check-note');
+  const note = await page.textContent('.ex .check-note');
   if (!/not how well you argued/.test(note)) throw new Error('coverage caveat missing');
-  if ((await page.$$('.crit.met')).length < 2) throw new Error('coverage detection too strict');
+  if ((await page.$$('.ex .crit.met')).length < 2) throw new Error('coverage detection too strict');
 });
 
 await step('every practice exercise has hints', async () => {

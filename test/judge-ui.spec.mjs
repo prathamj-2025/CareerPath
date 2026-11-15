@@ -95,7 +95,7 @@ await step('a lesson scenario is marked by the AI, each key point with a short r
 
 await step('a practice exercise is marked by the AI too, and the button shows it is working', async () => {
   const ba = await student('Bea Okafor', 'bea@usc.edu', 'ba');
-  await openSkill(ba, 'requirements-ba');
+  await openSkill(ba, 'requirements-ba', 'ba-requirements');
   await lastLesson(ba);
   await ba.waitForSelector('.ex textarea');
   await ba.fill('.ex textarea', 'I would ask what it is for. MET:2');

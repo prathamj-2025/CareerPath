@@ -2,7 +2,8 @@
 
    Two layers:
      1. the files in content/ (never served to browsers; see tools/strip-keys.mjs), the starting point;
-     2. rows in content_lessons and content_questions (supabase/migrations/008_content_edits.sql), what admins changed.
+     2. rows in content_lessons and content_questions (supabase/migrations/008_content_edits.sql), and in content_overrides
+        (013_content_overrides.sql: project briefs and practice exercises), what admins changed.
    content() returns layer 2 applied over layer 1. The database rows are cached for a few seconds so a busy site does
    not read them on every request, and the cache is dropped as soon as an admin saves. If the tables do not exist yet
    (the migration has not been run) the files alone are used. Files that start with an underscore are not routes. */
@@ -42,20 +43,34 @@ const fromRow = (r) => ({ qid: r.qid, v: r.version, lvl: r.lvl, q: r.q, opts: r.
 
 /* Pure: base roles plus database rows in, merged roles out. Skills with no edits are the same objects as in the base.
    Every merged skill gets drafts[] and archive[] (empty when there is nothing). */
-export function applyOverlay(baseRoles, lessonRows, questionRows) {
+export function applyOverlay(baseRoles, lessonRows, questionRows, overrideRows) {
   const liveLesson = {};
   (lessonRows || []).filter((r) => r.status === "live").forEach((r) => { (liveLesson[r.skill_id] = liveLesson[r.skill_id] || {})[r.idx] = r; });
   const qBy = {};
   (questionRows || []).forEach((r) => { (qBy[r.skill_id] = qBy[r.skill_id] || []).push(r); });
+  const projectBy = {}, practiceBy = {};
+  (overrideRows || []).filter((r) => r.status === "live").forEach((r) => {
+    if (r.kind === "project") projectBy[r.key] = r;
+    else if (r.kind === "practice") { const [sid, i] = String(r.key).split("#"); (practiceBy[sid] = practiceBy[sid] || {})[i] = r; }
+  });
   const changed = new Set();
 
   const roles = baseRoles.map((role) => {
     let touched = false;
     const skills = role.skills.map((sk) => {
-      const L = liveLesson[sk.id], Q = qBy[sk.id];
-      if (!L && !Q) return sk;
+      const L = liveLesson[sk.id], Q = qBy[sk.id], PJ = projectBy[sk.id], PR = practiceBy[sk.id];
+      if (!L && !Q && !PJ && !PR) return sk;
       touched = true; changed.add(sk.id);
       const out = Object.assign({}, sk, { lessons: sk.lessons.slice(), drafts: [], archive: [] });
+      if (PJ && PJ.data) out.project = Object.assign({}, sk.project || {}, { title: String(PJ.data.title || ""), brief: String(PJ.data.brief || "") });
+      if (PR) {
+        out.practice = (sk.practice || []).map((ex, i) => {
+          const r = PR[i]; if (!r || !r.data) return ex;
+          const d = r.data, o = Object.assign({}, ex, { prompt: String(d.prompt || ex.prompt), hints: Array.isArray(d.hints) ? d.hints.map(String) : ex.hints });
+          if (ex.kind === "query") o.solution = String(d.answer || ex.solution); else o.answer = String(d.answer || ex.answer);
+          return o;
+        });
+      }
       if (L) {
         Object.keys(L).forEach((i) => {
           if (out.lessons[i]) out.lessons[i] = Object.assign({}, out.lessons[i], { title: L[i].title, body: L[i].body, v: L[i].version });
@@ -84,7 +99,7 @@ export function applyOverlay(baseRoles, lessonRows, questionRows) {
 }
 function fieldsOf(r) { return { q: r.q, opts: r.opts, a: r.answer, lvl: r.lvl, why: r.why || "" }; }
 
-let rowCache = { at: 0, lessons: [], questions: [], loaded: false };
+let rowCache = { at: 0, lessons: [], questions: [], overrides: [], loaded: false };
 let mergedCache = null;
 export function invalidate() { rowCache.at = 0; mergedCache = null; }
 
@@ -103,14 +118,17 @@ const tableMissing = (r) => r.status === 404 || (r.data && (r.data.code === "PGR
 async function loadRows() {
   if (rowCache.loaded && Date.now() - rowCache.at < TTL_MS) return;
   const rest = serviceRest();
-  if (!rest) { rowCache = { at: Date.now(), lessons: [], questions: [], loaded: true }; mergedCache = null; return; }
-  const [l, q] = await Promise.all([
+  if (!rest) { rowCache = { at: Date.now(), lessons: [], questions: [], overrides: [], loaded: true }; mergedCache = null; return; }
+  const [l, q, o] = await Promise.all([
     all(rest, "content_lessons?select=*&order=skill_id.asc,idx.asc,version.asc"),
-    all(rest, "content_questions?select=*&order=created_at.asc")
+    all(rest, "content_questions?select=*&order=created_at.asc"),
+    all(rest, "content_overrides?select=*&order=key.asc,version.asc")
   ]);
-  if (l.ok && q.ok) { rowCache = { at: Date.now(), lessons: l.data, questions: q.data, loaded: true }; mergedCache = null; return; }
+  // Migration 013 may not have been run yet: the project and practice edits are then simply absent.
+  const over = o.ok ? o.data : (tableMissing(o) ? [] : null);
+  if (l.ok && q.ok && over) { rowCache = { at: Date.now(), lessons: l.data, questions: q.data, overrides: over, loaded: true }; mergedCache = null; return; }
   if ((!l.ok && tableMissing(l)) || (!q.ok && tableMissing(q))) {          // migration 008 not run yet: the files alone
-    rowCache = { at: Date.now(), lessons: [], questions: [], loaded: true }; mergedCache = null; return;
+    rowCache = { at: Date.now(), lessons: [], questions: [], overrides: [], loaded: true }; mergedCache = null; return;
   }
   if (rowCache.loaded) { rowCache.at = Date.now() - TTL_MS + 2000; return; }   // keep the last good copy, try again soon
   throw new Error("content_unavailable");
@@ -122,7 +140,7 @@ export async function content() {
   await loadRows();
   if (mergedCache) return mergedCache;
   const B = baseContent();
-  const o = applyOverlay(B.roles, rowCache.lessons, rowCache.questions);
+  const o = applyOverlay(B.roles, rowCache.lessons, rowCache.questions, rowCache.overrides);
   mergedCache = { roles: o.roles, levels: B.levels, grading: B.grading, project: B.project, changed: o.changed, rows: rowCache };
   return mergedCache;
 }
@@ -143,6 +161,28 @@ export function questionAt(skill, qid, v) {
 
 /* What the page needs. Students get the edited lessons and the live question text, with no answers. Admins also get the
    answers, the drafts and the earlier versions. Only skills that have edits are listed; the page keeps its files for the rest. */
+/* Earlier versions an admin can restore: lessons, the project brief and practice exercises. Newest first, live one left out. */
+function historyOf(rows, skillId) {
+  const at = (t) => dateText(t);
+  const lessons = {}, practice = {};
+  let project = [];
+  ((rows && rows.lessons) || []).filter((r) => r.skill_id === skillId && r.status === "archived").forEach((r) => {
+    (lessons[r.idx] = lessons[r.idx] || []).push({ v: r.version, title: r.title, body: r.body, at: at(r.edited_at) });
+  });
+  ((rows && rows.overrides) || []).filter((r) => r.status === "archived").forEach((r) => {
+    if (r.kind === "project" && r.key === skillId) project.push({ v: r.version, title: r.data.title, brief: r.data.brief, at: at(r.edited_at) });
+    if (r.kind === "practice" && String(r.key).split("#")[0] === skillId) {
+      const i = String(r.key).split("#")[1];
+      (practice[i] = practice[i] || []).push({ v: r.version, prompt: r.data.prompt, hints: r.data.hints || [], answer: r.data.answer, at: at(r.edited_at) });
+    }
+  });
+  const newest = (a, b) => b.v - a.v;
+  Object.keys(lessons).forEach((k) => lessons[k].sort(newest));
+  Object.keys(practice).forEach((k) => practice[k].sort(newest));
+  project.sort(newest);
+  return { lessons, project, practice };
+}
+
 export function viewFor(C, admin) {
   const skills = {};
   C.roles.forEach((r) => r.skills.forEach((s) => {
@@ -151,7 +191,14 @@ export function viewFor(C, admin) {
     const lessons = {};
     s.lessons.forEach((l, i) => { if (l !== base.lessons[i]) lessons[i] = { title: l.title, body: l.body, v: l.v || 1 }; });
     const v = { lessons, assessment: s.assessment.map((q) => (admin ? { qid: q.qid, v: q.v, lvl: q.lvl, q: q.q, opts: q.opts, a: q.a, why: q.why } : { qid: q.qid, v: q.v, lvl: q.lvl, q: q.q, opts: q.opts })) };
-    if (admin) { v.drafts = s.drafts || []; v.archive = s.archive || []; }
+    if (s.project !== base.project) v.project = { title: s.project.title, brief: s.project.brief };
+    const prac = {};
+    (s.practice || []).forEach((ex, i) => { if (ex !== (base.practice || [])[i]) prac[i] = { prompt: ex.prompt, hints: ex.hints || [], answer: ex.kind === "query" ? ex.solution : ex.answer }; });
+    if (Object.keys(prac).length) v.practice = prac;
+    if (admin) {
+      v.drafts = s.drafts || []; v.archive = s.archive || [];
+      v.history = historyOf(C.rows, s.id);
+    }
     skills[s.id] = v;
   }));
   return { skills };

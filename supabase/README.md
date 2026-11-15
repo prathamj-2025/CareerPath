@@ -38,6 +38,11 @@ One shared Supabase project. Database changes live here as numbered SQL files in
   keyword check scored it). Only adds columns, safe to run twice. **Run it before pushing the website that uses it.** If it
   is not run, scoring still works (the submission is saved without the new columns) but admins cannot save a reference answer.
 
+- `013_content_overrides.sql`: the `content_overrides` table, which holds admin edits to project briefs and practice exercises,
+  with every earlier version kept so an admin can restore it (lessons and questions already have their own tables from 008).
+  Server only: the site cannot read or write it. Safe to run twice. Run it after the website that uses it is deployed; until
+  then the project and practice edit buttons say to run 013 when you save, and everything else works as before.
+
 Run them in order, one at a time, in the SQL editor.
 
 ## Exam and project scoring (server side)

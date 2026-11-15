@@ -1,0 +1,573 @@
+[
+ {
+  "id": "foundations-ba",
+  "name": "Business Analysis Foundations",
+  "lens": "What business analysts do and how they create value",
+  "summary": "Start from zero: what business analysis is, the roles an analyst plays, the six core concepts that every analysis uses, how work moves from need to solution, and what good analysts deliver.",
+  "project": {
+   "title": "Business analysis in a real organization",
+   "brief": "Pick an organization you know (a bank branch, a hospital clinic, a campus service). Describe one problem it has, who is affected, what change could help, and what an analyst would need to find out before recommending anything. One page."
+  },
+  "lessons": [
+   "What is business analysis? Problems, needs and solutions",
+   "Business analyst roles and titles across industries",
+   "The six core concepts of business analysis",
+   "The BABOK Guide knowledge areas at a glance",
+   "From business need to delivered solution: the analyst's path",
+   "Business analyst versus product, project and data roles",
+   "Typical business analysis deliverables and who reads them",
+   "Skills of a strong business analyst"
+  ],
+  "notes": "Be method-neutral and teach BABOK Guide v3 concepts accurately in your own words (six knowledge areas, the Business Analysis Core Concept Model). Hedge anything about exam details; say 'check the IIBA site for the current guide'. Use everyday organizations (bank, clinic, retailer, university) for examples; label invented numbers illustrative."
+ },
+ {
+  "id": "strategy-ba",
+  "name": "Business Needs, Strategy and Business Cases",
+  "lens": "Find the real problem and justify the change",
+  "summary": "Analyze the current state, define the future state and the gap between them, find root causes, size options and write a business case a sponsor can approve.",
+  "project": {
+   "title": "A one-page business case",
+   "brief": "Choose a realistic improvement (for example, replacing a manual approval step). Write a one-page business case: problem, current and future state, two options, costs and benefits with simple numbers, risks and your recommendation."
+  },
+  "lessons": [
+   "Business needs: symptoms, problems and opportunities",
+   "Analyzing the current state",
+   "Defining the future state and the gap",
+   "Root cause analysis: 5 Whys and fishbone diagrams",
+   "SWOT, PESTLE and other strategic frames, used lightly",
+   "Defining solution options and scope",
+   "Costs, benefits, payback and return: the numbers in a business case",
+   "Writing and presenting a business case"
+  ],
+  "notes": "Every financial calculation (payback, ROI, NPV at beginner level, cost-benefit tables) MUST be computed with python and match the text. Show a fishbone as an indented text outline. Include a worked business case with a table of options."
+ },
+ {
+  "id": "elicitation-ba",
+  "name": "Elicitation and Collaboration",
+  "lens": "Draw out what people really need",
+  "summary": "Prepare for and run interviews, workshops, surveys, observation and document analysis, confirm what you heard, and keep stakeholders collaborating.",
+  "project": {
+   "title": "An elicitation plan and interview guide",
+   "brief": "For a project of your choice, write an elicitation plan (who, which technique, when, why) and a 10-question interview guide for the most important stakeholder, with the follow-up probes you would use."
+  },
+  "lessons": [
+   "Why elicitation is hard: people do not know what they need",
+   "Preparing for elicitation: goals, stakeholders and techniques",
+   "Interviews: questions that find real needs",
+   "Running a requirements workshop",
+   "Surveys and questionnaires that give usable answers",
+   "Observation and job shadowing",
+   "Document analysis, interface analysis and data as sources",
+   "Brainstorming, focus groups and prototypes as elicitation",
+   "Confirming results and managing stakeholder collaboration"
+  ],
+  "notes": "Provide sample interview scripts as short dialogues and sample workshop agendas as tables. Teach open versus closed questions, leading questions, and active listening. No stereotypes about people."
+ },
+ {
+  "id": "planning-ba",
+  "name": "Planning and Governing Your Analysis Work",
+  "lens": "Plan the analysis before you start",
+  "summary": "Choose an approach, plan stakeholder engagement, decide how requirements will be governed, estimate analysis effort, and measure how well your analysis work is going.",
+  "project": {
+   "title": "A business analysis plan",
+   "brief": "Write a one-to-two page business analysis plan for a project of your choice: approach, deliverables, stakeholders and engagement, how requirements will be approved and changed, effort estimate and risks to the analysis."
+  },
+  "lessons": [
+   "Planning business analysis: why analysts need a plan",
+   "Choosing a business analysis approach: predictive, agile or hybrid",
+   "Stakeholder analysis and engagement planning for analysts",
+   "Governance: who decides, approves and signs off requirements",
+   "Information management: where requirements live and how they are found",
+   "Estimating business analysis effort",
+   "Monitoring and improving the analysis work"
+  ],
+  "notes": "Include a sample BA plan outline, a stakeholder engagement table and an effort-estimate worked example (verify arithmetic in python). Tool-neutral."
+ },
+ {
+  "id": "requirements-ba",
+  "name": "Requirements Analysis and Specification",
+  "lens": "Write requirements that can be built and tested",
+  "summary": "Classify and write requirements correctly, remove ambiguity, prioritize with MoSCoW and other methods, organize them into a specification and check their quality.",
+  "project": {
+   "title": "A requirements specification excerpt",
+   "brief": "Write a requirements specification for one feature of a system you know: business, stakeholder, functional and non-functional requirements (at least 12), each with an ID, a priority and a way to verify it."
+  },
+  "lessons": [
+   "What a requirement is: needs, wants and constraints",
+   "Requirement types: business, stakeholder, solution, transition",
+   "Functional requirements: writing statements a developer can build",
+   "Writing clearly: ambiguity, weak words and testable wording",
+   "Requirements quality checklist: complete, consistent, verifiable",
+   "Prioritizing requirements: MoSCoW, value versus effort, Kano",
+   "Business requirements documents, functional specs and SRS compared",
+   "Requirements packages for different audiences",
+   "Assumptions, constraints and dependencies"
+  ],
+  "notes": "Include many weak-to-strong requirement rewrites as before/after pairs, and a sample requirements table with ID, statement, priority and verification. Do not claim a single standard template; mention IEEE 29148 only as an example, hedged."
+ },
+ {
+  "id": "userstories-ba",
+  "name": "User Stories, Use Cases and Acceptance Criteria",
+  "lens": "Capture behavior in stories, scenarios and criteria",
+  "summary": "Write user stories with the INVEST checklist, split large stories, describe scenarios as use cases, and write acceptance criteria in Given-When-Then form.",
+  "project": {
+   "title": "Stories and acceptance criteria for a feature",
+   "brief": "Take a feature (for example, password reset or booking a time slot). Write five user stories, split one that is too big, write Given-When-Then acceptance criteria for two of them and one use case with a main flow and two alternate flows."
+  },
+  "lessons": [
+   "User stories: the card, the conversation and the confirmation",
+   "Writing good stories with the INVEST checklist",
+   "Splitting large stories without losing value",
+   "Epics, themes and the story map",
+   "Acceptance criteria: rules and Given-When-Then scenarios",
+   "Use cases: actors, goals, main flow and alternate flows",
+   "Choosing between stories, use cases and plain requirements",
+   "Edge cases, error paths and negative scenarios"
+  ],
+  "notes": "Provide worked examples for each technique with realistic features. Show use cases as numbered text. Teach Given-When-Then neutrally (call it Gherkin-style) and do not claim one right format."
+ },
+ {
+  "id": "nfr-ba",
+  "name": "Non-Functional Requirements and Quality Attributes",
+  "lens": "Specify how well the system must work",
+  "summary": "Capture performance, security, usability, reliability, accessibility and compliance requirements in measurable terms and balance them against cost.",
+  "project": {
+   "title": "Measurable non-functional requirements",
+   "brief": "For a system of your choice, write eight measurable non-functional requirements covering performance, availability, security, usability, accessibility and data retention, each with a measure and a target."
+  },
+  "lessons": [
+   "What non-functional requirements are and why they get missed",
+   "Performance and capacity requirements with real numbers",
+   "Availability, reliability and recovery",
+   "Security, privacy and compliance requirements",
+   "Usability and accessibility requirements",
+   "Writing measurable quality attributes and negotiating trade-offs"
+  ],
+  "notes": "Availability arithmetic (for example, 99.9% allows about 8.76 hours of downtime a year) and capacity numbers MUST be computed with python. Do not state legal requirements for specific jurisdictions as facts beyond naming well-known regimes (GDPR, WCAG, PCI DSS) at a high level; say 'check current regulations'."
+ },
+ {
+  "id": "modeling-ba",
+  "name": "Modeling for Analysts",
+  "lens": "Draw the system so everyone sees the same thing",
+  "summary": "Use context diagrams, data flow diagrams, entity relationship diagrams and basic UML to show scope, data and behavior, and pick the right diagram for the question.",
+  "project": {
+   "title": "A set of models for one system",
+   "brief": "For a small system of your choice (a library loan desk, a clinic booking tool), draw a context diagram, one data flow diagram level, an entity relationship diagram and a UML activity or sequence diagram in text form, and write one paragraph on what each shows."
+  },
+  "lessons": [
+   "Why analysts model: pictures that remove misunderstandings",
+   "The context diagram: scope on one page",
+   "Data flow diagrams: how data moves",
+   "Entity relationship diagrams: the data behind the system",
+   "UML essentials: use case, class and activity diagrams",
+   "Sequence and state diagrams in plain terms",
+   "Choosing the right model for the question",
+   "Keeping models consistent with the requirements"
+  ],
+  "notes": "Draw all diagrams as ASCII/text in ```text blocks or as indented outlines, never images. Keep notation correct (DFD external entities, processes, data stores, flows; ERD cardinality)."
+ },
+ {
+  "id": "process-ba",
+  "name": "Process Modeling and Improvement",
+  "lens": "See how work flows, then make it flow better",
+  "summary": "Map processes in BPMN, find waste and bottlenecks, measure cycle time, and design a better to-be process with controls and measures.",
+  "project": {
+   "title": "As-is and to-be process",
+   "brief": "Map an everyday process you know (expense approval, returns, onboarding) as-is in text-form BPMN with swimlanes, measure or estimate where time goes, then design a to-be version and explain what changes and what risk the change creates."
+  },
+  "lessons": [
+   "Why processes matter: inputs, steps, outputs and owners",
+   "BPMN basics: events, tasks, gateways and flows",
+   "Swimlanes and handoffs: who does what",
+   "Mapping the as-is process from interviews and data",
+   "Measuring a process: cycle time, wait time and rework",
+   "Finding waste and bottlenecks: lean thinking for analysts",
+   "Designing the to-be process",
+   "Controls, exceptions and compliance in processes",
+   "Automation, RPA and when not to automate"
+  ],
+  "notes": "Show BPMN as structured text (e.g., Lane: Finance; Start event; Task; Exclusive gateway with conditions). Cycle-time, wait-time, throughput and process-efficiency arithmetic MUST be computed with python. Name BPMN 2.0 correctly and accurately."
+ },
+ {
+  "id": "rules-ba",
+  "name": "Business Rules, Decision Tables and Data Requirements",
+  "lens": "Capture the logic and the data precisely",
+  "summary": "Separate business rules from process, write them clearly, model complex logic as decision tables and decision trees, and define data requirements with a data dictionary.",
+  "project": {
+   "title": "Decision table and data dictionary",
+   "brief": "Choose a rule-heavy process (loan pre-qualification, discount eligibility, shipping charges). Write the rules in plain statements, build a decision table that covers every combination, and a data dictionary for the fields involved."
+  },
+  "lessons": [
+   "Business rules: what they are and how they differ from requirements",
+   "Writing atomic, testable business rules",
+   "Decision tables: every case, no gaps, no overlaps",
+   "Decision trees and rule hierarchies",
+   "Data requirements and the data dictionary",
+   "Data quality rules, reference data and validation"
+  ],
+  "notes": "Decision tables must be verified by python enumeration (complete and non-overlapping). Show tables in markdown. Use a realistic eligibility or pricing example."
+ },
+ {
+  "id": "prototyping-ba",
+  "name": "Wireframes and Prototyping for Analysts",
+  "lens": "Show it before it is built",
+  "summary": "Sketch screens and flows, use wireframes to elicit and confirm requirements, write annotations developers can use and run a simple usability review.",
+  "project": {
+   "title": "A wireframe set with annotations",
+   "brief": "Sketch (on paper or in a free tool, then describe in text) three screens for a feature of your choice with annotations for fields, validations and error messages, and write a five-question usability review script."
+  },
+  "lessons": [
+   "Why prototypes find requirements that talk cannot",
+   "Low-fidelity wireframes: sketching screens and flows",
+   "Annotating wireframes: fields, rules, validations and messages",
+   "Prototypes and mockups: when higher fidelity is worth it",
+   "Running a simple usability review with stakeholders",
+   "Connecting wireframes to requirements and acceptance criteria"
+  ],
+  "notes": "Describe wireframes as text layouts in ```text blocks (boxes and labels in ASCII). Tool-neutral (mention Figma, Balsamiq or pencil and paper only as examples; no pricing or feature claims)."
+ },
+ {
+  "id": "solution-ba",
+  "name": "Solution Options and Evaluation",
+  "lens": "Choose the right solution and check that it worked",
+  "summary": "Compare solution options, assess vendor and build-or-buy decisions, define success measures and evaluate whether the delivered solution creates the expected value.",
+  "project": {
+   "title": "A solution comparison and evaluation plan",
+   "brief": "Compare three options for a business need with a weighted scoring table, recommend one, then write how you would judge after launch whether it delivered the value you promised."
+  },
+  "lessons": [
+   "Defining solution options and what 'good enough' means",
+   "Build, buy or configure: a decision guide",
+   "Weighted scoring and comparing options fairly",
+   "Requests for information and proposals from an analyst's point of view",
+   "Defining measures of success before delivery",
+   "Evaluating a solution after launch",
+   "Recommending improvements and retiring what no longer works"
+  ],
+  "notes": "All weighted scoring arithmetic MUST be verified in python. Do not quote vendor prices. Include a worked comparison table."
+ },
+ {
+  "id": "traceability-ba",
+  "name": "Traceability and Managing Change to Requirements",
+  "lens": "Keep requirements true as everything moves",
+  "summary": "Trace requirements from need to test, assess the impact of change, baseline and version them, and keep requirements approved, current and retired cleanly.",
+  "project": {
+   "title": "A traceability matrix and change request",
+   "brief": "For ten requirements, build a traceability matrix from business objective to requirement to design item to test case, then write one change request and its impact analysis."
+  },
+  "lessons": [
+   "Why requirements change and why that is normal",
+   "Traceability: linking need, requirement, design and test",
+   "Requirements baselines and versioning",
+   "Change requests and impact analysis",
+   "Approving, rejecting and prioritizing changes",
+   "Requirements status through their life: proposed to retired",
+   "Requirements management tools versus spreadsheets"
+  ],
+  "notes": "Show a traceability matrix as a markdown table and a change request form as a text block. Count-based checks (coverage percentages) MUST be verified in python."
+ },
+ {
+  "id": "agile-ba",
+  "name": "Business Analysis in Agile Teams",
+  "lens": "Analysis that keeps pace with the sprint",
+  "summary": "Work as an analyst in Scrum and Kanban teams: groom the backlog, prepare stories, support the product owner, analyze just in time and keep documentation lean but useful.",
+  "project": {
+   "title": "A sprint-ready backlog slice",
+   "brief": "Take an epic and prepare a backlog slice for the next two sprints: refined stories with acceptance criteria, a definition of ready, dependencies and the questions that must be answered before sprint planning."
+  },
+  "lessons": [
+   "Where the business analyst fits in an agile team",
+   "Backlog refinement: getting stories ready",
+   "The definition of ready and the definition of done",
+   "Just-in-time analysis and spikes",
+   "Working with the product owner and the team",
+   "Lean documentation: what to write and what to skip",
+   "Analysis in Kanban and continuous delivery",
+   "Agile anti-patterns for analysts"
+  ],
+  "notes": "Be accurate about Scrum (Scrum Guide roles: Product Owner, Scrum Master, Developers; there is no 'business analyst' role in the guide, analysts work within the team). Verify any capacity or story-point arithmetic in python."
+ },
+ {
+  "id": "predictive-ba",
+  "name": "Business Analysis in Predictive and Hybrid Projects",
+  "lens": "Analysis in plan-driven delivery",
+  "summary": "Run requirements work in stage-gated projects: documents, reviews, sign-offs, phase exits and handoffs, and adapt to hybrid delivery.",
+  "project": {
+   "title": "A requirements phase plan",
+   "brief": "For a plan-driven project, write the requirements phase plan: activities, documents, reviews, sign-off authority, entry and exit criteria and the plan for late change."
+  },
+  "lessons": [
+   "Predictive delivery: where analysis happens",
+   "Requirements documents, reviews and sign-off",
+   "Phase gates, entry criteria and exit criteria",
+   "Handing requirements to design, build and test",
+   "Late change in a plan-driven project",
+   "Hybrid delivery: choosing what to plan and what to iterate"
+  ],
+  "notes": "Even-handed about methods. Provide a sample phase table and review checklist."
+ },
+ {
+  "id": "testing-ba",
+  "name": "Verification, Validation and UAT",
+  "lens": "Prove the solution matches the requirements and the need",
+  "summary": "Review requirements, support testing, write UAT scenarios, triage defects and decide whether the solution is ready to go live.",
+  "project": {
+   "title": "A UAT plan",
+   "brief": "Write a user acceptance test plan for a feature of your choice: scope, scenarios traced to requirements, entry and exit criteria, defect severity rules and the go-live recommendation criteria."
+  },
+  "lessons": [
+   "Verification and validation: right build versus right thing",
+   "Reviewing requirements: walkthroughs and inspections",
+   "Test levels and where the analyst contributes",
+   "Writing UAT scenarios from acceptance criteria",
+   "Running UAT and managing testers",
+   "Defect triage and severity versus priority",
+   "The go or no-go recommendation"
+  ],
+  "notes": "Show a sample UAT scenario table, a defect log and severity/priority matrix. Verify any pass-rate arithmetic in python."
+ },
+ {
+  "id": "implementation-ba",
+  "name": "Transition, Adoption and Benefits Realization",
+  "lens": "Make the change stick and prove the value",
+  "summary": "Plan the transition, training and cutover from the analyst's side, measure adoption, track benefits against the business case and close the loop.",
+  "project": {
+   "title": "A transition and benefits plan",
+   "brief": "Write the transition plan for a new system (training, data migration checks, cutover support, adoption measures) and a benefits tracking table comparing the business case promises with how you will measure them."
+  },
+  "lessons": [
+   "Transition requirements: what must be true on day one",
+   "Training, documentation and support needs",
+   "Data migration requirements and checks",
+   "Measuring adoption after go-live",
+   "Benefits realization: did the business case hold",
+   "Lessons learned and closing the analysis"
+  ],
+  "notes": "Include a sample benefits table with baseline, target and actual; verify arithmetic in python. Hedge on change frameworks (name Kotter, ADKAR briefly as examples)."
+ },
+ {
+  "id": "sql-ba",
+  "name": "SQL for Business Analysts",
+  "lens": "Query the data to check, reconcile and report",
+  "summary": "Learn SQL from zero with an analyst's lens: select and filter data, join tables, aggregate, check data quality, reconcile counts and totals, and answer business questions on a real practice dataset.",
+  "project": {
+   "title": "Reconciliation and reporting queries",
+   "brief": "Write five SQL queries on the practice data: a count reconciliation between two tables, a missing-data check, a monthly summary, a top-N report and a duplicate check. For each, state the business question and the result you expect."
+  },
+  "lessons": [
+   "Tables, rows, keys and what one row means",
+   "SELECT, WHERE and ORDER BY: asking your first questions",
+   "Filtering with AND, OR, IN, BETWEEN and LIKE",
+   "NULL: missing data and why it breaks comparisons",
+   "Aggregation: COUNT, SUM, AVG and GROUP BY",
+   "HAVING and the order SQL runs a query",
+   "JOINs: INNER and LEFT, and what each keeps",
+   "Reconciling two sources: counts, totals and mismatches",
+   "Data quality checks: duplicates, gaps and impossible values",
+   "Dates, CASE and building a clean report query"
+  ],
+  "notes": "DATA MODULE: use the TuneBox dataset exactly as described in /home/claude/content-pm2/SCHEMA.md (SQLite at /home/claude/content-pm2/data/tunebox.db). EVERY SQL query MUST be executed and its true output pasted (under 12 lines, under 20 lines of code per block). No SQL comments (--). Analyst lens: reconciliation, validation and reporting, not product experiments. Say 'in the TuneBox practice data'."
+ },
+ {
+  "id": "excel-ba",
+  "name": "Excel and Spreadsheet Analysis",
+  "lens": "Analyze, check and present with a spreadsheet",
+  "summary": "Use formulas, lookups, pivots, conditional logic and charts to analyze data, and build checks so a spreadsheet can be trusted.",
+  "project": {
+   "title": "A checked analysis workbook",
+   "brief": "Build (or fully describe) a workbook with a raw data sheet, a cleaned table, lookup columns, a pivot-style summary and a checks area that proves the totals reconcile. Document each formula in plain language."
+  },
+  "lessons": [
+   "The spreadsheet as an analysis tool: structure and good habits",
+   "Formulas, absolute references and common errors",
+   "Lookups: VLOOKUP, INDEX and MATCH, and XLOOKUP",
+   "Logical and text functions: IF, AND, OR, SUMIFS, COUNTIFS",
+   "Cleaning data in a spreadsheet",
+   "Pivot tables: summarizing without formulas",
+   "Charts that tell the truth",
+   "Checks, reconciliation and protecting a model",
+   "Scenario tables and what-if analysis"
+  ],
+  "notes": "Show formulas as text with a small data table and the computed result; EVERY result MUST be computed with python (pandas or plain python) and match. Note that function availability varies by version (XLOOKUP is in newer Excel and Google Sheets). Do not rely on screenshots."
+ },
+ {
+  "id": "data-ba",
+  "name": "Data Analysis and Reporting for Analysts",
+  "lens": "Turn data into a trustworthy answer",
+  "summary": "Frame a question, profile and clean data, summarize with the right statistics, compare groups carefully and write findings with the right caveats.",
+  "project": {
+   "title": "An analysis memo",
+   "brief": "Using the practice data, answer one business question: state the question, describe the data and its limits, show the numbers, give a recommendation and list two caveats. Keep it to one page."
+  },
+  "lessons": [
+   "From business question to analysis plan",
+   "Profiling a dataset: size, types, ranges and gaps",
+   "Cleaning data: missing values, duplicates and outliers",
+   "Summarizing: mean, median, percentiles and spread",
+   "Comparing groups and avoiding false conclusions",
+   "Correlation is not causation: reading relationships carefully",
+   "Writing findings: question, evidence, caveat, recommendation",
+   "Reporting cycles: building a report that runs every month"
+  ],
+  "notes": "DATA MODULE: use the TuneBox dataset (see SCHEMA.md; SQLite at /home/claude/content-pm2/data/tunebox.db and CSVs). EVERY query/code block and every number MUST be executed and pasted from real output. SQL or Python (pandas) are fine; no SQL comments. Beginner level statistics only. Say 'in the TuneBox practice data'."
+ },
+ {
+  "id": "bi-ba",
+  "name": "Dashboards and Visualization for Analysts",
+  "lens": "Show the numbers so people can act",
+  "summary": "Choose the right chart, design a clear dashboard, define metrics precisely, avoid misleading visuals and tell a story with data.",
+  "project": {
+   "title": "A dashboard specification",
+   "brief": "Write a dashboard specification for a business team: the questions it answers, 6 metrics with exact definitions, the chart for each, filters, refresh frequency and the users who must act on it."
+  },
+  "lessons": [
+   "Visualization basics: matching the chart to the question",
+   "Bar, line, scatter and tables: when to use each",
+   "Misleading charts and how to spot them",
+   "Metric definitions: numerator, denominator and time window",
+   "Designing a dashboard people actually use",
+   "Data storytelling: the headline, the evidence and the ask",
+   "BI tools in practice: Power BI, Tableau, Looker Studio and Excel"
+  ],
+  "notes": "DATA MODULE: use the TuneBox dataset (see SCHEMA.md) for every number; EVERY metric you quote MUST be computed from real queries and pasted. Draw charts as ASCII/text tables or bar rows in ```text blocks, never images. Tool-neutral, no feature or price claims; say 'check the current documentation'."
+ },
+ {
+  "id": "tech-ba",
+  "name": "Technology Literacy for Analysts",
+  "lens": "Understand the systems you are analyzing",
+  "summary": "Understand databases, APIs, integrations, architecture and security basics well enough to ask good questions, write technical requirements and talk to engineers.",
+  "project": {
+   "title": "An integration requirements brief",
+   "brief": "For two systems that must exchange data (for example, a web store and an accounting system), write an integration brief: what data moves, in which direction and how often, the failure cases, the security needs and the questions you would ask the engineers."
+  },
+  "lessons": [
+   "How software systems are built: client, server and database",
+   "Databases and data models in plain terms",
+   "APIs: requests, responses and JSON",
+   "Integrations: batch, real-time and file-based",
+   "Cloud, environments and release pipelines for analysts",
+   "Security and privacy basics every analyst should know",
+   "Working with engineers: questions that save time"
+  ],
+  "notes": "Show JSON and HTTP examples and VERIFY any JSON parsing/arithmetic with python. Teach concepts, not vendor products. Do not make security guarantees; be accurate about basics (authentication versus authorization, encryption in transit and at rest)."
+ },
+ {
+  "id": "stakeholder-ba",
+  "name": "Stakeholder Management for Analysts",
+  "lens": "Work with the people who decide, build and use",
+  "summary": "Identify and analyze stakeholders, build trust, manage conflicting requests, handle resistance and keep sponsors and teams aligned.",
+  "project": {
+   "title": "Stakeholder map and conflict plan",
+   "brief": "Map at least eight stakeholders for a project you know by influence and interest, then write how you would resolve a conflict between two of them over a requirement."
+  },
+  "lessons": [
+   "Who the stakeholders are: users, sponsors, SMEs and others",
+   "Stakeholder analysis: influence, interest and attitude",
+   "Building trust with subject matter experts",
+   "Managing conflicting requirements",
+   "Handling resistance and difficult conversations",
+   "Managing expectations and saying no well",
+   "Keeping sponsors engaged"
+  ],
+  "notes": "Include a stakeholder register table, example dialogues and a conflict-resolution worked example. Respectful, no stereotypes."
+ },
+ {
+  "id": "communication-ba",
+  "name": "Communication and Facilitation",
+  "lens": "Be understood and get decisions",
+  "summary": "Write clearly for business and technical readers, present findings, facilitate workshops and meetings, give and receive feedback and communicate across teams and cultures.",
+  "project": {
+   "title": "A findings presentation and email",
+   "brief": "Write a five-slide outline (title and key message per slide) presenting an analysis recommendation to a sponsor, and a short follow-up email that confirms the decisions and next steps."
+  },
+  "lessons": [
+   "Writing for business readers: lead with the answer",
+   "Writing for technical readers: precise and complete",
+   "Presenting analysis: the headline first",
+   "Facilitating workshops and decision meetings",
+   "Meeting notes, decisions and follow-up",
+   "Giving and receiving feedback",
+   "Communicating across teams, time zones and cultures"
+  ],
+  "notes": "Provide before/after rewrites, templates as text blocks and sample agendas. Invented respectful examples."
+ },
+ {
+  "id": "tools-ba",
+  "name": "Business Analysis Tools",
+  "lens": "Choose and use the tools of the trade",
+  "summary": "What requirements, diagramming, backlog and collaboration tools do, how to use them well, and how to set up a clean analysis workspace.",
+  "project": {
+   "title": "An analysis workspace setup",
+   "brief": "Describe how you would set up the tools for a project: where requirements, diagrams, decisions and tests live, naming conventions, access rules and how a new teammate finds anything quickly."
+  },
+  "lessons": [
+   "What analyst tools do: capture, model, track and share",
+   "Backlog and requirements tools: Jira, Azure DevOps and others",
+   "Documentation tools: Confluence, SharePoint and wikis",
+   "Diagramming and modeling tools: Visio, Lucidchart, draw.io",
+   "Wireframing and prototyping tools",
+   "Choosing, rolling out and governing tools"
+  ],
+  "notes": "Teach the job each tool does first, then name real tools as examples. No prices or feature lists; say 'check current features'. Use sample requirement and ticket text."
+ },
+ {
+  "id": "ai-ba",
+  "name": "AI for Business Analysts",
+  "lens": "Use AI as an assistant, not an autopilot",
+  "summary": "Where AI helps an analyst (summaries, drafts, test ideas, data checks), how to prompt well, how to review AI output, and how to protect confidential information.",
+  "project": {
+   "title": "An AI-assisted analysis workflow",
+   "brief": "Design a repeatable workflow that uses an AI assistant to turn raw interview notes into a draft requirements list: inputs, prompt, review checklist, what must never be pasted in and how you verify the output."
+  },
+  "lessons": [
+   "What AI can and cannot do for a business analyst",
+   "Prompting for analysis work: clear context, task and format",
+   "Summarizing interviews, documents and meeting notes",
+   "Drafting requirements, stories and test cases with AI",
+   "Checking data and logic with AI help",
+   "Privacy, confidentiality and company policy",
+   "Reviewing AI output: errors, invented facts and bias"
+  ],
+  "notes": "Tool-neutral (name ChatGPT, Claude, Copilot or Gemini only as examples; no feature claims). Show example prompts and example outputs that contain a flaw the learner must catch. Stress human review and confidentiality."
+ },
+ {
+  "id": "certs-ba",
+  "name": "Business Analysis Certifications and Career Paths",
+  "lens": "Know the credentials and the road ahead",
+  "summary": "Understand the main business analysis credentials (IIBA and PMI), what each is for, how to choose, how to study, and how business analysts progress in their careers.",
+  "project": {
+   "title": "A certification and career plan",
+   "brief": "Write a one-page plan: your current experience, which credential (if any) fits and why, a 12-week study plan, and the first two roles you would target with the skills you will have."
+  },
+  "lessons": [
+   "Business analyst career paths and levels",
+   "The IIBA credentials: ECBA, CCBA, CBAP and others",
+   "PMI-PBA and other analysis-related credentials",
+   "Choosing whether and when to certify",
+   "Studying for an exam: the BABOK Guide, practice questions and habits",
+   "Moving from analyst to product, project or data roles"
+  ],
+  "notes": "IMPORTANT: say 'check the issuing body for current requirements, fees, exam formats and renewal rules'. Do not state fees, pass rates, question counts or hour thresholds unless you are certain; prefer hedged wording. Describe what each credential is for in general terms."
+ },
+ {
+  "id": "career-ba",
+  "name": "Interview-Ready Business Analyst",
+  "lens": "Turn what you learned into a job",
+  "summary": "Build a resume and portfolio, answer behavioral and technical interview questions, handle a requirements case and a process case, and start strong in a new role.",
+  "project": {
+   "title": "Interview-ready analyst portfolio",
+   "brief": "Prepare three STAR stories, one real or realistic analysis artifact (requirements excerpt, process map or analysis memo) and a two-minute answer to 'tell me about a requirement that changed late'."
+  },
+  "lessons": [
+   "Business analyst resumes: show impact, not duties",
+   "Building a portfolio with real artifacts",
+   "Behavioral interviews: STAR stories for analysts",
+   "Technical questions: SQL, Excel and process modeling",
+   "Case interview: gather requirements from a vague brief",
+   "Case interview: improve a broken process",
+   "Negotiating an offer and the first 90 days",
+   "A 30-day interview preparation plan"
+  ],
+  "notes": "Include a worked STAR story, a worked requirements case with the questions to ask, and a worked process case with a verified calculation. Hedge any claim about hiring practices ('often', 'commonly')."
+ }
+]

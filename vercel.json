@@ -27,7 +27,7 @@
   },
   "crons": [
     {
-      "path": "/api/keepalive",
+      "path": "/api/config?task=keepalive",
       "schedule": "0 14 * * *"
     }
   ]

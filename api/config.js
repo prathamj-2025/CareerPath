@@ -15,10 +15,21 @@
  * CP_DEMO=1 switches the real accounts off and returns to the browser-only demo (used by tests).
  */
 import { DEFAULT_URL, DEFAULT_KEY } from "./_env.js";
+import keepalive from "./_keepalive.js";
+import report from "./_report.js";
 
 const DEFAULT_SUPPORT = "careerpath531@gmail.com";
 
+/* Vercel's free plan allows 12 functions per deployment, and every file in api/ without a leading underscore counts as one.
+   So the daily keep-alive ping and the browser error report ride on this function:
+     /api/config?task=keepalive   called by the daily cron in vercel.json (see api/_keepalive.js)
+     /api/config?task=report      POST from public/monitor.js (see api/_report.js)
+   Do not add a new file to api/ without removing or merging another. */
 export default function handler(req, res) {
+  let task = "";
+  try { task = new URL(req.url || "/", "http://x").searchParams.get("task") || ""; } catch (e) { task = ""; }
+  if (task === "keepalive") return keepalive(req, res);
+  if (task === "report") return report(req, res);
   res.setHeader("cache-control", "no-store");
   const demo = process.env.CP_DEMO === "1";
   res.status(200).json({

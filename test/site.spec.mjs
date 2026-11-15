@@ -108,12 +108,12 @@ await step('the compare roadmaps link opens the role picker', async () => {
   need(await page.$('.skill-list'), 'logo did not return home from the picker');
 });
 
-await step('the Business Analyst roadmap has its own filled layout', async () => {
+await step('the Business Analyst roadmap shows the modules layout like the other roadmaps', async () => {
   await page.click('#sidebar .role-btn'); await page.click('#sidebar .role-opt[data-role="ba"]'); await wait(page);
   const t = await page.textContent('#view');
   need(!/Any skill can be opened/.test(t), 'note remains on BA page');
   const cards = await page.$$eval('.ex-card h3', els => els.map(e => e.textContent));
-  need(cards[0] === 'How stars work' && cards[1] === 'Recent results', cards.join('|'));
+  need(cards[0] === 'How stars work' && cards[1] === 'Certificates you can earn', cards.join('|'));
 });
 need(!page.errs.length, 'js errors: ' + page.errs.join(' | '));
 await page.close();

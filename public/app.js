@@ -46,6 +46,8 @@
     adminSkill: null,     // { roleId, skillId }
     adminEdit: null,      // qid being edited, or "new"
     adminLesson: null,    // lesson index being edited
+    adminProject: false,  // project brief open for editing
+    adminPractice: null,  // practice exercise index being edited
     adminHistory: null,   // qid whose version history is open
     adminStudent: null,   // student id whose profile is open
     studentFilter: { role: "all", school: "all", q: "" },
@@ -2331,6 +2333,13 @@
         });
         sk.drafts = c.drafts || [];
         sk.archive = c.archive || [];
+        if (c.project) sk.project = { title: c.project.title, brief: c.project.brief };
+        Object.keys(c.practice || {}).forEach(function (i) {
+          var ex = (sk.practice || [])[i], e = c.practice[i]; if (!ex) return;
+          ex.prompt = e.prompt; ex.hints = (e.hints || []).slice();
+          if (ex.kind === "query") ex.solution = e.answer; else ex.answer = e.answer;
+        });
+        sk.history = c.history || null;
       });
     });
     return n;
@@ -3558,9 +3567,66 @@
             '<div class="row" style="justify-content:space-between;align-items:flex-start;gap:12px">' +
               '<p style="font-weight:500"><span class="pill" style="margin-right:6px">' + (i + 1) + "</span>" + esc(l.title) + "</p>" +
               '<button class="btn sm" data-action="al-edit" data-i="' + i + '">Edit</button></div>' +
-            '<p class="tiny muted" style="margin-top:8px">' + esc(l.body.slice(0, 160)) + "&hellip;</p></div>";
+            '<p class="tiny muted" style="margin-top:8px">' + esc(l.body.slice(0, 160)) + "&hellip;</p>" +
+            versionList(s, "lesson", i, (s.history && s.history.lessons && s.history.lessons[i]) || [], function (h) { return h.title + " - " + h.body.slice(0, 100); }) + "</div>";
         }).join("") +
-      "</div>";
+      "</div>" +
+      projectEditor(s) + practiceEditors(s);
+  }
+
+  /* Earlier versions of one thing an admin can put back. Putting one back saves it as a new live version, so nothing is lost. */
+  function versionList(s, kind, idx, list, preview) {
+    if (!REAL || !list || !list.length) return "";
+    return '<details style="margin-top:10px"><summary class="tiny muted" style="cursor:pointer">Earlier versions (' + list.length + ")</summary>" +
+      '<div class="stack" style="gap:8px;margin-top:8px">' +
+      list.map(function (h) {
+        return '<div class="row" style="justify-content:space-between;align-items:flex-start;gap:12px">' +
+          '<p class="tiny" style="min-width:0"><b>v' + h.v + "</b> &middot; " + esc(h.at || "") + "<br>" + esc(preview(h)) + "&hellip;</p>" +
+          '<button class="btn sm" data-action="ar-restore" data-kind="' + kind + '" data-idx="' + idx + '" data-v="' + h.v + '">Restore</button></div>';
+      }).join("") + "</div></details>";
+  }
+
+  function taStyle() { return 'style="background:var(--surface);border:1px solid var(--line-strong);border-radius:8px;padding:10px;font-size:13.5px;line-height:1.6;width:100%"'; }
+
+  function projectEditor(s) {
+    if (!s.project) return "";
+    var hist = (s.history && s.history.project) || [];
+    var box = '<h2 style="margin:26px 0 10px;font-size:18px">Skill project</h2>';
+    if (state.adminProject) {
+      return box + '<div style="border:1px solid var(--accent);border-radius:9px;padding:15px"><div class="stack" style="gap:10px">' +
+        '<div class="field"><label for="ap-t">Project title</label><input id="ap-t" value="' + esc(s.project.title) + '"></div>' +
+        '<div class="field"><label for="ap-b">Brief the student sees (and the AI reviewer is told)</label><textarea id="ap-b" rows="8" ' + taStyle() + ">" + esc(s.project.brief) + "</textarea></div>" +
+        '<div class="row"><button class="btn primary sm" data-action="ap-save">Publish changes</button><button class="btn sm" data-action="ap-cancel">Cancel</button></div>' +
+        "</div></div>";
+    }
+    return box + '<div style="border:1px solid var(--line);border-radius:9px;padding:13px">' +
+      '<div class="row" style="justify-content:space-between;align-items:flex-start;gap:12px"><p style="font-weight:500;min-width:0">' + esc(s.project.title) + "</p>" +
+      '<button class="btn sm" data-action="ap-edit">Edit</button></div>' +
+      '<p class="tiny muted" style="margin-top:8px">' + esc(s.project.brief.slice(0, 200)) + "&hellip;</p>" +
+      versionList(s, "project", 0, hist, function (h) { return h.title + " - " + (h.brief || "").slice(0, 100); }) + "</div>";
+  }
+
+  function practiceEditors(s) {
+    if (!s.practice || !s.practice.length) return "";
+    var out = '<h2 style="margin:26px 0 10px;font-size:18px">Practice exercises</h2><div class="stack" style="gap:10px">';
+    s.practice.forEach(function (ex, i) {
+      var ans = ex.kind === "query" ? ex.solution : ex.answer;
+      if (state.adminPractice === i) {
+        out += '<div style="border:1px solid var(--accent);border-radius:9px;padding:15px"><div class="stack" style="gap:10px">' +
+          '<div class="field"><label for="ax-p">Exercise ' + (i + 1) + " prompt</label><textarea id=\"ax-p\" rows=\"4\" " + taStyle() + ">" + esc(ex.prompt) + "</textarea></div>" +
+          '<div class="field"><label for="ax-h">Hints, one per line (2 to 5)</label><textarea id="ax-h" rows="5" ' + taStyle() + ">" + esc((ex.hints || []).join("\n")) + "</textarea></div>" +
+          '<div class="field"><label for="ax-a">' + (ex.kind === "query" ? "Model query" : "Model answer") + '</label><textarea id="ax-a" rows="8" ' + taStyle() + ">" + esc(ans || "") + "</textarea></div>" +
+          '<p class="tiny muted">How an answer is checked stays as it is. Only the wording changes.</p>' +
+          '<div class="row"><button class="btn primary sm" data-action="ax-save" data-i="' + i + '">Publish changes</button><button class="btn sm" data-action="ax-cancel">Cancel</button></div>' +
+          "</div></div>";
+        return;
+      }
+      out += '<div style="border:1px solid var(--line);border-radius:9px;padding:13px">' +
+        '<div class="row" style="justify-content:space-between;align-items:flex-start;gap:12px"><p style="min-width:0"><span class="pill" style="margin-right:6px">' + (i + 1) + "</span>" + esc(ex.prompt.slice(0, 160)) + "&hellip;</p>" +
+        '<button class="btn sm" data-action="ax-edit" data-i="' + i + '">Edit</button></div>' +
+        versionList(s, "practice", i, (s.history && s.history.practice && s.history.practice[i]) || [], function (h) { return (h.prompt || "").slice(0, 120); }) + "</div>";
+    });
+    return out + "</div>";
   }
 
   function viewAdminDrafts() {
@@ -4186,7 +4252,7 @@
       render();
     },
 
-    nav: function (el) { state.adminEdit = null; state.adminLesson = null; go(el.dataset.nav); },
+    nav: function (el) { state.adminEdit = null; state.adminLesson = null; state.adminProject = false; state.adminPractice = null; go(el.dataset.nav); },
 
     // The logo always goes to the student's home: the roadmap, or the role picker until one is chosen.
     home: function () {
@@ -4808,6 +4874,36 @@
       if (b) l.body = b;
       state.adminLesson = null;
       render();
+    },
+
+    "ap-edit": function () { state.adminProject = true; render(); },
+    "ap-cancel": function () { state.adminProject = false; render(); },
+    "ap-save": function () {
+      var s = skill(state.adminSkill.roleId, state.adminSkill.skillId);
+      var t = val("ap-t"), b = val("ap-b");
+      if (!t || !b) return;
+      if (REAL) return adminCall({ action: "override-save", kind: "project", skill: s.id, fields: { title: t, brief: b } }, function () { state.adminProject = false; render(); });
+      s.project = { title: t, brief: b };
+      state.adminProject = false; render();
+    },
+    "ax-edit": function (el) { state.adminPractice = +el.dataset.i; render(); },
+    "ax-cancel": function () { state.adminPractice = null; render(); },
+    "ax-save": function (el) {
+      var s = skill(state.adminSkill.roleId, state.adminSkill.skillId);
+      var i = +el.dataset.i, ex = s.practice[i];
+      var pr = val("ax-p"), an = val("ax-a");
+      var hints = (document.getElementById("ax-h") ? document.getElementById("ax-h").value : "").split("\n").map(function (h) { return h.trim(); }).filter(Boolean);
+      if (!pr || !an) return;
+      if (REAL) return adminCall({ action: "override-save", kind: "practice", skill: s.id, i: i, fields: { prompt: pr, hints: hints, answer: an } }, function () { state.adminPractice = null; render(); });
+      ex.prompt = pr; ex.hints = hints; if (ex.kind === "query") ex.solution = an; else ex.answer = an;
+      state.adminPractice = null; render();
+    },
+    "ar-restore": function (el) {
+      var s = skill(state.adminSkill.roleId, state.adminSkill.skillId);
+      var p = { action: "restore", kind: el.dataset.kind, skill: s.id, version: +el.dataset.v };
+      if (el.dataset.kind === "lesson") p.idx = +el.dataset.idx;
+      if (el.dataset.kind === "practice") p.i = +el.dataset.idx;
+      adminCall(p, function () { state.adminLesson = null; state.adminProject = false; state.adminPractice = null; render(); });
     },
 
     preview: function (el) {

@@ -39,18 +39,27 @@ async function pass(u, role, kind, id) {
   return api(u, '/api/exam', { action: 'submit', attempt: s.data.attempt, answers });
 }
 const ID = /^CP-[A-Z0-9]{4}-[A-Z0-9]{4}$/;
+// Every roadmap now has modules, so a certificate is earned through a module exam. Seed the module's skills at three stars first.
+const MOD = 'ba-fundamentals';
+async function ready(u, role, trackId) {
+  const t = trackOf(role, trackId);
+  const skills = t.groups.flatMap(g => g.skills).map(id => ({ skill_id: id, stars: 3, best: 80, attempts: 1, project: false, lessons_done: [], history: [] }));
+  await jf('/__seed?email=' + u.email, { skills });
+  return t;
+}
 
 let bo, bcert;
-await step('passing a skill on a roadmap without modules issues a certificate with a random ID', async () => {
+await step('passing a module exam issues a certificate with a random ID', async () => {
   bo = await student('bo@usc.edu', 'ba', 'Bo Chen');
+  const mt = await ready(bo, 'ba', MOD);
   const none = await api(bo, '/api/certs');
   need(none.status === 200 && none.data.certs.length === 0, 'certificates before any result: ' + JSON.stringify(none.data));
-  const r = await pass(bo, 'ba', 'skill', 'sql-ba');
-  need(r.status === 200 && r.data.progress.stars >= 3, 'did not reach three stars: ' + JSON.stringify(r.data).slice(0, 200));
+  const r = await pass(bo, 'ba', 'module', MOD);
+  need(r.status === 200 && r.data.passed, 'module exam not passed: ' + JSON.stringify(r.data).slice(0, 200));
   const list = await api(bo, '/api/certs');
   need(list.data.certs.length === 1, 'expected one certificate, got ' + list.data.certs.length);
   bcert = list.data.certs[0];
-  need(ID.test(bcert.id) && bcert.kind === 'skill' && bcert.target === 'sql-ba' && bcert.holder === 'Bo Chen' && bcert.school === 'USC' && !bcert.revoked, JSON.stringify(bcert));
+  need(ID.test(bcert.id) && bcert.kind === 'module' && bcert.target === MOD && bcert.title.startsWith(mt.cert) && bcert.holder === 'Bo Chen' && bcert.school === 'USC' && !bcert.revoked, JSON.stringify(bcert));
   need(bcert.roadmapId === 'ba' && bcert.score >= 70, JSON.stringify(bcert));
   const again = await api(bo, '/api/certs');
   need(again.data.certs.length === 1 && again.data.certs[0].id === bcert.id, 'asking again changed the ID or issued a second certificate');
@@ -58,7 +67,8 @@ await step('passing a skill on a roadmap without modules issues a certificate wi
 
 await step('IDs are different for different people and carry nothing guessable', async () => {
   const cy = await student('cy@usc.edu', 'ba', 'Cy Ode');
-  await pass(cy, 'ba', 'skill', 'sql-ba');
+  await ready(cy, 'ba', MOD);
+  await pass(cy, 'ba', 'module', MOD);
   const c = (await api(cy, '/api/certs')).data.certs[0];
   need(ID.test(c.id) && c.id !== bcert.id, 'same ID for two students');
   const all = new Set(); for (let i = 0; i < 200; i++) { const mod = await import('../api/_certs.js'); all.add(mod.newId()); }
@@ -66,13 +76,15 @@ await step('IDs are different for different people and carry nothing guessable',
   need([...all].every(i => ID.test(i) && !/[01OI]/.test(i.slice(3))), 'an ID has a confusable character');
 });
 
-await step('a certificate that is not earned is not issued: two stars, or another roadmap', async () => {
+await step('a certificate that is not earned is not issued: a failed module exam', async () => {
   const dee = await student('dee@usc.edu', 'ba', 'Dee');
-  const s = await api(dee, '/api/exam', { action: 'start', kind: 'skill', id: 'sql-ba' });
+  await ready(dee, 'ba', MOD);
+  const s = await api(dee, '/api/exam', { action: 'start', kind: 'module', id: MOD });
+  need(s.status === 200, 'start ' + s.status);
   const role = roles.find(r => r.id === 'ba');
-  const answers = s.data.items.map((it, i) => (i < 2 ? qOf(role, it).a : (qOf(role, it).a + 1) % 4));
+  const answers = s.data.items.map(it => (qOf(role, it).a + 1) % 4);
   const r = await api(dee, '/api/exam', { action: 'submit', attempt: s.data.attempt, answers });
-  need(r.status === 200 && r.data.progress.stars < 3, 'two right answers gave ' + r.data.progress.stars + ' stars');
+  need(r.status === 200 && !r.data.passed, 'all wrong answers passed: ' + JSON.stringify(r.data).slice(0, 200));
   need((await api(dee, '/api/certs')).data.certs.length === 0, 'a certificate was issued below three stars');
 });
 
@@ -128,7 +140,7 @@ await step('an admin sees a student\'s certificates and can revoke and restore o
   need(rev.status === 200 && rev.data.cert.revoked, JSON.stringify(rev.data));
   const v = await api(null, '/api/verify?id=' + bcert.id);
   need(v.data.found && v.data.status === 'revoked', 'public page does not say revoked: ' + JSON.stringify(v.data));
-  await pass(bo, 'ba', 'skill', 'sql-ba');       // doing the exam again must not bring a revoked certificate back
+  await pass(bo, 'ba', 'module', MOD);       // doing the exam again must not bring a revoked certificate back
   const mine = (await api(bo, '/api/certs')).data.certs;
   need(mine.length === 1 && mine[0].id === bcert.id && mine[0].revoked, 'a revoked certificate came back: ' + JSON.stringify(mine));
   const back = await api(ad, '/api/certs', { action: 'restore', id: bcert.id });

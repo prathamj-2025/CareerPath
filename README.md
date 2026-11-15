@@ -30,13 +30,23 @@ of weights ranks the roadmaps instead. The page says which of the two produced t
 practice exercises with progressive hints and an answer check, take a 10-question
 assessment graded L1 to L5, earn one to five stars, and compete on a leaderboard limited to
 your own school and target role. The leaderboard updates on screen as other students finish,
-with no reload. Business Analyst issues a certificate per skill at three stars or above.
+with no reload. Certificates are issued for passed module exams (see the three course sections below).
 
 **Project Manager course.** 5 main modules, 28 sub-modules, 200 lessons, built the same way as the Product
 Manager course: Project Management Fundamentals, Planning Risk and Control, Agile and Hybrid Delivery,
 Leadership and Stakeholder Management (four certificates), and Interview-Ready Project Manager (practice only).
 Every calculation in it (critical path, PERT, earned value, EMV, velocity, cycle time, capacity, weighted scores)
 was computed in code, and every module went through an independent accuracy review before it was added.
+
+**Business Analyst course.** 5 main modules, 28 sub-modules, 207 lessons, built the same way as the other two: Business Analysis
+Fundamentals, Requirements Modeling and Design, Solutions Validation and Delivery, Data and Technology for Analysts (four
+certificates; the data module downloads the TuneBox CSVs for SQL and Excel practice), and Interview-Ready Business Analyst
+(practice only).
+Course data lives in `content/lessons-ba.js` (`CP_BA_META`, `CP_BA_COURSE`, `CP_BA_TRACKS`), built by
+`tools/build_lessons_ba.py` from the written modules. The source notes and outline are kept in `docs/ba-course-source/`
+(the module files themselves are large and live outside the repo; the built `content/lessons-ba.js` is the source of truth).
+The five original BA skills (`sql-ba`, `requirements-ba`, `process-ba`, `excel-ba`, `stakeholder-ba`) kept their ids, so
+existing students keep their stars, and they keep their practice exercises.
 
 **Product Manager course.** 5 main modules, 28 sub-modules, 217 lessons. Stars are earned per
 sub-module (3 stars = job-ready, 75% on its assessment). A certificate belongs to a main module:
@@ -134,6 +144,10 @@ browser-only demo (set `CP_DEMO=1` to force that).
 - Weekly challenges written by admins are saved to the database (`api/challenges.js`,
   `supabase/migrations/011_challenges.sql`), and the server refuses the study assistant while a student has the challenge
   open. Week 1 is the easy starter set. Run 011 after deploying this version.
+- Admins can also edit each skill's project brief and its practice exercises (wording, hints, model answer; the scoring
+  rules stay in the files), and put any earlier version of a lesson, brief or exercise back
+  (`api/content.js`, `supabase/migrations/013_content_overrides.sql`). Run 013 after deploying this version; until then
+  lesson and question edits work as before and a project or practice save says to run 013.
 - AI scoring of written answers (`api/_judge.js`, `api/judge.js`, `api/grade-challenge.js`,
   `supabase/migrations/012_ai_scoring.sql`, reference answers in `content/challenge-refs.js`). Run 012 BEFORE pushing this version.
 - Skill assessments, module exams and practical projects are graded on the server (`api/exam.js`, `api/grade-project.js`).
@@ -186,14 +200,14 @@ sent to the browser and is not in this repository.
 ### Keeping the free database awake
 
 Supabase pauses a free project after about a week with no activity. `vercel.json` has a daily cron that calls
-`/api/keepalive`, which reads one row and returns only `{ ok, status }`. Nothing to set up. Optionally add
+`/api/config?task=keepalive`, which reads one row and returns only `{ ok, status }`. Nothing to set up. Optionally add
 `CRON_SECRET` (any long random string) in Vercel: Vercel then sends it on its own cron calls and the route refuses
-everyone else. To check it by hand, open `https://<your-site>/api/keepalive`; `{"ok":true,"status":200}` means the
+everyone else. To check it by hand, open `https://<your-site>/api/config?task=keepalive`; `{"ok":true,"status":200}` means the
 database answered. Vercel's free (Hobby) plan allows one cron run per day, which is all this needs.
 
 ### Error reports and page counts
 
-`public/monitor.js` reports uncaught browser errors to `/api/report`, which writes one line to the function log (Vercel, your
+`public/monitor.js` reports uncaught browser errors to `/api/config?task=report`, which writes one line to the function log (Vercel, your
 project, Logs, search `client-error`). Nothing is stored and no names, emails or answers are sent: the error text, file and line,
 a short stack, the page path and the browser name. At most five distinct errors per page load and twenty per address per hour.
 Optional page-view counts: turn on Analytics in the Vercel project (free on the Hobby plan), then add `WEB_ANALYTICS` = `1` in
@@ -244,6 +258,7 @@ public/app.js          The whole application: routing, scoring, admin, assistant
 public/data.js         Product Manager track.
 public/data2.js        Business Analyst track.
 public/lessons-pjm.js Project Manager course (built by tools/build_lessons_pjm.py).
+public/lessons-ba.js  Business Analyst course (built by tools/build_lessons_ba.py; the full copy is content/lessons-ba.js).
 public/data4.js        Practice exercises: prompts, schemas, hints, model answers.
 public/data5.js        Answer-checking rules for practice exercises.
 content/data6.js       Resume vocabulary, the five guided questions and the weekly challenge library, with each rubric line's scoring pattern (server only).
@@ -274,8 +289,8 @@ because there is no database behind the page. Written answers are checked for co
 coverage, which reports whether an idea was raised, not how well it was argued. Both
 caveats are printed in the app where a learner sees them.
 
-**Question banks are still growing.** Ten questions per assessment on most skills; the Business Analyst
-roadmap is being expanded to the same depth as Product Manager and Project Manager.
+**Question banks are still growing.** Ten questions per assessment on every skill, in all three roadmaps. More can be
+added by admins from the Content page.
 
 **The preview copy simulates classmates.** On the live site the school leaderboard is read from the
 database every 30 seconds. The Claude artifact copy has no database, so it generates sample classmates
