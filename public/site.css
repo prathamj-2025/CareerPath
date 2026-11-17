@@ -54,3 +54,8 @@ details p { color: var(--ink-2); padding-bottom: 6px; }
   .head-row nav { order: 3; flex-basis: 100%; flex-wrap: nowrap; overflow-x: auto; margin-inline: -8px; padding-inline: 8px; scrollbar-width: none; }
   .head-row nav a { white-space: nowrap; }
 }
+/* Phones: header and footer links get a thumb-sized tap area. */
+@media (max-width: 720px) {
+  .head-row nav a, .foot-row nav a { display: inline-flex; align-items: center; min-height: 40px; }
+  .head-row > .btn { min-height: 40px; display: inline-flex; align-items: center; }
+}

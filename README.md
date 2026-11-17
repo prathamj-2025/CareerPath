@@ -236,7 +236,9 @@ redeploying. No code changes.
 ## Tests
 
 There is a browser test suite covering the student flow, the admin draft-and-publish
-workflow, the assistant, and the deployed shape of the site.
+workflow, the assistant, and the deployed shape of the site. `test/phone.spec.mjs` checks the
+main screens at 320, 390 and 430 px wide for sideways scroll, oversized elements and inputs under 16px
+(which make iPhones zoom in).
 
 ```bash
 npm i                        # installs playwright

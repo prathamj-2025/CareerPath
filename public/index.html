@@ -6,6 +6,8 @@
 <title>CareerPath</title>
 <meta name="description" content="CareerPath: pick a target role, learn the skills it needs, and prove them through assessment.">
 <meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#F4F6F4" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0E1311" media="(prefers-color-scheme: dark)">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2314532D'/%3E%3Cg fill='none' stroke='white' stroke-width='2.1' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M16 7 28 13 16 19 4 13Z'/%3E%3Cpath d='M9 16.5v5.2c0 2.2 3.1 4 7 4s7-1.8 7-4v-5.2'/%3E%3Cpath d='M28 13v7'/%3E%3C/g%3E%3C/svg%3E">
 <script>try{var t=localStorage.getItem("cp-theme");if(t==="dark"||t==="light")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
@@ -681,6 +683,7 @@
   }
   #tutor-launch .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: .7; }
   #tutor-launch.locked { background: var(--surface-3); color: var(--ink-2); }
+  #tutor-launch svg { display: none; }
   /* Floating, the panel sits on top of whatever is behind it and used to read as two
      pages printed over each other. The scrim puts the page behind it deliberately. */
   #tutor-scrim {
@@ -701,7 +704,7 @@
     border-radius: 12px; box-shadow: 0 8px 34px rgba(19,23,32,.18); overflow: hidden;
   }
   /* Docked: a permanent right rail that reserves its own space instead of covering the page. */
-  :root { --tutor-w: 360px; }
+  :root { --tutor-w: clamp(300px, 26vw, 380px); }
   #tutor-panel.docked {
     right: 0; top: 0; bottom: 0; width: var(--tutor-w);
     max-height: none; border-radius: 0; border-top: 0; border-right: 0; border-bottom: 0;
@@ -766,14 +769,31 @@
   }
   .tutor-inline:hover { background: var(--accent-soft); border-color: var(--accent); }
 
-  @media (max-width: 560px) {
-    #tutor-panel {
-      right: 10px; left: 10px; width: auto;
-      bottom: calc(10px + env(safe-area-inset-bottom, 0px));
-      max-height: min(78dvh, calc(100dvh - 20px));
-    }
-    #tutor-launch { right: 14px; }
+  /* Small screens (phones, and landscape phones): the assistant is a full-height sheet that
+     follows the visual viewport, so the on-screen keyboard never covers the question box.
+     app.js sets --vv-top / --vv-h from window.visualViewport and adds .sheet. */
+  #tutor-panel.sheet {
+    right: 0; left: auto; bottom: auto; top: var(--vv-top, 0px);
+    width: min(100%, 460px); height: var(--vv-h, 100dvh); max-height: none;
+    border-radius: 0; border-width: 0 0 0 1px; box-shadow: none;
+    padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);
+    overscroll-behavior: contain;
   }
+  @media (max-width: 560px) {
+    #tutor-panel.sheet { width: 100%; border-left-width: 0; }
+    #tutor-panel.sheet header { padding: 10px 14px; }
+    #tutor-launch { right: 14px; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); }
+  }
+  @media (max-width: 860px) {
+    /* The floating button never hides the last button on a page */
+    #view { padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }
+    #tutor-launch { width: 50px; height: 50px; padding: 0; justify-content: center; border-radius: 50%; }
+    #tutor-launch #tutor-launch-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+    #tutor-launch .dot { display: none; }
+    #tutor-launch svg { display: block; }
+    #tutor-launch.locked { display: none; }   /* nothing to offer during an assessment */
+  }
+  body.tutor-locked { overflow: hidden; }
 
   /* ---------- mobile ---------- */
   #mobilebar { display: none; }
@@ -1082,9 +1102,34 @@
     .mb-top .role-switch { position: static; }
     .mb-top .role-menu { position: fixed; left: 12px; right: 12px; top: calc(54px + env(safe-area-inset-top, 0px)); width: auto; max-width: none; }
     .mb-top { flex-wrap: nowrap; }
-    .mb-top > .row { flex-wrap: nowrap; min-width: 0; }
+    .mb-top > .row { flex: 0 1 auto; flex-wrap: nowrap; min-width: 0; justify-content: flex-end; }
     .mb-top .brand { flex: 0 0 auto; }
-    .mb-top button.bar-context { max-width: 150px; font-size: 10px; padding: 4px 8px; gap: 5px; }
+    .mb-top .role-switch { min-width: 0; flex: 0 1 auto; }
+    .mb-top button.bar-context { max-width: min(150px, 100%); min-width: 0; font-size: 11px; padding: 4px 8px; gap: 5px; }
+    .mb-top button.bar-context span { white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+    .mb-top button.bar-context svg { flex: 0 0 auto; }
+  }
+  /* Touch targets on phones: every button and tab is at least 40px tall so a thumb can hit it. */
+  @media (max-width: 860px) {
+    .btn, .btn.sm { min-height: 40px; }
+    .icon-btn, .mb-top .btn.sm.ghost { min-width: 40px; min-height: 40px; display: inline-flex; align-items: center; justify-content: center; }
+    .mb-top button.bar-context { min-height: 40px; }
+    .mb-top .brand, .auth-brand a, a.brand { min-height: 40px; display: inline-flex; align-items: center; }
+    .mb-nav button { min-height: 40px; }
+    .lesson-nav button, .lesson-nav button.num { min-height: 40px; }
+    .tutor-inline { min-height: 40px; }
+    .linkbtn { display: inline-block; padding-block: 8px; }
+    [role="tablist"] button, .auth-tabs button { min-height: 40px; }
+    .site-links a { display: inline-flex; align-items: center; min-height: 40px; }
+    .onb-step { min-height: 36px; }
+    /* iPhones zoom the page in when a field smaller than 16px gets focus, so fields are 16px on phones. */
+    input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), textarea, select { font-size: 16px !important; }
+    .opt { min-height: 48px; }
+  }
+  /* The narrowest phones: keep only the logo mark so the role name and the two buttons fit on one line. */
+  @media (max-width: 360px) {
+    .mb-top { gap: 6px; padding-inline: 12px; }
+    .mb-top .brand-name { display: none; }
   }
 
   /* footer links to the website pages */
@@ -1281,8 +1326,8 @@
 
 <div id="tutor" hidden>
   <div id="tutor-scrim" data-tutor="close" hidden></div>
-  <button id="tutor-launch" aria-expanded="false">
-    <span class="dot"></span><span id="tutor-launch-label">Ask</span>
+  <button id="tutor-launch" aria-expanded="false" aria-label="Ask the study assistant">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.5-4.7A8 8 0 1 1 21 12z"/></svg><span class="dot"></span><span id="tutor-launch-label">Ask</span>
   </button>
 
   <section id="tutor-panel" hidden aria-label="Study assistant">

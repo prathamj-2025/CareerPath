@@ -5256,7 +5256,7 @@
   // and the page must render correctly when storage is unavailable.
   // Dock wherever a rail fits. Below this the panel floats, and a scrim goes behind it
   // so it reads as an overlay rather than two pages printed on top of each other.
-  var DOCK_MQ = window.matchMedia ? window.matchMedia("(min-width: 940px)") : { matches: false };
+  var DOCK_MQ = window.matchMedia ? window.matchMedia("(min-width: 1100px)") : { matches: false };
   try {
     var saved = window.localStorage.getItem("cp-tutor-dock");
     if (saved === "0") tutor.docked = false;
@@ -5265,6 +5265,26 @@
   function saveDock() {
     try { window.localStorage.setItem("cp-tutor-dock", tutor.docked ? "1" : "0"); } catch (e) { /* ignore */ }
   }
+  var SHEET_MQ = window.matchMedia ? window.matchMedia("(max-width: 560px), (max-height: 520px)") : { matches: false };
+  var COARSE_MQ = window.matchMedia ? window.matchMedia("(pointer: coarse)") : { matches: false };
+
+  // Follow the visual viewport so the on-screen keyboard shrinks the sheet instead of covering it.
+  function fitTutor() {
+    var vv = window.visualViewport, root = document.documentElement.style;
+    if (vv && SHEET_MQ.matches) {
+      root.setProperty("--vv-h", Math.round(vv.height) + "px");
+      root.setProperty("--vv-top", Math.round(vv.offsetTop) + "px");
+    } else {
+      root.removeProperty("--vv-h"); root.removeProperty("--vv-top");
+    }
+  }
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener("resize", function () { fitTutor(); var l = document.getElementById("tutor-log"); if (l && tutor.open) l.scrollTop = l.scrollHeight; });
+    window.visualViewport.addEventListener("scroll", fitTutor);
+  }
+  function onTutorMq() { if (typeof updateTutor === "function") updateTutor(); }
+  [SHEET_MQ, DOCK_MQ].forEach(function (mq) { if (mq.addEventListener) mq.addEventListener("change", onTutorMq); else if (mq.addListener) mq.addListener(onTutorMq); });
+
   function isDocked() { return tutorVisible() && tutor.docked && DOCK_MQ.matches; }
 
   var TUTOR = window.CP_TUTOR;   // standing instructions and context wording live in tutor.js
@@ -5514,8 +5534,12 @@
     var blocked = tutorBlocked();
     var docked = isDocked();
 
+    var sheet = !docked && SHEET_MQ.matches;
     document.body.classList.toggle("tutor-docked", docked);
     panel.classList.toggle("docked", docked);
+    panel.classList.toggle("sheet", sheet);
+    document.body.classList.toggle("tutor-locked", sheet && tutor.open);
+    fitTutor();
 
     launch.hidden = docked || tutor.open;
     launch.className = blocked ? "locked" : "";
@@ -5551,7 +5575,8 @@
     tutor.open = true;
     updateTutor();
     var input = document.getElementById("tutor-input");
-    if (input && !tutorBlocked()) input.focus();
+    // On a touch screen, focusing at once raises the keyboard over the answer; let the student tap first.
+    if (input && !tutorBlocked() && !COARSE_MQ.matches) input.focus();
   }
 
   function tutorSetBusy(on) {
