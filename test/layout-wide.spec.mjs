@@ -93,11 +93,13 @@ await step('the Ask button never sits on the footer links', async () => {
   }
 });
 
-await step('skill page uses two columns on a laptop', async () => {
+await step('skill page: lessons, then the project, then the assessment, one under the other', async () => {
   const { c, p } = await roadmap(1440, 800, '0');
   for (const s of ['[data-action="open-track"]', '.skill-row']) { await (await p.$(s + ':visible')).click(); await p.waitForTimeout(300); }
-  const cols = await p.evaluate(() => getComputedStyle(document.querySelector('.skill-cols')).gridTemplateColumns.split(' ').length);
-  ok(cols === 2, 'columns: ' + cols);
+  const parts = await p.evaluate(() => [...document.querySelectorAll('#view .stack > .card')].map(e => { const b = e.getBoundingClientRect(); return { l: Math.round(b.left), t: b.top, w: Math.round(b.width), h: e.textContent.slice(0, 20) }; }));
+  ok(parts.length >= 2, 'cards missing');
+  ok(parts.every(x => x.l === parts[0].l && x.w === parts[0].w), 'cards are not in one column: ' + JSON.stringify(parts));
+  ok(parts.every((x, i) => i === 0 || x.t > parts[i - 1].t), 'cards out of order');
   await c.close();
 });
 

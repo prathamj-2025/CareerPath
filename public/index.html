@@ -1387,11 +1387,6 @@
   #sitefoot { padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }
   body.tutor-docked #sitefoot { padding-bottom: 28px; }
 
-  /* Skill page: lessons beside the assessment details when there is room. */
-  @container (min-width: 1100px) {
-    #view[data-route="skill"] .skill-cols { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 18px 24px; align-items: start; }
-    #view[data-route="skill"] .skill-cols > :first-child { grid-row: 1 / span 6; }
-  }
 </style>
 </head>
 <body>

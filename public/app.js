@@ -7,7 +7,7 @@
   // The CareerPath mark: a mortarboard. Drawn in currentColor so it follows the surface it sits on.
   var CAP = '<svg viewBox="0 0 32 32" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 7 28 13 16 19 4 13Z"/><path d="M9 16.5v5.2c0 2.2 3.1 4 7 4s7-1.8 7-4v-5.2"/><path d="M28 13v7"/></svg>';
   var BRAND = '<a class="brand" href="/" data-action="home" aria-label="CareerPath home"><div class="brand-mark">' + CAP +
-    '</div><div class="brand-name">career<span>path</span></div></a>';
+    '</div><div class="brand-name">Career<span>Path</span></div></a>';
 
 
   var ROLES = window.CP_ROLES;
@@ -1291,7 +1291,7 @@
     /* Restoring a saved sign-in (a refresh): show a quiet loading screen, not the marketing sign-in page for a moment. */
     if (REAL && state.booting && !state.googlePending && !state.authNotice) {
       el.innerHTML = '<div class="boot"><div class="boot-in"><div class="brand"><div class="brand-mark">' + CAP +
-        '</div><div class="brand-name">career<span>path</span></div></div><p role="status">Loading your account&hellip;</p></div></div>';
+        '</div><div class="brand-name">Career<span>Path</span></div></div><p role="status">Loading your account&hellip;</p></div></div>';
       return;
     }
 
@@ -2741,7 +2741,7 @@
             '<button class="btn primary" data-action="start-exam" data-skill="' + s.id + '">Take the assessment</button>' +
           "</div></div></div>" +
 
-      '<div class="stack skill-cols">' +
+      '<div class="stack">' +
         '<div class="card">' +
           '<div class="row" style="justify-content:space-between;margin-bottom:10px">' +
             '<h3>Lessons</h3><span class="pill">' + lessonsDone + " / " + s.lessons.length + " read</span></div>" +
