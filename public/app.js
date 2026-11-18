@@ -644,7 +644,7 @@
     if (!live.feed.length) return '<span class="tiny muted">Waiting for the next result.</span>';
     return live.feed.map(function (e, i) {
       return '<div class="feed-row' + (i === 0 ? " new" : "") + '"><span class="feed-dot"></span>' +
-        "<span>" + esc(e.name.split(" ")[0]) + " reached " + e.stars + STAR + " in " + esc(e.skill) + "</span></div>";
+        "<span>" + esc(shortName(e.name).split(" ")[0]) + " reached " + e.stars + STAR + " in " + esc(e.skill) + "</span></div>";
     }).join("");
   }
 
@@ -663,6 +663,20 @@
     }).sort(function (a, b) { return b.points - a.points || totalStars(b) - totalStars(a); });
   }
 
+  // "Pratham Jain" -> "Pratham J.". A name written like "PJ (Pratham Jain)" uses the part in brackets;
+  // brackets, dots and stray symbols never end up as the "initial".
+  function shortName(full) {
+    var n = String(full || "").trim();
+    var m = n.match(/\(([^)]+)\)/);
+    if (m && /[A-Za-z]/.test(m[1])) n = m[1];
+    n = n.replace(/[()]/g, " ").replace(/\s+/g, " ").trim();
+    var parts = n.split(" ").filter(function (w) { return /[A-Za-z\u00C0-\u024F]/.test(w); });
+    if (!parts.length) return "Student";
+    if (parts.length === 1) return parts[0];
+    var last = parts[parts.length - 1].replace(/[^A-Za-z\u00C0-\u024F]/g, "");
+    return parts[0] + " " + last.charAt(0).toUpperCase() + ".";
+  }
+
   function boardHTML(user, compact) {
     var rows = peersOf(user);
     if (compact) rows = rows.slice(0, 6);
@@ -673,7 +687,7 @@
         var cls = (u.id === user.id ? "lb-you " : "") + (fresh(u.id) ? "lb-move" : "");
         return '<tr class="' + cls.trim() + '">' +
           '<td><span class="rank ' + (i < 3 ? "top" : "") + '">' + (i + 1) + "</span></td>" +
-          "<td>" + esc(compact ? u.name.split(" ")[0] + " " + (u.name.split(" ")[1] || "").charAt(0) + "." : u.name) +
+          "<td>" + esc(compact ? shortName(u.name) : u.name) +
             (u.id === user.id ? ' <span class="pill accent">You</span>' : "") + "</td>" +
           (compact ? "" :
             "<td>" + starHTML(Math.round(totalStars(u) / Math.max(1, role(u.roleId).skills.length))) +
@@ -1087,7 +1101,9 @@
     });
   }
   function initials(name) {
-    return name.split(/\s+/).slice(0, 2).map(function (w) { return w[0]; }).join("").toUpperCase();
+    var words = String(name || "").split(/\s+/).filter(function (w) { return /[A-Za-z\u00C0-\u024F]/.test(w); });
+    var out = words.slice(0, 2).map(function (w) { return w.replace(/[^A-Za-z\u00C0-\u024F]/g, "").charAt(0); }).join("").toUpperCase();
+    return out || "?";
   }
   function today() {
     return new Date().toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
@@ -2030,7 +2046,7 @@
         var cls = (row.user.id === user.id ? "lb-you " : "") + (fresh(row.user.id) ? "lb-move" : "");
         return '<tr class="' + cls.trim() + '">' +
           '<td><span class="rank ' + (i < 3 ? "top" : "") + '">' + (i + 1) + "</span></td>" +
-          "<td>" + esc(row.user.name.split(" ")[0] + " " + (row.user.name.split(" ")[1] || "").charAt(0) + ".") +
+          "<td>" + esc(shortName(row.user.name)) +
             (row.user.id === user.id ? ' <span class="pill accent">You</span>' : "") +
             (row.user.school ? '<span class="tiny muted" style="display:block">' + esc(row.user.school) + "</span>" : "") + "</td>" +
           '<td class="mono">' + row.sub.pct + "%</td></tr>";
@@ -4081,6 +4097,7 @@
         n === "profile" ? viewProfile(user) :
         viewRoadmap(user);
     }
+    v.setAttribute("data-route", n);
     v.innerHTML = html;
 
     // The board only ticks while someone is looking at one.
