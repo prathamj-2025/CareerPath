@@ -2741,7 +2741,7 @@
             '<button class="btn primary" data-action="start-exam" data-skill="' + s.id + '">Take the assessment</button>' +
           "</div></div></div>" +
 
-      '<div class="stack">' +
+      '<div class="stack skill-cols">' +
         '<div class="card">' +
           '<div class="row" style="justify-content:space-between;margin-bottom:10px">' +
             '<h3>Lessons</h3><span class="pill">' + lessonsDone + " / " + s.lessons.length + " read</span></div>" +
@@ -2792,6 +2792,7 @@
             (compact ? (j + 1) : (j + 1) + ". " + esc(l.title)) + "</button>";
         }).join("") +
       "</div>" +
+      '<div class="learn-cols"><div class="learn-main">' +
       '<div class="card prose" style="margin-bottom:18px">' + paras(lesson.body) + "</div>" +
       scenarioBlock(s, i, lesson) + revisionBlock(lesson) +
       (last ? (s.practice && s.practice.length ? practiceBlock(s) : "") + deliverableBlock(s) + quizBlock(s) : "") +
@@ -2799,7 +2800,22 @@
         '<button class="btn" data-action="lesson" data-i="' + Math.max(0, i - 1) + '"' + (i === 0 ? " disabled" : "") + ">&larr; Previous</button>" +
         (last ? '<button class="btn primary" data-action="start-exam" data-skill="' + s.id + '">Go to assessment &rarr;</button>'
               : '<button class="btn primary" data-action="lesson" data-i="' + (i + 1) + '">Next lesson &rarr;</button>') +
+      "</div></div>" +
+      lessonRail(s, p, i) +
       "</div>";
+  }
+
+  /* On wide screens the lesson list sits beside the lesson, with titles, so the page uses its width
+     and a student can see where they are in the skill. Narrower screens keep the numbered chips. */
+  function lessonRail(s, p, i) {
+    return '<aside class="learn-rail" aria-label="Lessons in this skill"><div class="side-card">' +
+      '<div class="side-head"><span>In this skill</span><span class="tiny muted">' + s.lessons.length + " lessons</span></div>" +
+      '<ol class="lrail">' + s.lessons.map(function (l, j) {
+        var done = p.lessonsDone.indexOf(j) > -1;
+        return '<li><button data-action="lesson" data-i="' + j + '" aria-current="' + (j === i) + '" class="' + (done && j !== i ? "done" : "") + '">' +
+          '<span class="ln">' + (done && j !== i ? "&#10003;" : (j + 1)) + "</span>" +
+          '<span class="lt">' + esc(l.title) + (l.minutes ? '<small>' + l.minutes + " min</small>" : "") + "</span></button></li>";
+      }).join("") + "</ol></div></aside>";
   }
 
   var KIND = {

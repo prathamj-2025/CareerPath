@@ -53,10 +53,51 @@ await step('with the assistant docked (1440) nothing overflows and the board sta
   const a = await box(p, '.skill-list, .rm-list'), r = await box(p, '.rail'); ok(r.l >= a.r - 1, 'board not beside the list');
   await c.close();
 });
-await step('lessons keep a readable line length on a wide screen', async () => {
+await step('lesson text keeps a readable line length on a wide screen', async () => {
   const { c, p } = await roadmap(1920, 1080, '0');
   for (const s of ['[data-action="open-track"]', '.skill-row', '[data-action="start-learn"]']) { await (await p.$(s + ':visible')).click(); await p.waitForTimeout(300); }
-  const v = await box(p, '#view'); ok(v.w <= 1090, 'lesson page ' + Math.round(v.w) + 'px wide');
+  const v = await box(p, '.prose'); ok(v.w <= 1000, 'lesson text ' + Math.round(v.w) + 'px wide');
+  await c.close();
+});
+
+await step('lesson page: a lesson list beside the lesson on a laptop, numbered chips on a phone', async () => {
+  const { c, p } = await roadmap(1440, 800, '0');
+  for (const s of ['[data-action="open-track"]', '.skill-row', '[data-action="start-learn"]']) { await (await p.$(s + ':visible')).click(); await p.waitForTimeout(300); }
+  const rail = await box(p, '.learn-rail'), main = await box(p, '.learn-main');
+  ok(rail.w >= 250 && rail.l >= main.r, 'lesson list not beside the lesson');
+  ok(main.w >= 800, 'lesson only ' + Math.round(main.w) + 'px wide');
+  await (await p.$('.learn-rail [data-action="lesson"][data-i="2"]')).click(); await p.waitForTimeout(300);
+  ok(await p.evaluate(() => /Lesson 3 of/.test(document.querySelector('.eyebrow').textContent)), 'list did not open lesson 3');
+  await c.close();
+  const m = await browser.newContext({ viewport: { width: 390, height: 800 }, isMobile: true, hasTouch: true });
+  const q = await m.newPage(); await q.goto(DEMO + '/'); await q.waitForTimeout(300);
+  await q.click('[data-action="login"]'); await q.waitForSelector('.skill-list');
+  for (const s of ['[data-action="open-track"]', '.skill-row', '[data-action="start-learn"]']) { await (await q.$(s + ':visible')).click(); await q.waitForTimeout(300); }
+  ok(!(await q.$('.learn-rail:visible')), 'lesson list shown on a phone');
+  ok(await q.$('.lesson-nav [data-action="lesson"]:visible'), 'numbered lessons missing on a phone');
+  await m.close();
+});
+
+await step('the Ask button never sits on the footer links', async () => {
+  for (const [w, h, touch] of [[1440, 800, false], [1024, 700, false], [390, 800, true]]) {
+    const c = await browser.newContext({ viewport: { width: w, height: h }, isMobile: touch, hasTouch: touch });
+    await c.addInitScript(() => { try { localStorage.setItem('cp-tutor-dock', '0'); } catch (e) {} });
+    const p = await c.newPage(); await p.goto(DEMO + '/'); await p.waitForTimeout(300);
+    await p.click('[data-action="login"]'); await p.waitForSelector('.skill-list'); await p.waitForTimeout(300);
+    await p.evaluate(() => { document.getElementById('sitefoot').innerHTML = '<a href="#">About</a> <a href="#">FAQ</a> <a href="#">Terms</a>'; window.scrollTo(0, document.body.scrollHeight); });
+    await p.waitForTimeout(300);
+    const hit = await p.evaluate(() => { const a = document.getElementById('tutor-launch').getBoundingClientRect();
+      return [...document.querySelectorAll('#sitefoot a')].some(e => { const r = e.getBoundingClientRect(); return r.left < a.right && r.right > a.left && r.top < a.bottom && r.bottom > a.top; }); });
+    ok(!hit, 'Ask button covers a footer link at ' + w + 'px');
+    await c.close();
+  }
+});
+
+await step('skill page uses two columns on a laptop', async () => {
+  const { c, p } = await roadmap(1440, 800, '0');
+  for (const s of ['[data-action="open-track"]', '.skill-row']) { await (await p.$(s + ':visible')).click(); await p.waitForTimeout(300); }
+  const cols = await p.evaluate(() => getComputedStyle(document.querySelector('.skill-cols')).gridTemplateColumns.split(' ').length);
+  ok(cols === 2, 'columns: ' + cols);
   await c.close();
 });
 

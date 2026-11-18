@@ -210,7 +210,7 @@
   #main > #view { flex: 1 0 auto; width: 100%; }
   .page { max-width: 1360px; margin: 0 auto; padding: 26px 24px 64px; }
   /* Pages that are mostly reading or one question at a time stay at a comfortable line length. */
-  #view[data-route="learn"], #view[data-route="assess"], #view[data-route="mexam"], #view[data-route="result"],
+  #view[data-route="assess"], #view[data-route="mexam"], #view[data-route="result"],
   #view[data-route="mresult"], #view[data-route="cert"], #view[data-route="profile"], #view[data-route="roles"],
   #view[data-route^="onb-"] { max-width: 1080px; }
   .page-head { margin-bottom: 22px; }
@@ -1357,6 +1357,40 @@
     .side-board .rank { width: 24px; font-size: 13px; }
     .feed-row { font-size: 13px; }
     .rail { gap: 16px; }
+  }
+
+  /* Lesson page: the lesson beside a lesson list when there is room, chips when there is not. */
+  .learn-cols { display: block; }
+  .learn-rail { display: none; }
+  .lrail { list-style: none; margin: 0 -6px; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+  .lrail button {
+    width: 100%; display: flex; gap: 10px; align-items: flex-start; text-align: left; border: 0; background: transparent;
+    padding: 9px 8px; border-radius: 8px; cursor: pointer; font: inherit; font-size: 13.5px; line-height: 1.35; color: var(--ink-2);
+  }
+  .lrail button:hover { background: var(--surface-2); }
+  .lrail button[aria-current="true"] { background: var(--accent-soft); color: var(--ink); font-weight: 700; }
+  .lrail .ln {
+    flex: 0 0 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700;
+    border: 1px solid var(--line-strong); background: var(--bg); color: var(--ink-2);
+  }
+  .lrail button[aria-current="true"] .ln { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .lrail button.done .ln { border-color: var(--ok); color: var(--ok); }
+  .lrail .lt small { display: block; font-weight: 500; color: var(--ink-3); font-size: 12px; }
+  @container (min-width: 1100px) {
+    #view[data-route="learn"] .learn-cols { display: grid; grid-template-columns: minmax(0, 1fr) clamp(260px, 26%, 330px); gap: 28px; align-items: start; }
+    #view[data-route="learn"] .learn-rail { display: block; position: sticky; top: 100px; }
+    #view[data-route="learn"] .lesson-nav { display: none; }
+    #view[data-route="learn"] .prose { font-size: 16.5px; line-height: 1.7; }
+  }
+
+  /* The floating Ask button must never sit on top of the footer links. */
+  #sitefoot { padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }
+  body.tutor-docked #sitefoot { padding-bottom: 28px; }
+
+  /* Skill page: lessons beside the assessment details when there is room. */
+  @container (min-width: 1100px) {
+    #view[data-route="skill"] .skill-cols { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 18px 24px; align-items: start; }
+    #view[data-route="skill"] .skill-cols > :first-child { grid-row: 1 / span 6; }
   }
 </style>
 </head>
