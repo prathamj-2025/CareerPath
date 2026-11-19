@@ -50,10 +50,11 @@ One shared Supabase project. Database changes live here as numbered SQL files in
   then the old per-copy limits apply and nothing else changes.
 
 - `015_feedback.sql`: the `feedback` table for the feedback form, one column per question in the order of the form, each with its
-  question as a column comment. The server writes answers after checking every field, and only admins read them, also through
+  question as a column comment, every choice saved exactly as worded on the page, and the view `feedback_by_question` with the full
+  questions as column names (Table Editor, or `select * from public.feedback_by_question`, then Export). The server writes answers after checking every field, and only admins read them, also through
   the server; nothing can be read or written from the site directly. An email is kept only when someone types it in. Safe to run
-  twice. If you ran the first copy of this file (with an `answers` column), run it again: it moves every saved answer into the new
-  columns. Run it after the website with the form is deployed; until then the form says feedback is not switched on yet.
+  twice. If you ran an earlier copy of this file, run it again: it moves every saved answer into this layout and turns
+  short codes (order, youtube, very) into the words on the page. Run it after the website with the form is deployed; until then the form says feedback is not switched on yet.
 
 Run them in order, one at a time, in the SQL editor.
 

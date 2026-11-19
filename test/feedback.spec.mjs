@@ -50,13 +50,39 @@ await step('every answer is saved in its own column, in the order of the form, a
   ok(rows.length === 1, 'rows: ' + rows.length);
   const x = rows[0];
   ok(x._keys.join() === ORDER.join(), 'columns or order: ' + x._keys.join());
-  ok(x.status === 'student' && x.school === 'USC' && x.program === 'MS EM' && x.target_role === 'pm' && x.heard === 'whatsapp' && x.tried === 'yes', JSON.stringify(x));
-  ok(x.ease === 4 && x.lessons === 5 && x.lessons_better === 'More examples' && x.favorite === 'assessments' && x.continue_use === 'regularly', JSON.stringify(x));
-  ok(x.pmf === 'very' && x.recommend === 9 && x.add_or_change === 'More SQL practice' && JSON.stringify(x.used) === '["lessons","assessments"]' && JSON.stringify(x.device) === '["phone"]', JSON.stringify(x));
+  ok(x.status === 'Student' && x.school === 'USC' && x.program === 'MS EM' && x.target_role === 'Product Manager' && x.heard === 'WhatsApp or group chat' && x.tried === 'Yes', JSON.stringify(x));
+  ok(x.ease === 4 && x.lessons === 5 && x.lessons_better === 'More examples' && x.favorite === 'Assessments and stars' && x.continue_use === 'Yes, regularly', JSON.stringify(x));
+  ok(x.pmf === 'Very disappointed' && x.recommend === 9 && x.add_or_change === 'More SQL practice' && JSON.stringify(x.used) === '["Lessons","Assessments and stars"]' && JSON.stringify(x.device) === '["Phone"]', JSON.stringify(x));
   ok(x.email === 'me@usc.edu' && x.source === 'page' && x.user_id == null, 'email, source or user: ' + JSON.stringify(x));
-  ok(JSON.stringify(x.prepare) === '["youtube"]' && JSON.stringify(x.struggle) === '["order","testing"]', 'choices not cleaned: ' + JSON.stringify(x.prepare));
+  ok(JSON.stringify(x.prepare) === '["YouTube"]' && JSON.stringify(x.struggle) === '["Knowing what to learn first and next","Testing whether I really know it"]', 'choices not saved as worded: ' + JSON.stringify([x.prepare, x.struggle]));
   ok(x.broken === null && x.change_mind === null && x.why_not === null && x.would_try === null, 'empty or other-branch answers stored: ' + JSON.stringify(x));
   ok(!('extra' in x) && !('sneaky' in x), 'unknown fields kept');
+});
+
+await step('several choices are saved in the order they appear on the page, each once', async () => {
+  const r = await send({ ...YES, struggle: ['interviews', 'order', 'order', 'nonsense'] });
+  ok(r.status === 201, JSON.stringify(r));
+  const x = (await jf('/__feedback')).pop();
+  ok(JSON.stringify(x.struggle) === '["Knowing what to learn first and next","Getting ready for interviews"]', JSON.stringify(x.struggle));
+});
+
+await step('the page, the server and the database use exactly the same wording for every choice', async () => {
+  const { FORM } = await import('../api/_feedback_form.js');
+  const fs = await import('node:fs');
+  const html = fs.readFileSync(new URL('../public/feedback.html', import.meta.url), 'utf8');
+  const sql = fs.readFileSync(new URL('../supabase/migrations/015_feedback.sql', import.meta.url), 'utf8');
+  const NAME = { target_role: 'role', continue_use: 'continue' };
+  for (const [k, f] of Object.entries(FORM)) {
+    const name = NAME[k] || k;
+    const onPage = [...html.matchAll(new RegExp('name="' + name + '" value="([^"]+)"><span>([^<]+)</span>', 'g'))].map(m => [m[1], m[2]]);
+    ok(JSON.stringify(onPage) === JSON.stringify(Object.entries(f.opts)), k + ' on the page: ' + JSON.stringify(onPage));
+    const line = sql.split('\n').find(l => l.startsWith('alter table public.feedback add constraint feedback_' + k + '_check '));
+    const c = line && (/ in \((.*)\)\);$/.exec(line) || /<@ array\[(.*)\]::text\[\]\);$/.exec(line));
+    ok(c, k + ': no rule in 015');
+    const allowed = [...c[1].matchAll(/'((?:[^']|'')*)'/g)].map(m => m[1].replace(/''/g, "'"));
+    ok(JSON.stringify(allowed) === JSON.stringify(Object.values(f.opts)), k + ' in 015: ' + JSON.stringify(allowed));
+    ok(html.includes(f.q), k + ': question wording differs on the page');
+  }
 });
 
 await step('required answers and a wrong email are refused with a plain message', async () => {
@@ -74,7 +100,8 @@ await step('required answers and a wrong email are refused with a plain message'
   ok(r.status === 400 && /recommend/.test(r.data.error.message), JSON.stringify(r));
   r = await send({ ...YES, email: 'not-an-email' });
   ok(r.status === 400 && /email/.test(r.data.error.message), JSON.stringify(r));
-  ok((await jf('/__feedback')).length === 1, 'a refused answer was saved');
+  // two saved so far: the first answer and the order check above
+  ok((await jf('/__feedback')).length === 2, 'a refused answer was saved');
 });
 
 await step('"not yet" answers keep only the questions for people who have not tried it', async () => {
@@ -82,8 +109,8 @@ await step('"not yet" answers keep only the questions for people who have not tr
   ok(r.status === 201, JSON.stringify(r));
   const x = (await jf('/__feedback')).pop();
   ok(x._keys.join() === ORDER.join(), 'columns or order: ' + x._keys.join());
-  ok(x.tried === 'no' && x.ease == null && x.recommend == null && x.lessons == null && x.pmf == null && x.used.length === 0, 'rating kept: ' + JSON.stringify(x));
-  ok(x.why_not === 'no_time' && x.would_try === 'A short demo video' && x.heard === 'friend', JSON.stringify(x));
+  ok(x.tried === 'Not yet' && x.ease == null && x.recommend == null && x.lessons == null && x.pmf == null && x.used.length === 0, 'rating kept: ' + JSON.stringify(x));
+  ok(x.why_not === 'No time yet' && x.would_try === 'A short demo video' && x.heard === 'A friend or classmate', JSON.stringify(x));
 });
 
 await step('the hidden spam field is accepted quietly and nothing is saved', async () => {
@@ -201,7 +228,8 @@ await step('on the live site the page sends the answer, from the app, linked to 
   await p.click('#fb-send'); await p.waitForSelector('#fb-done:visible', { timeout: 5000 });
   const rows = await jf('/__feedback');
   const x = rows[rows.length - 1];
-  ok(rows.length === before + 1 && x.source === 'app' && x.user_id === stu.id && x.target_role === 'pjm' && x.add_or_change === 'More SQL, please' && x.pmf === 'very' && x.heard === 'whatsapp', JSON.stringify(x));
+  ok(rows.length === before + 1 && x.source === 'app' && x.user_id === stu.id && x.target_role === 'Project Manager' && x.add_or_change === 'More SQL, please' && x.pmf === 'Very disappointed' && x.heard === 'WhatsApp or group chat', JSON.stringify(x));
+  ok(JSON.stringify(x.prepare) === '["YouTube"]' && JSON.stringify(x.struggle) === '["Knowing what to learn first and next"]' && JSON.stringify(x.used) === '["Lessons"]', 'page answers not saved as worded: ' + JSON.stringify(x));
   ok(x._keys.join() === ORDER.join(), 'columns or order from the page: ' + x._keys.join());
   ok(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'sideways scroll on a phone');
   await c.close();
@@ -303,7 +331,7 @@ await step('the admin Feedback tab shows the averages, every answer, and a CSV d
   const [dl] = await Promise.all([p.waitForEvent('download'), p.click('[data-action="fb-csv"]')]);
   const csv = await (await dl.createReadStream()).toArray().then(b => Buffer.concat(b).toString('utf8'));
   ok(/^\ufeff?created_at,source,status,school,program,target_role,prepare,struggle,heard,tried,used,ease,device,broken,lessons,lessons_better,favorite,continue_use,change_mind,pmf,recommend,add_or_change,why_not,would_try,email,linked_account/.test(csv), 'csv header: ' + csv.slice(0, 300));
-  ok(/More SQL, please/.test(csv) && /,pjm,/.test(csv) && /,very,/.test(csv), 'csv: ' + csv.slice(0, 400));
+  ok(/More SQL, please/.test(csv) && /,Project Manager,/.test(csv) && /,Very disappointed,/.test(csv) && /,YouTube,/.test(csv), 'csv: ' + csv.slice(0, 400));
   await c.close();
 });
 

@@ -512,27 +512,30 @@ await step('feedback (015): one column per question in form order, only the serv
   const noted = (await db.query(`select a.attname, col_description(a.attrelid, a.attnum) as d from pg_attribute a where a.attrelid = 'public.feedback'::regclass and a.attnum > 0 and not a.attisdropped`)).rows;
   need(noted.find(r => r.attname === 'pmf').d.startsWith('Q15') && noted.find(r => r.attname === 'prepare').d.startsWith('Q4'), 'column comments missing');
   await svc(`insert into public.feedback (source, status, target_role, prepare, struggle, heard, tried, used, ease, lessons, continue_use, pmf, recommend, add_or_change, email)
-             values ('page', 'student', 'pm', '{youtube,google}', '{order}', 'whatsapp', 'yes', '{lessons}', 4, 5, 'regularly', 'very', 9, 'more SQL', 'a@usc.edu')`);
-  await svc(`insert into public.feedback (user_id, tried, why_not) values ($1, 'no', 'no_time')`, [S1]);
+             values ('page', 'Student', 'Product Manager', '{YouTube,"Google search"}', '{"Knowing what to learn first and next"}', 'WhatsApp or group chat', 'Yes',
+                     '{"Role match (resume or questions)"}', 4, 5, 'Yes, regularly', 'Very disappointed', 9, 'more SQL', 'a@usc.edu')`);
+  await svc(`insert into public.feedback (user_id, tried, why_not) values ($1, 'Not yet', 'No time yet')`, [S1]);
   const r = await svc(`select count(*)::int as n, max(recommend) as top from public.feedback`);
   need(r.rows[0].n === 2 && r.rows[0].top === 9, JSON.stringify(r.rows));
-  need(await fails(S1, `insert into public.feedback (tried) values ('yes')`), 'a student wrote an answer from the site');
+  need(await fails(S1, `insert into public.feedback (tried) values ('Yes')`), 'a student wrote an answer from the site');
+  need(await fails(S1, `select * from public.feedback_by_question`), 'a student read the readable view');
   need(await fails(S1, `select * from public.feedback`), 'a student read the answers');
   need(await fails(ADM, `select * from public.feedback`), 'an admin read the answers from the site (they go through the server)');
   await db.exec(`set role anon`);
-  let anon = null; try { await db.query(`insert into public.feedback (tried) values ('yes')`); } catch (e) { anon = e.message; } finally { await db.exec(`reset role`); }
+  let anon = null; try { await db.query(`insert into public.feedback (tried) values ('Yes')`); } catch (e) { anon = e.message; } finally { await db.exec(`reset role`); }
   need(anon, 'a signed-out visitor wrote straight into the table');
-  for (const [sql, why] of [[`(tried) values ('maybe')`, 'a bad tried value'], [`(tried, ease) values ('yes', 6)`, 'an ease of 6'],
-    [`(tried, recommend) values ('yes', 11)`, 'a recommend of 11'], [`(tried, pmf) values ('yes', 'meh')`, 'a bad pmf value'],
-    [`(tried, heard) values ('yes', 'tv')`, 'a bad heard value'], [`(tried, prepare) values ('yes', '{tiktok}')`, 'an unknown prepare choice'],
-    [`(tried, used) values ('yes', '{everything}')`, 'an unknown used choice'], [`(tried, email) values ('yes', 'nope')`, 'an email without @'],
-    [`(tried, source) values ('yes', 'elsewhere')`, 'an unknown source'], [`(tried, broken) values ('yes', repeat('x', 1001))`, 'an over-long answer']]) {
+  for (const [sql, why] of [[`(tried) values ('maybe')`, 'a bad tried value'], [`(tried) values ('yes')`, 'a short code in place of the words'],
+    [`(tried, ease) values ('Yes', 6)`, 'an ease of 6'], [`(tried, recommend) values ('Yes', 11)`, 'a recommend of 11'],
+    [`(tried, pmf) values ('Yes', 'very')`, 'a short pmf code'], [`(tried, heard) values ('Yes', 'TV')`, 'a bad heard value'],
+    [`(tried, prepare) values ('Yes', '{youtube}')`, 'a short prepare code'], [`(tried, used) values ('Yes', '{Everything}')`, 'an unknown used choice'],
+    [`(tried, email) values ('Yes', 'nope')`, 'an email without @'], [`(tried, source) values ('Yes', 'elsewhere')`, 'an unknown source'],
+    [`(tried, broken) values ('Yes', repeat('x', 1001))`, 'an over-long answer']]) {
     need(await dbFails(`insert into public.feedback ` + sql), why + ' was accepted');
   }
 });
 
 await step('feedback (015): answers saved by the first version of the table move into the new columns when the file runs again', async () => {
-  await db.exec(`drop table public.feedback`);
+  await db.exec(`drop view if exists public.feedback_by_question; drop table public.feedback`);
   await db.exec(`create table public.feedback (id bigint generated always as identity primary key, created_at timestamptz not null default now(),
     user_id uuid, source text not null default 'page', status text, target_role text, tried text not null, ease smallint, lessons smallint,
     recommend smallint, continue_use text, answers jsonb not null default '{}'::jsonb, email text)`);
@@ -545,12 +548,41 @@ await step('feedback (015): answers saved by the first version of the table move
   const rows = (await db.query(`select * from public.feedback order by id`)).rows;
   need(rows.length === 2, 'rows: ' + rows.length);
   const a = rows[0], b = rows[1];
-  need(a.school === 'USC' && a.prepare.join() === 'youtube' && a.struggle.join() === 'order,time' && a.used.join() === 'lessons' && a.device.join() === 'phone', JSON.stringify(a));
-  need(a.favorite === 'lessons' && a.add_or_change === 'more cases' && a.ease === 3 && a.recommend === 8 && a.source === 'app' && a.email === 'b@usc.edu' && a.pmf === null, JSON.stringify(a));
-  need(b.tried === 'no' && b.why_not === 'forgot' && b.would_try === 'a reminder' && b.prepare.length === 0, JSON.stringify(b));
+  need(a.school === 'USC' && a.prepare.join() === 'YouTube' && a.struggle.join('|') === 'Knowing what to learn first and next|Finding the time' && a.used.join() === 'Lessons' && a.device.join() === 'Phone', JSON.stringify(a));
+  need(a.favorite === 'Lessons' && a.add_or_change === 'more cases' && a.ease === 3 && a.recommend === 8 && a.source === 'app' && a.email === 'b@usc.edu' && a.pmf === null, JSON.stringify(a));
+  need(a.status === 'Student' && a.target_role === 'Business Analyst' && a.tried === 'Yes' && a.continue_use === 'Now and then', JSON.stringify(a));
+  need(b.tried === 'Not yet' && b.why_not === 'I forgot about it' && b.would_try === 'a reminder' && b.prepare.length === 0, JSON.stringify(b));
   need((await db.query(`select to_regclass('public.feedback_v1') as t`)).rows[0].t === null, 'the old table was left behind');
   need(!('answers' in a), 'the old answers column is still there');
   need(await fails(S1, `select * from public.feedback`), 'a student can read the moved answers');
+});
+
+await step('feedback (015): answers saved with short codes by the second version turn into the words on the page, and the view shows full questions', async () => {
+  await db.exec(`drop view if exists public.feedback_by_question; drop table public.feedback`);
+  await db.exec(`create table public.feedback (id bigint generated always as identity primary key, created_at timestamptz not null default now(),
+    user_id uuid, source text not null default 'page', status text check (status in ('student', 'working', 'other')), school text, program text,
+    target_role text check (target_role in ('pm', 'pjm', 'ba', 'other', 'unsure')), prepare text[] not null default '{}', struggle text[] not null default '{}',
+    heard text check (heard in ('whatsapp', 'friend', 'class', 'linkedin', 'poster', 'other')), tried text not null check (tried in ('yes', 'no')),
+    used text[] not null default '{}', ease smallint, device text[] not null default '{}', broken text, lessons smallint, lessons_better text,
+    favorite text, continue_use text check (continue_use in ('regularly', 'sometimes', 'interviews', 'no')), change_mind text,
+    pmf text check (pmf in ('very', 'somewhat', 'not')), recommend smallint, add_or_change text, why_not text, would_try text, email text)`);
+  await db.exec(`insert into public.feedback (status, target_role, prepare, struggle, heard, tried, used, ease, lessons, favorite, continue_use, pmf, recommend)
+                 values ('student', 'pjm', '{google,youtube}', '{order}', 'linkedin', 'yes', '{roadmap,assistant}', 5, 4, 'assistant', 'no', 'somewhat', 7)`);
+  await db.exec(`insert into public.feedback (status, target_role, prepare, struggle, heard, tried, why_not) values ('other', 'unsure', '{none}', '{time,other}', 'other', 'no', 'not_sure')`);
+  await db.exec(fs.readFileSync(path.join(dir, '015_feedback.sql'), 'utf8'));
+  await db.exec(fs.readFileSync(path.join(dir, '015_feedback.sql'), 'utf8'));
+  const rows = (await db.query(`select * from public.feedback order by id`)).rows;
+  const [a, b] = rows;
+  need(a.status === 'Student' && a.target_role === 'Project Manager' && a.prepare.join('|') === 'Google search|YouTube' && a.struggle.join() === 'Knowing what to learn first and next', JSON.stringify(a));
+  need(a.heard === 'LinkedIn' && a.tried === 'Yes' && a.used.join('|') === 'Roadmap|Study assistant' && a.favorite === 'Study assistant' && a.continue_use === 'No' && a.pmf === 'Somewhat disappointed', JSON.stringify(a));
+  need(b.status === 'Other' && b.target_role === 'Not sure yet' && b.prepare.join() === 'I have not started' && b.struggle.join('|') === 'Finding the time|Something else' && b.heard === 'Something else' && b.tried === 'Not yet' && b.why_not === 'Not sure it is for me', JSON.stringify(b));
+  need(await dbFails(`insert into public.feedback (tried) values ('yes')`), 'a short code is still allowed after the upgrade');
+  const v = (await db.query(`select * from public.feedback_by_question order by "Answer number"`)).rows;
+  const cols = Object.keys(v[0]);
+  need(cols[3] === 'Q1 Are you a student or working?' && cols.includes('Q5 What is the hardest part of preparing for your target role?') && cols.includes('Q15 How would you feel if you could no longer use CareerPath?'), cols.join(' | '));
+  need(v[0]['Q4 How are you preparing for your target role right now?'] === 'Google search; YouTube' && v[0]['Q8 Which parts did you use?'] === 'Roadmap; Study assistant', JSON.stringify(v[0]));
+  need(v.length === 2 && v[1]['Not tried yet: What stopped you so far?'] === 'Not sure it is for me', JSON.stringify(v[1]));
+  need(await fails(ADM, `select * from public.feedback_by_question`), 'an admin read the view from the site');
 });
 
 console.log(failed ? failed + ' failed' : 'all passed');

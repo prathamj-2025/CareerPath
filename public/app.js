@@ -3785,7 +3785,10 @@
     pmf: { very: "Very disappointed", somewhat: "Somewhat disappointed", not: "Not disappointed" },
     source: { page: "Feedback page", app: "From the app", prompt: "After an assessment" }
   };
+  // Answers are saved as worded on the page; the maps only translate short codes from very early answers.
+  function fbL(map, v) { return v ? (map[v] || v) : ""; }
   function fbList(map, arr) { return (arr || []).map(function (k) { return map[k] || k; }).join(", "); }
+  function fbYes(r) { return r.tried === "Yes" || r.tried === "yes"; }
 
   function loadFeedback() {
     var f = state.feedback;
@@ -3813,10 +3816,10 @@
     var rec = rows.map(function (r) { return r.recommend; }).filter(function (x) { return typeof x === "number"; });
     var nps = rec.length ? Math.round((rec.filter(function (x) { return x >= 9; }).length - rec.filter(function (x) { return x <= 6; }).length) / rec.length * 100) : null;
     var cont = rows.map(function (r) { return r.continue_use; }).filter(Boolean);
-    var keep = cont.length ? Math.round(cont.filter(function (x) { return x !== "no"; }).length / cont.length * 100) : null;
+    var keep = cont.length ? Math.round(cont.filter(function (x) { return !/^no$/i.test(x); }).length / cont.length * 100) : null;
     var pm = rows.map(function (r) { return r.pmf; }).filter(Boolean);
-    var pmf = pm.length ? Math.round(pm.filter(function (x) { return x === "very"; }).length / pm.length * 100) : null;
-    var tried = rows.filter(function (r) { return r.tried === "yes"; }).length;
+    var pmf = pm.length ? Math.round(pm.filter(function (x) { return /^very/i.test(x); }).length / pm.length * 100) : null;
+    var tried = rows.filter(fbYes).length;
     function top(key, map) {
       var n = {};
       rows.forEach(function (r) { var a = r[key]; (Array.isArray(a) ? a : a ? [a] : []).forEach(function (x) { n[x] = (n[x] || 0) + 1; }); });
@@ -3883,21 +3886,21 @@
       var txt = function (k, v) { return v ? '<div class="fb-text"><span>' + k + "</span><p>" + esc(v) + "</p></div>" : ""; };
       return '<div class="card fb-resp">' +
         '<div class="row" style="justify-content:space-between;gap:8px;margin-bottom:8px">' +
-          '<b>' + esc(FB_LABEL.role[r.target_role] || "Role not given") + '</b>' +
+          '<b>' + esc(fbL(FB_LABEL.role, r.target_role) || "Role not given") + '</b>' +
           '<span class="tiny muted">' + esc(when) + " &middot; " + esc(FB_LABEL.source[r.source] || "") + (r.user_id ? " &middot; linked to an account" : "") + "</span></div>" +
-        line("About", esc([FB_LABEL.status[r.status], a.school, a.program].filter(Boolean).join(" \u00b7 "))) +
+        line("About", esc([fbL(FB_LABEL.status, r.status), a.school, a.program].filter(Boolean).join(" \u00b7 "))) +
         line("Prepares with", esc(fbList(FB_LABEL.prepare, a.prepare))) +
         line("Hardest", esc(fbList(FB_LABEL.struggle, a.struggle))) +
-        line("Heard from", esc(FB_LABEL.heard[a.heard] || "")) +
-        (r.tried === "yes"
+        line("Heard from", esc(fbL(FB_LABEL.heard, a.heard))) +
+        (fbYes(r)
           ? line("Ratings", "Easy to start " + r.ease + "/5 &middot; Lessons " + r.lessons + "/5 &middot; Recommend " + r.recommend + "/10") +
-            line("Will keep using", esc(FB_LABEL.cont[r.continue_use] || "")) +
-            line("Without CareerPath", esc(FB_LABEL.pmf[r.pmf] || "")) +
-            line("Used", esc(fbList(FB_LABEL.used, a.used))) + line("Favorite", esc(FB_LABEL.used[a.favorite] || "")) +
+            line("Will keep using", esc(fbL(FB_LABEL.cont, r.continue_use))) +
+            line("Without CareerPath", esc(fbL(FB_LABEL.pmf, r.pmf))) +
+            line("Used", esc(fbList(FB_LABEL.used, a.used))) + line("Favorite", esc(fbL(FB_LABEL.used, a.favorite))) +
             line("Devices", esc(fbList(FB_LABEL.device, a.device))) +
             txt("Broken or confusing", a.broken) + txt("Make the lessons better", a.lessons_better) +
             txt("What would change their mind", a.change_mind) + txt("Add or change", a.add_or_change)
-          : line("Tried it", "Not yet" + (a.why_not ? " &middot; " + esc(FB_LABEL.why_not[a.why_not] || "") : "")) + txt("Would try it if", a.would_try)) +
+          : line("Tried it", "Not yet" + (a.why_not ? " &middot; " + esc(fbL(FB_LABEL.why_not, a.why_not)) : "")) + txt("Would try it if", a.would_try)) +
         (r.email ? line("Email", '<span class="mono">' + esc(r.email) + "</span>") : "") +
         "</div>";
     }).join("");

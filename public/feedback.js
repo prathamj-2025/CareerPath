@@ -111,14 +111,22 @@
     if (real === false) {
       try {
         var list = JSON.parse(localStorage.getItem(DEMO_KEY) || "[]");
+        // Saved like the live site saves them: each choice as it reads on the page.
         var yes = p.tried === "yes", none = function (v) { return v || null; };
+        var word = function (name, v) {
+          var el = v ? form.querySelector('[name="' + name + '"][value="' + v + '"]') : null;
+          return el ? el.parentNode.querySelector("span").textContent : null;
+        };
+        var words = function (name, list) { return (list || []).map(function (v) { return word(name, v); }).filter(Boolean); };
         var row = { id: list.length + 1, created_at: new Date().toISOString(), source: p.source, user_id: null,
-          status: p.status, school: none(p.school), program: none(p.program), target_role: p.role, prepare: p.prepare, struggle: p.struggle,
-          heard: p.heard, tried: p.tried, used: yes ? p.used : [], ease: yes ? p.ease : null, device: yes ? p.device : [],
+          status: word("status", p.status), school: none(p.school), program: none(p.program), target_role: word("role", p.role),
+          prepare: words("prepare", p.prepare), struggle: words("struggle", p.struggle), heard: word("heard", p.heard), tried: word("tried", p.tried),
+          used: yes ? words("used", p.used) : [], ease: yes ? p.ease : null, device: yes ? words("device", p.device) : [],
           broken: yes ? none(p.broken) : null, lessons: yes ? p.lessons : null, lessons_better: yes ? none(p.lessons_better) : null,
-          favorite: yes ? none(p.favorite) : null, continue_use: yes ? p.continue : null, change_mind: yes ? none(p.change_mind) : null,
-          pmf: yes ? p.pmf : null, recommend: yes ? p.recommend : null, add_or_change: yes ? none(p.add_or_change) : null,
-          why_not: yes ? null : none(p.why_not), would_try: yes ? null : none(p.would_try), email: none(p.email) };
+          favorite: yes ? word("favorite", p.favorite) : null, continue_use: yes ? word("continue", p.continue) : null,
+          change_mind: yes ? none(p.change_mind) : null, pmf: yes ? word("pmf", p.pmf) : null, recommend: yes ? p.recommend : null,
+          add_or_change: yes ? none(p.add_or_change) : null, why_not: yes ? null : word("why_not", p.why_not),
+          would_try: yes ? null : none(p.would_try), email: none(p.email) };
         list.push(row); localStorage.setItem(DEMO_KEY, JSON.stringify(list.slice(-200)));
       } catch (e) { /* storage blocked: still thank them */ }
       done("This preview copy has no database, so your answer was kept in this browser only.");

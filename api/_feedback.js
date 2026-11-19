@@ -15,24 +15,16 @@ const MAX_BODY = 12000;
 const PER_HOUR = 20;
 const TEXT = 1000;
 
-export const CHOICES = {
-  status: ["student", "working", "other"],
-  role: ["pm", "pjm", "ba", "other", "unsure"],
-  prepare: ["google", "youtube", "courses", "chatgpt", "linkedin", "mentors", "books", "none"],
-  struggle: ["order", "testing", "too_many", "time", "interviews", "other"],
-  heard: ["whatsapp", "friend", "class", "linkedin", "poster", "other"],
-  tried: ["yes", "no"],
-  why_not: ["no_time", "not_sure", "forgot", "other"],
-  used: ["match", "roadmap", "lessons", "practice", "assessments", "assistant", "leaderboard", "challenge"],
-  device: ["phone", "laptop", "tablet"],
-  continue: ["regularly", "sometimes", "interviews", "no"],
-  pmf: ["very", "somewhat", "not"],
-  source: ["page", "app", "prompt"]
-};
+import { FORM } from "./_feedback_form.js";
+
+/* Choices arrive as the short values on the page and are saved as the text the person saw (FORM in _feedback_form.js). */
+const SOURCES = ["page", "app", "prompt"];
 
 function clip(v, n) { return String(v == null ? "" : v).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]+/g, " ").trim().slice(0, n); }
-const one = (v, list) => (list.indexOf(v) > -1 ? v : null);
-const many = (v, list) => (Array.isArray(v) ? v.filter((x, i) => list.indexOf(x) > -1 && v.indexOf(x) === i) : []);
+const has = (o, k) => typeof k === "string" && Object.prototype.hasOwnProperty.call(o, k);
+const one = (v, k) => (has(FORM[k].opts, v) ? FORM[k].opts[v] : null);
+// Several choices: kept in the order they appear on the page, each once, as the text on the page.
+const many = (v, k) => (Array.isArray(v) ? Object.keys(FORM[k].opts).filter((x) => v.indexOf(x) > -1).map((x) => FORM[k].opts[x]) : []);
 function num(v, lo, hi) { const n = Number(v); return Number.isInteger(n) && n >= lo && n <= hi ? n : null; }
 
 /* Returns { row } or { error }. The row has one key per column of public.feedback, in the order of the form
@@ -44,20 +36,20 @@ export const COLUMNS = ["source", "user_id", "status", "school", "program", "tar
 
 export function clean(b) {
   const text = (v, n) => clip(v, n || TEXT) || null;
-  const status = one(b.status, CHOICES.status), role = one(b.role, CHOICES.role);
+  const status = one(b.status, "status"), role = one(b.role, "target_role");
   if (!status) return { error: "Please choose student, working or other." };
   if (!role) return { error: "Please choose the role you are aiming for." };
-  const prepare = many(b.prepare, CHOICES.prepare), struggle = many(b.struggle, CHOICES.struggle), heard = one(b.heard, CHOICES.heard);
+  const prepare = many(b.prepare, "prepare"), struggle = many(b.struggle, "struggle"), heard = one(b.heard, "heard");
   if (!prepare.length) return { error: "Please choose how you are preparing for your target role." };
   if (!struggle.length) return { error: "Please choose what is hardest about preparing." };
   if (!heard) return { error: "Please say how you heard about CareerPath." };
-  const tried = one(b.tried, CHOICES.tried);
+  const tried = one(b.tried, "tried");
   if (!tried) return { error: "Please say whether you have tried CareerPath." };
   let email = clip(b.email, 200).toLowerCase();
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { error: "That email address does not look right. Leave it empty if you prefer." };
 
   const row = {
-    source: one(b.source, CHOICES.source) || "page", user_id: null,
+    source: SOURCES.indexOf(b.source) > -1 ? b.source : "page", user_id: null,
     status, school: text(b.school, 120), program: text(b.program, 120), target_role: role, prepare, struggle, heard, tried,
     used: [], ease: null, device: [], broken: null, lessons: null, lessons_better: null, favorite: null, continue_use: null,
     change_mind: null, pmf: null, recommend: null, add_or_change: null,
@@ -65,22 +57,22 @@ export function clean(b) {
     email: email || null
   };
 
-  if (tried === "yes") {
-    row.used = many(b.used, CHOICES.used);
-    row.ease = num(b.ease, 1, 5); row.lessons = num(b.lessons, 1, 5); row.continue_use = one(b.continue, CHOICES.continue);
-    row.pmf = one(b.pmf, CHOICES.pmf); row.recommend = num(b.recommend, 0, 10);
+  if (b.tried === "yes") {
+    row.used = many(b.used, "used");
+    row.ease = num(b.ease, 1, 5); row.lessons = num(b.lessons, 1, 5); row.continue_use = one(b.continue, "continue_use");
+    row.pmf = one(b.pmf, "pmf"); row.recommend = num(b.recommend, 0, 10);
     if (!row.used.length) return { error: "Please choose the parts of CareerPath you used." };
     if (row.ease == null) return { error: "Please rate how easy it was to get started." };
     if (row.lessons == null) return { error: "Please rate how helpful the lessons were." };
     if (row.continue_use == null) return { error: "Please say whether you will keep using CareerPath." };
     if (row.pmf == null) return { error: "Please say how you would feel if you could no longer use CareerPath." };
     if (row.recommend == null) return { error: "Please choose how likely you are to recommend CareerPath." };
-    row.device = many(b.device, CHOICES.device);
-    row.broken = text(b.broken); row.lessons_better = text(b.lessons_better); row.favorite = one(b.favorite, CHOICES.used);
-    row.change_mind = row.continue_use === "no" ? text(b.change_mind) : null;
+    row.device = many(b.device, "device");
+    row.broken = text(b.broken); row.lessons_better = text(b.lessons_better); row.favorite = one(b.favorite, "favorite");
+    row.change_mind = b.continue === "no" ? text(b.change_mind) : null;
     row.add_or_change = text(b.add_or_change != null ? b.add_or_change : b.change);
   } else {
-    row.why_not = one(b.why_not, CHOICES.why_not);
+    row.why_not = one(b.why_not, "why_not");
     if (!row.why_not) return { error: "Please say what stopped you from trying CareerPath." };
     row.would_try = text(b.would_try);
   }
