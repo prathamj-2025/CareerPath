@@ -83,18 +83,22 @@ end $$;
 
 -- 3. Choices are stored exactly as they read on the form. The first copies of this file stored short codes instead
 --    (order, youtube, ...): this turns any of those into the words on the page, then allows only those words.
-alter table public.feedback drop constraint if exists feedback_status_check;
-alter table public.feedback drop constraint if exists feedback_target_role_check;
-alter table public.feedback drop constraint if exists feedback_prepare_check;
-alter table public.feedback drop constraint if exists feedback_struggle_check;
-alter table public.feedback drop constraint if exists feedback_heard_check;
-alter table public.feedback drop constraint if exists feedback_tried_check;
-alter table public.feedback drop constraint if exists feedback_used_check;
-alter table public.feedback drop constraint if exists feedback_device_check;
-alter table public.feedback drop constraint if exists feedback_favorite_check;
-alter table public.feedback drop constraint if exists feedback_continue_use_check;
-alter table public.feedback drop constraint if exists feedback_pmf_check;
-alter table public.feedback drop constraint if exists feedback_why_not_check;
+-- Remove every older rule on these columns first, whatever it is called: earlier copies of this file left rules that allow only
+-- the short codes, and Postgres sometimes names them with a number on the end (feedback_continue_use_check1).
+do $$
+declare r record;
+begin
+  for r in
+    select distinct c.conname
+    from pg_constraint c
+    join pg_attribute a on a.attrelid = c.conrelid and a.attnum = any (c.conkey)
+    where c.conrelid = 'public.feedback'::regclass and c.contype = 'c'
+      and a.attname in ('status', 'target_role', 'prepare', 'struggle', 'heard', 'tried', 'used', 'device', 'favorite',
+                        'continue_use', 'pmf', 'why_not')
+  loop
+    execute format('alter table public.feedback drop constraint %I', r.conname);
+  end loop;
+end $$;
 
 update public.feedback set
   status = case status when 'student' then 'Student' when 'working' then 'Working professional' when 'other' then 'Other' else status end,
