@@ -3781,6 +3781,8 @@
     device: { phone: "Phone", laptop: "Laptop", tablet: "Tablet" },
     cont: { regularly: "Yes, regularly", sometimes: "Now and then", interviews: "Only before interviews", no: "No" },
     why_not: { no_time: "No time yet", not_sure: "Not sure it is for them", forgot: "Forgot", other: "Something else" },
+    heard: { whatsapp: "WhatsApp or group chat", friend: "Friend or classmate", class: "Class or professor", linkedin: "LinkedIn", poster: "Poster or flyer", other: "Something else" },
+    pmf: { very: "Very disappointed", somewhat: "Somewhat disappointed", not: "Not disappointed" },
     source: { page: "Feedback page", app: "From the app", prompt: "After an assessment" }
   };
   function fbList(map, arr) { return (arr || []).map(function (k) { return map[k] || k; }).join(", "); }
@@ -3793,11 +3795,15 @@
       var rows = [];
       try { rows = JSON.parse(window.localStorage.getItem("cp-feedback-demo") || "[]").reverse(); } catch (e) { rows = []; }
       f.rows = rows; f.loading = false;
+      var st = state.users.filter(function (u) { return u.role === "student"; });
+      var any = function (u, k) { return Object.keys(u.progress || {}).some(function (id) { var x = u.progress[id]; return k === "l" ? (x.lessonsDone || []).length : x.attempts > 0; }); };
+      f.usage = { accounts: st.length, onboarded: st.filter(function (u) { return !!u.roleId; }).length,
+        read_lesson: st.filter(function (u) { return any(u, "l"); }).length, took_assessment: st.filter(function (u) { return any(u, "a"); }).length, came_back: null };
       return;
     }
     apiGet("/api/config?task=feedback").then(function (r) {
       f.loading = false;
-      if (r.error) { f.err = r.error; f.rows = f.rows || []; } else f.rows = (r.data && r.data.rows) || [];
+      if (r.error) { f.err = r.error; f.rows = f.rows || []; } else { f.rows = (r.data && r.data.rows) || []; f.usage = (r.data && r.data.usage) || null; }
       if (state.route.name === "a-feedback") render();
     });
   }
@@ -3808,14 +3814,29 @@
     var nps = rec.length ? Math.round((rec.filter(function (x) { return x >= 9; }).length - rec.filter(function (x) { return x <= 6; }).length) / rec.length * 100) : null;
     var cont = rows.map(function (r) { return r.continue_use; }).filter(Boolean);
     var keep = cont.length ? Math.round(cont.filter(function (x) { return x !== "no"; }).length / cont.length * 100) : null;
+    var pm = rows.map(function (r) { return r.pmf; }).filter(Boolean);
+    var pmf = pm.length ? Math.round(pm.filter(function (x) { return x === "very"; }).length / pm.length * 100) : null;
     var tried = rows.filter(function (r) { return r.tried === "yes"; }).length;
     function top(key, map) {
       var n = {};
-      rows.forEach(function (r) { var a = (r.answers || {})[key]; (Array.isArray(a) ? a : a ? [a] : []).forEach(function (x) { n[x] = (n[x] || 0) + 1; }); });
+      rows.forEach(function (r) { var a = r[key]; (Array.isArray(a) ? a : a ? [a] : []).forEach(function (x) { n[x] = (n[x] || 0) + 1; }); });
       return Object.keys(n).sort(function (a, b) { return n[b] - n[a]; }).map(function (k) { return { label: map[k] || k, n: n[k] }; });
     }
-    return { total: rows.length, tried: tried, ease: avg("ease"), lessons: avg("lessons"), nps: nps, recN: rec.length, keep: keep,
-      favorite: top("favorite", FB_LABEL.used), struggle: top("struggle", FB_LABEL.struggle), used: top("used", FB_LABEL.used) };
+    return { total: rows.length, tried: tried, ease: avg("ease"), lessons: avg("lessons"), nps: nps, recN: rec.length, keep: keep, pmf: pmf, pmfN: pm.length,
+      favorite: top("favorite", FB_LABEL.used), struggle: top("struggle", FB_LABEL.struggle), used: top("used", FB_LABEL.used),
+      heard: top("heard", FB_LABEL.heard), prepare: top("prepare", FB_LABEL.prepare) };
+  }
+
+  function fbUsage(u) {
+    if (!u) return "";
+    var pct = function (n) { return u.accounts ? Math.round(n / u.accounts * 100) + "%" : "&ndash;"; };
+    var cell = function (k, n) { return summaryCell(k, n == null ? "&ndash;" : n + "<small> " + pct(n) + "</small>"); };
+    return '<h2 style="margin:4px 0 6px">What students actually did</h2>' +
+      '<p class="tiny muted" style="margin-bottom:10px">Counted from saved progress, not from the form. Percentages are of all student accounts.</p>' +
+      '<div class="summary-row" style="margin-bottom:22px">' +
+        summaryCell("Accounts", String(u.accounts)) + cell("Picked a roadmap", u.onboarded) + cell("Read a lesson", u.read_lesson) +
+        cell("Took an assessment", u.took_assessment) + cell("Came back another day", u.came_back) +
+      "</div>";
   }
 
   function fbBars(title, list, total) {
@@ -3841,7 +3862,7 @@
       '<button class="btn" data-action="fb-refresh">Refresh</button>' +
       (rows.length ? '<button class="btn" data-action="fb-csv">Download CSV</button>' : "") +
       (REAL ? "" : '<span class="tiny muted">Preview copy: shows answers sent from this browser only.</span>') + "</div>";
-    if (!rows.length) return head + tools + '<div class="card"><h3>No answers yet</h3><p class="tiny muted" style="margin-top:6px">Answers appear here as soon as someone sends the form.</p></div>';
+    if (!rows.length) return head + tools + fbUsage(f.usage) + '<div class="card"><h3>No answers yet</h3><p class="tiny muted" style="margin-top:6px">Answers appear here as soon as someone sends the form.</p></div>';
 
     var summary = '<div class="summary-row" style="margin-bottom:16px">' +
       summaryCell("Answers", String(st.total) + "<small> &middot; " + st.tried + " tried it</small>") +
@@ -3849,11 +3870,13 @@
       summaryCell("Easy to start", one(st.ease, 1) + "<small> / 5</small>") +
       summaryCell("Recommend score", (st.nps == null ? "&ndash;" : (st.nps > 0 ? "+" : "") + st.nps) + "<small> " + st.recN + " rated</small>") +
       summaryCell("Will keep using", (st.keep == null ? "&ndash;" : st.keep + "%")) +
+      summaryCell("Very disappointed without it", (st.pmf == null ? "&ndash;" : st.pmf + "%") + "<small> " + st.pmfN + " answered</small>") +
       "</div>";
-    var charts = '<div class="fb-grid">' + fbBars("Hardest part of preparing", st.struggle, st.total) + fbBars("Parts they used", st.used, st.tried) + fbBars("Favorite part", st.favorite, st.tried) + "</div>";
+    var charts = '<div class="fb-grid">' + fbBars("Hardest part of preparing", st.struggle, st.total) + fbBars("How they prepare today", st.prepare, st.total) +
+      fbBars("How they heard about CareerPath", st.heard, st.total) + fbBars("Parts they used", st.used, st.tried) + fbBars("Favorite part", st.favorite, st.tried) + "</div>";
 
     var list = rows.map(function (r) {
-      var a = r.answers || {};
+      var a = r;
       var d = new Date(r.created_at);
       var when = isNaN(d) ? "" : d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
       var line = function (k, v) { return v ? '<div class="fb-line"><span>' + k + "</span><span>" + v + "</span></div>" : ""; };
@@ -3865,31 +3888,30 @@
         line("About", esc([FB_LABEL.status[r.status], a.school, a.program].filter(Boolean).join(" \u00b7 "))) +
         line("Prepares with", esc(fbList(FB_LABEL.prepare, a.prepare))) +
         line("Hardest", esc(fbList(FB_LABEL.struggle, a.struggle))) +
+        line("Heard from", esc(FB_LABEL.heard[a.heard] || "")) +
         (r.tried === "yes"
           ? line("Ratings", "Easy to start " + r.ease + "/5 &middot; Lessons " + r.lessons + "/5 &middot; Recommend " + r.recommend + "/10") +
             line("Will keep using", esc(FB_LABEL.cont[r.continue_use] || "")) +
+            line("Without CareerPath", esc(FB_LABEL.pmf[r.pmf] || "")) +
             line("Used", esc(fbList(FB_LABEL.used, a.used))) + line("Favorite", esc(FB_LABEL.used[a.favorite] || "")) +
             line("Devices", esc(fbList(FB_LABEL.device, a.device))) +
             txt("Broken or confusing", a.broken) + txt("Make the lessons better", a.lessons_better) +
-            txt("What would change their mind", a.change_mind) + txt("Add or change", a.change)
+            txt("What would change their mind", a.change_mind) + txt("Add or change", a.add_or_change)
           : line("Tried it", "Not yet" + (a.why_not ? " &middot; " + esc(FB_LABEL.why_not[a.why_not] || "") : "")) + txt("Would try it if", a.would_try)) +
         (r.email ? line("Email", '<span class="mono">' + esc(r.email) + "</span>") : "") +
         "</div>";
     }).join("");
-    return head + tools + summary + charts + '<h2 style="margin:20px 0 10px">All answers</h2><div class="stack">' + list + "</div>";
+    return head + tools + fbUsage(f.usage) + '<h2 style="margin:4px 0 10px">What they told us</h2>' + summary + charts + '<h2 style="margin:20px 0 10px">All answers</h2><div class="stack">' + list + "</div>";
   }
 
   function feedbackCsv(rows) {
-    var cols = ["created_at", "source", "status", "target_role", "school", "program", "prepare", "struggle", "tried", "used", "ease", "device",
-      "broken", "lessons", "lessons_better", "favorite", "continue_use", "change_mind", "recommend", "change", "why_not", "would_try", "email", "linked_account"];
+    // Same columns, in the same order, as the feedback table and the form (Q1 to Q17, then the "not yet" questions).
+    var cols = ["created_at", "source", "status", "school", "program", "target_role", "prepare", "struggle", "heard", "tried",
+      "used", "ease", "device", "broken", "lessons", "lessons_better", "favorite", "continue_use", "change_mind", "pmf", "recommend",
+      "add_or_change", "why_not", "would_try", "email", "linked_account"];
     var q = function (v) { v = v == null ? "" : Array.isArray(v) ? v.join("; ") : String(v); return /[",\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
     var lines = [cols.join(",")].concat(rows.map(function (r) {
-      var a = r.answers || {};
-      return cols.map(function (c) {
-        if (c === "linked_account") return q(r.user_id ? "yes" : "no");
-        if (Object.prototype.hasOwnProperty.call(r, c) && c !== "answers") return q(r[c]);
-        return q(a[c]);
-      }).join(",");
+      return cols.map(function (c) { return c === "linked_account" ? q(r.user_id ? "yes" : "no") : q(r[c]); }).join(",");
     }));
     var blob = new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
     var a = document.createElement("a");

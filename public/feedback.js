@@ -26,7 +26,12 @@
     $("fb-no").hidden = t !== "no";
     $("fb-end").hidden = !t;
     $("fb-mind").hidden = val("continue") !== "no";
+    // A linked answer already comes with the account's email, so the follow-up box is only for everyone else.
+    var linked = !!(token && $("fb-link") && $("fb-link").checked);
+    var eq = form.querySelector('.fb-q[data-q="email"]');
+    if (eq) eq.hidden = linked;
   }
+  if ($("fb-link")) $("fb-link").addEventListener("change", sync);
   form.addEventListener("change", function (e) {
     sync();
     var q = e.target.closest && e.target.closest(".fb-q");
@@ -41,8 +46,10 @@
   }
 
   var NEEDS = {
-    status: "Please choose one.", role: "Please choose one.", tried: "Please choose one.",
-    ease: "Please pick a number.", lessons: "Please pick a number.", continue: "Please choose one.", recommend: "Please pick a number."
+    status: "Please choose one.", role: "Please choose one.", prepare: "Please pick at least one.", struggle: "Please pick at least one.",
+    heard: "Please choose one.", tried: "Please choose one.", used: "Please pick at least one.", ease: "Please pick a number.",
+    lessons: "Please pick a number.", continue: "Please choose one.", pmf: "Please choose one.", recommend: "Please pick a number.",
+    why_not: "Please choose one."
   };
   function check() {
     var first = null;
@@ -53,7 +60,7 @@
       mark(q, missing ? NEEDS[name] || "Please answer this." : "");
       if (missing && !first) first = q;
     });
-    var email = text("email");
+    var email = form.querySelector('.fb-q[data-q="email"]').hidden ? "" : text("email");
     var eq = form.querySelector('.fb-q[data-q="email"]');
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { mark(eq, "That email address does not look right. Leave it empty if you prefer."); first = first || eq; }
     else if (eq) mark(eq, "");
@@ -63,12 +70,13 @@
   function payload() {
     var tried = val("tried");
     var p = { source: source, status: val("status"), role: val("role"), school: text("school"), program: text("program"),
-      prepare: vals("prepare"), struggle: vals("struggle"), tried: tried, email: text("email"), website: text("website") };
+      prepare: vals("prepare"), struggle: vals("struggle"), heard: val("heard"), tried: tried, website: text("website"),
+      email: form.querySelector('.fb-q[data-q="email"]').hidden ? "" : text("email") };
     if (tried === "yes") {
       p.used = vals("used"); p.ease = Number(val("ease")); p.device = vals("device"); p.broken = text("broken");
       p.lessons = Number(val("lessons")); p.lessons_better = text("lessons_better"); p.favorite = val("favorite");
       p.continue = val("continue"); p.change_mind = val("continue") === "no" ? text("change_mind") : "";
-      p.recommend = Number(val("recommend")); p.change = text("change");
+      p.pmf = val("pmf"); p.recommend = Number(val("recommend")); p.add_or_change = text("add_or_change");
     } else {
       p.why_not = val("why_not"); p.would_try = text("would_try");
     }
@@ -103,9 +111,14 @@
     if (real === false) {
       try {
         var list = JSON.parse(localStorage.getItem(DEMO_KEY) || "[]");
-        var row = { id: list.length + 1, created_at: new Date().toISOString(), source: p.source, status: p.status, target_role: p.role,
-          tried: p.tried, ease: p.ease || null, lessons: p.lessons || null, recommend: p.tried === "yes" ? p.recommend : null,
-          continue_use: p.continue || null, email: p.email || null, answers: p };
+        var yes = p.tried === "yes", none = function (v) { return v || null; };
+        var row = { id: list.length + 1, created_at: new Date().toISOString(), source: p.source, user_id: null,
+          status: p.status, school: none(p.school), program: none(p.program), target_role: p.role, prepare: p.prepare, struggle: p.struggle,
+          heard: p.heard, tried: p.tried, used: yes ? p.used : [], ease: yes ? p.ease : null, device: yes ? p.device : [],
+          broken: yes ? none(p.broken) : null, lessons: yes ? p.lessons : null, lessons_better: yes ? none(p.lessons_better) : null,
+          favorite: yes ? none(p.favorite) : null, continue_use: yes ? p.continue : null, change_mind: yes ? none(p.change_mind) : null,
+          pmf: yes ? p.pmf : null, recommend: yes ? p.recommend : null, add_or_change: yes ? none(p.add_or_change) : null,
+          why_not: yes ? null : none(p.why_not), would_try: yes ? null : none(p.would_try), email: none(p.email) };
         list.push(row); localStorage.setItem(DEMO_KEY, JSON.stringify(list.slice(-200)));
       } catch (e) { /* storage blocked: still thank them */ }
       done("This preview copy has no database, so your answer was kept in this browser only.");

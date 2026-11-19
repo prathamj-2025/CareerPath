@@ -49,10 +49,11 @@ One shared Supabase project. Database changes live here as numbered SQL files in
   rows older than a day are deleted. Server only. Safe to run twice. Run it after the website that uses it is deployed; until
   then the old per-copy limits apply and nothing else changes.
 
-- `015_feedback.sql`: the `feedback` table for the feedback form. The server writes answers after checking every field, and only
-  admins read them, also through the server; nothing can be read or written from the site directly. The rating answers have
-  their own columns, the rest sit in `answers`, and an email is kept only when someone types it in. Safe to run twice. Run it
-  after the website with the form is deployed; until then the form says feedback is not switched on yet.
+- `015_feedback.sql`: the `feedback` table for the feedback form, one column per question in the order of the form, each with its
+  question as a column comment. The server writes answers after checking every field, and only admins read them, also through
+  the server; nothing can be read or written from the site directly. An email is kept only when someone types it in. Safe to run
+  twice. If you ran the first copy of this file (with an `answers` column), run it again: it moves every saved answer into the new
+  columns. Run it after the website with the form is deployed; until then the form says feedback is not switched on yet.
 
 Run them in order, one at a time, in the SQL editor.
 

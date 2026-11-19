@@ -272,10 +272,13 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET') return send(200, [...fb.rows].reverse());
     if (req.method === 'POST') {
       const r = body || {};
+      const cols = ['source', 'user_id', 'status', 'school', 'program', 'target_role', 'prepare', 'struggle', 'heard', 'tried', 'used', 'ease', 'device',
+        'broken', 'lessons', 'lessons_better', 'favorite', 'continue_use', 'change_mind', 'pmf', 'recommend', 'add_or_change', 'why_not', 'would_try', 'email'];
       const ok = ['yes', 'no'].includes(r.tried) && (r.ease == null || (r.ease >= 1 && r.ease <= 5)) && (r.recommend == null || (r.recommend >= 0 && r.recommend <= 10))
-        && typeof r.answers === 'object' && !Array.isArray(r.answers);
+        && (r.pmf == null || ['very', 'somewhat', 'not'].includes(r.pmf)) && ['prepare', 'struggle', 'used', 'device'].every(k => r[k] == null || Array.isArray(r[k]))
+        && Object.keys(r).every(k => cols.includes(k));   // an unknown column is an error in PostgREST
       if (!ok) return send(400, { code: '23514', message: 'check violation' });
-      fb.rows.push({ id: fb.rows.length + 1, created_at: new Date().toISOString(), user_id: null, ...r });
+      fb.rows.push({ id: fb.rows.length + 1, created_at: new Date().toISOString(), user_id: null, ...r, _keys: Object.keys(r) });
       return send(201);
     }
   }

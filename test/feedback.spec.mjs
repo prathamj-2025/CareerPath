@@ -15,7 +15,8 @@ const step = async (label, fn) => {
 const ok = (c, m) => { if (!c) throw new Error(m); };
 const jf = async (path) => (await fetch(FAKE + path)).json();
 let ipN = 0;
-const ip = () => '10.9.' + Math.floor(++ipN / 250) + '.' + (ipN % 250);
+const RUN = Date.now() % 200;   // the fake database keeps rate counts between runs, so each run uses fresh addresses
+const ip = () => '10.' + RUN + '.' + Math.floor(++ipN / 250) + '.' + (ipN % 250);
 async function send(body, opts = {}) {
   const h = { 'content-type': 'application/json', 'x-forwarded-for': opts.ip || ip() };
   if (opts.token) h.authorization = 'Bearer ' + opts.token;
@@ -32,28 +33,41 @@ async function person(email, admin) {
   return { tok, id: me.id };
 }
 const YES = { status: 'student', role: 'pm', school: 'USC', program: 'MS EM', prepare: ['youtube', 'google'], struggle: ['order', 'testing'],
-  tried: 'yes', used: ['lessons', 'assessments'], ease: 4, device: ['phone'], broken: '', lessons: 5, lessons_better: 'More examples',
-  favorite: 'assessments', continue: 'regularly', recommend: 9, change: 'More SQL practice', email: 'Me@Usc.edu' };
+  heard: 'whatsapp', tried: 'yes', used: ['lessons', 'assessments'], ease: 4, device: ['phone'], broken: '', lessons: 5, lessons_better: 'More examples',
+  favorite: 'assessments', continue: 'regularly', pmf: 'very', recommend: 9, add_or_change: 'More SQL practice', email: 'Me@Usc.edu' };
+const NO = { status: 'working', role: 'unsure', prepare: ['none'], struggle: ['time'], heard: 'friend', tried: 'no', why_not: 'no_time', would_try: 'A short demo video' };
+const ORDER = ['source', 'user_id', 'status', 'school', 'program', 'target_role', 'prepare', 'struggle', 'heard', 'tried', 'used', 'ease', 'device',
+  'broken', 'lessons', 'lessons_better', 'favorite', 'continue_use', 'change_mind', 'pmf', 'recommend', 'add_or_change', 'why_not', 'would_try', 'email'];
 
 await jf('/__reset');
 await jf('/__feedbackclear');
 await jf('/__feedbackoff?on=0');
 
-await step('an answer is saved with every field checked, and unknown fields are dropped', async () => {
-  const r = await send({ ...YES, prepare: ['youtube', 'youtube', 'tiktok'], extra: 'nope', ease: 4, sneaky: { a: 1 } });
+await step('every answer is saved in its own column, in the order of the form, and unknown fields are dropped', async () => {
+  const r = await send({ ...YES, prepare: ['youtube', 'youtube', 'tiktok'], extra: 'nope', sneaky: { a: 1 } });
   ok(r.status === 201 && r.data.ok, JSON.stringify(r));
   const rows = await jf('/__feedback');
   ok(rows.length === 1, 'rows: ' + rows.length);
   const x = rows[0];
-  ok(x.tried === 'yes' && x.ease === 4 && x.lessons === 5 && x.recommend === 9 && x.continue_use === 'regularly' && x.target_role === 'pm' && x.status === 'student', JSON.stringify(x));
+  ok(x._keys.join() === ORDER.join(), 'columns or order: ' + x._keys.join());
+  ok(x.status === 'student' && x.school === 'USC' && x.program === 'MS EM' && x.target_role === 'pm' && x.heard === 'whatsapp' && x.tried === 'yes', JSON.stringify(x));
+  ok(x.ease === 4 && x.lessons === 5 && x.lessons_better === 'More examples' && x.favorite === 'assessments' && x.continue_use === 'regularly', JSON.stringify(x));
+  ok(x.pmf === 'very' && x.recommend === 9 && x.add_or_change === 'More SQL practice' && JSON.stringify(x.used) === '["lessons","assessments"]' && JSON.stringify(x.device) === '["phone"]', JSON.stringify(x));
   ok(x.email === 'me@usc.edu' && x.source === 'page' && x.user_id == null, 'email, source or user: ' + JSON.stringify(x));
-  ok(JSON.stringify(x.answers.prepare) === '["youtube"]', 'choices not cleaned: ' + JSON.stringify(x.answers.prepare));
-  ok(!('extra' in x) && !('extra' in x.answers) && !('sneaky' in x.answers) && !('broken' in x.answers), 'unknown or empty fields kept: ' + JSON.stringify(x.answers));
+  ok(JSON.stringify(x.prepare) === '["youtube"]' && JSON.stringify(x.struggle) === '["order","testing"]', 'choices not cleaned: ' + JSON.stringify(x.prepare));
+  ok(x.broken === null && x.change_mind === null && x.why_not === null && x.would_try === null, 'empty or other-branch answers stored: ' + JSON.stringify(x));
+  ok(!('extra' in x) && !('sneaky' in x), 'unknown fields kept');
 });
 
 await step('required answers and a wrong email are refused with a plain message', async () => {
-  let r = await send({ status: 'student', role: 'pm' });
+  let r = await send({ ...YES, tried: undefined });
   ok(r.status === 400 && /tried/.test(r.data.error.message), JSON.stringify(r));
+  for (const [field, word] of [['prepare', 'preparing'], ['struggle', 'hardest'], ['heard', 'heard'], ['used', 'parts'], ['pmf', 'no longer']]) {
+    r = await send({ ...YES, [field]: field === 'heard' || field === 'pmf' ? '' : [] });
+    ok(r.status === 400 && r.data.error.message.includes(word), field + ' was not required: ' + JSON.stringify(r));
+  }
+  r = await send({ ...NO, why_not: '' });
+  ok(r.status === 400 && /stopped/.test(r.data.error.message), 'what stopped you was not required: ' + JSON.stringify(r));
   r = await send({ ...YES, lessons: null });
   ok(r.status === 400 && /lessons/.test(r.data.error.message), JSON.stringify(r));
   r = await send({ ...YES, recommend: 11 });
@@ -64,11 +78,12 @@ await step('required answers and a wrong email are refused with a plain message'
 });
 
 await step('"not yet" answers keep only the questions for people who have not tried it', async () => {
-  const r = await send({ status: 'working', role: 'unsure', tried: 'no', why_not: 'no_time', would_try: 'A short demo video', ease: 5, recommend: 10, lessons: 1 });
+  const r = await send({ ...NO, ease: 5, recommend: 10, lessons: 1, pmf: 'very', used: ['lessons'] });
   ok(r.status === 201, JSON.stringify(r));
   const x = (await jf('/__feedback')).pop();
-  ok(x.tried === 'no' && x.ease == null && x.recommend == null && x.lessons == null, 'rating kept: ' + JSON.stringify(x));
-  ok(x.answers.why_not === 'no_time' && x.answers.would_try === 'A short demo video', JSON.stringify(x.answers));
+  ok(x._keys.join() === ORDER.join(), 'columns or order: ' + x._keys.join());
+  ok(x.tried === 'no' && x.ease == null && x.recommend == null && x.lessons == null && x.pmf == null && x.used.length === 0, 'rating kept: ' + JSON.stringify(x));
+  ok(x.why_not === 'no_time' && x.would_try === 'A short demo video' && x.heard === 'friend', JSON.stringify(x));
 });
 
 await step('the hidden spam field is accepted quietly and nothing is saved', async () => {
@@ -107,6 +122,20 @@ await step('only admins can read the answers', async () => {
   const a = await get(boss.tok);
   ok(a.status === 200 && Array.isArray(a.data.rows) && a.data.rows.length >= 5, JSON.stringify(a).slice(0, 200));
   ok(new Date(a.data.rows[0].created_at) >= new Date(a.data.rows[a.data.rows.length - 1].created_at), 'not newest first');
+  ok(a.data.rows[0].pmf !== undefined && a.data.rows[0].heard !== undefined && a.data.rows[0].add_or_change !== undefined, 'columns missing from the admin read');
+});
+
+await step('admins also get what students actually did: accounts, roadmap picked, lesson read, assessment taken, came back', async () => {
+  await person('fb-new@usc.edu');
+  const busy = await person('fb-busy@usc.edu');
+  const svcH = { apikey: 'sb_secret_test', 'content-type': 'application/json' };
+  await fetch(FAKE + '/rest/v1/profiles?id=eq.' + busy.id, { method: 'PATCH', headers: svcH, body: JSON.stringify({ roadmap_id: 'pm', created_at: '2026-01-01T10:00:00Z' }) });
+  await fetch(FAKE + '/rest/v1/skill_progress', { method: 'POST', headers: svcH,
+    body: JSON.stringify({ user_id: busy.id, skill_id: 'discovery-pm', lessons_done: [0, 1], attempts: 1, stars: 1, best: 55, updated_at: new Date().toISOString() }) });
+  const r = await fetch(REAL + '/api/config?task=feedback', { headers: { authorization: 'Bearer ' + boss.tok } });
+  const u = (await r.json()).usage;
+  ok(u && u.accounts >= 3 && u.onboarded >= 1 && u.read_lesson >= 1 && u.took_assessment >= 1 && u.came_back >= 1, JSON.stringify(u));
+  ok(u.accounts > u.onboarded, 'a student who has not picked a roadmap was counted as onboarded: ' + JSON.stringify(u));
 });
 
 await step('before 015 is run the form and the admin tab say what to do', async () => {
@@ -125,9 +154,10 @@ await step('a copy of the site without the server key says it cannot save', asyn
 
 const pick = async (p, q, i) => { await (await p.$$(`.fb-q[data-q="${q}"] .fb-chip, .fb-q[data-q="${q}"] .fb-cell`))[i].click(); };
 async function fillYes(p) {
-  await pick(p, 'status', 0); await pick(p, 'role', 1); await pick(p, 'prepare', 1); await pick(p, 'struggle', 0); await pick(p, 'tried', 0);
-  await pick(p, 'used', 2); await pick(p, 'ease', 3); await pick(p, 'lessons', 4); await pick(p, 'favorite', 2); await pick(p, 'continue', 1); await pick(p, 'recommend', 8);
-  await p.fill('[name="change"]', 'More SQL, please');
+  await pick(p, 'status', 0); await pick(p, 'role', 1); await pick(p, 'prepare', 1); await pick(p, 'struggle', 0); await pick(p, 'heard', 0); await pick(p, 'tried', 0);
+  await pick(p, 'used', 2); await pick(p, 'ease', 3); await pick(p, 'lessons', 4); await pick(p, 'favorite', 2); await pick(p, 'continue', 1);
+  await pick(p, 'pmf', 0); await pick(p, 'recommend', 8);
+  await p.fill('[name="add_or_change"]', 'More SQL, please');
 }
 
 await step('the page shows the right questions for "yes" and "not yet", and asks for missing answers', async () => {
@@ -145,7 +175,11 @@ await step('the page shows the right questions for "yes" and "not yet", and asks
   await pick(p, 'tried', 0);
   await p.click('#fb-send'); await p.waitForTimeout(300);
   const bad = await p.$$eval('.fb-q.bad', els => els.map(e => e.getAttribute('data-q')));
-  ok(['status', 'role', 'ease', 'lessons', 'recommend'].every(q => bad.includes(q)), 'missing answers not marked: ' + bad);
+  const want = ['status', 'role', 'prepare', 'struggle', 'heard', 'used', 'ease', 'lessons', 'pmf', 'recommend'];   // Will you keep using was answered above
+  ok(want.every(q => bad.includes(q)) && bad.length === want.length, 'missing answers marked: ' + bad);
+  const nums = await p.$$eval('#fb-form .fb-q', els => els.filter(e => !e.closest('[hidden]')).map(e => e.querySelector('.fb-n').textContent));
+  ok(nums.slice(0, 17).join() === '1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17', 'question numbers: ' + nums);
+  ok(/no longer use CareerPath/.test(await p.textContent('.fb-q[data-q="pmf"]')) && /preparing for your target role/.test(await p.textContent('.fb-q[data-q="prepare"]')), 'wording');
   ok(!(await p.isVisible('#fb-done')), 'sent with missing answers');
   ok(!errs.length, errs.join(' | '));
   await c.close();
@@ -157,12 +191,18 @@ await step('on the live site the page sends the answer, from the app, linked to 
   const p = await c.newPage();
   await p.goto(REAL + '/feedback.html?from=app'); await p.waitForTimeout(500);
   ok(await p.isVisible('#fb-linked'), 'the "link to my account" box is missing for a signed-in student');
+  await pick(p, 'tried', 0);
+  ok(!(await p.isVisible('.fb-q[data-q="email"]')), 'the email box is shown although the answer is linked to the account');
+  await p.uncheck('#fb-link');
+  ok(await p.isVisible('.fb-q[data-q="email"]'), 'the email box did not come back when the link was cleared');
+  await p.check('#fb-link');
   const before = (await jf('/__feedback')).length;
   await fillYes(p);
   await p.click('#fb-send'); await p.waitForSelector('#fb-done:visible', { timeout: 5000 });
   const rows = await jf('/__feedback');
   const x = rows[rows.length - 1];
-  ok(rows.length === before + 1 && x.source === 'app' && x.user_id === stu.id && x.target_role === 'pjm' && x.answers.change === 'More SQL, please', JSON.stringify(x));
+  ok(rows.length === before + 1 && x.source === 'app' && x.user_id === stu.id && x.target_role === 'pjm' && x.add_or_change === 'More SQL, please' && x.pmf === 'very' && x.heard === 'whatsapp', JSON.stringify(x));
+  ok(x._keys.join() === ORDER.join(), 'columns or order from the page: ' + x._keys.join());
   ok(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'sideways scroll on a phone');
   await c.close();
 });
@@ -257,11 +297,13 @@ await step('the admin Feedback tab shows the averages, every answer, and a CSV d
   await p.click('[data-action="login"]'); await p.waitForTimeout(500);
   await (await p.$('[data-nav="a-feedback"]:visible')).click(); await p.waitForTimeout(400);
   const txt = await p.textContent('#view');
-  ok(/Lessons helpful\s*5\.0/.test(txt) && /Easy to start\s*4\.0/.test(txt) && /Will keep using\s*100%/.test(txt), 'summary: ' + txt.slice(0, 300));
+  ok(/Lessons helpful\s*5\.0/.test(txt) && /Easy to start\s*4\.0/.test(txt) && /Will keep using\s*100%/.test(txt) && /Very disappointed without it\s*100%/.test(txt), 'summary: ' + txt.slice(0, 400));
+  ok(/What students actually did/.test(txt) && /Read a lesson/.test(txt) && /How they heard about CareerPath/.test(txt), 'usage panel or heard chart missing');
   ok(/More SQL, please/.test(txt) && /Project Manager/.test(txt), 'the answer is not listed');
   const [dl] = await Promise.all([p.waitForEvent('download'), p.click('[data-action="fb-csv"]')]);
   const csv = await (await dl.createReadStream()).toArray().then(b => Buffer.concat(b).toString('utf8'));
-  ok(/^﻿?created_at,source,status,target_role/.test(csv) && /More SQL, please/.test(csv) && /,pjm,/.test(csv), 'csv: ' + csv.slice(0, 200));
+  ok(/^\ufeff?created_at,source,status,school,program,target_role,prepare,struggle,heard,tried,used,ease,device,broken,lessons,lessons_better,favorite,continue_use,change_mind,pmf,recommend,add_or_change,why_not,would_try,email,linked_account/.test(csv), 'csv header: ' + csv.slice(0, 300));
+  ok(/More SQL, please/.test(csv) && /,pjm,/.test(csv) && /,very,/.test(csv), 'csv: ' + csv.slice(0, 400));
   await c.close();
 });
 
