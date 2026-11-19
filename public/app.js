@@ -3235,8 +3235,9 @@
         '<h1 class="result-h1"><span class="big">' + res.pct + "%</span> <span class=\"rest\">" + res.award.label + "</span></h1>" +
         '<p class="sub">' + (state.preview
             ? "Preview only. No score, stars, or points were recorded for anyone."
-            : (res.newStars ? "Your roadmap has been updated and " + res.pointsAwarded + " leaderboard points were added."
-                            : "This did not beat your previous best of " + p.best + "%, so your roadmap is unchanged.")) + "</p></div>" +
+            : !res.award.stars ? "Not passed yet. Score 50% or more for your first star. Review the questions below, then try again."
+            : res.newStars ? "Your roadmap has been updated" + (res.pointsAwarded ? " and " + res.pointsAwarded + " leaderboard points were added." : ".")
+            : "This did not beat your previous best of " + p.best + "%, so your roadmap is unchanged.") + "</p></div>" +
 
       '<div class="card" style="margin-bottom:18px;text-align:center">' +
         '<div style="font-size:30px;line-height:1">' + starHTML(res.award.stars, "30px") + "</div>" +
@@ -3376,7 +3377,9 @@
         rows.push({ s: s, h: h, n: i + 1, of: hist.length, isBest: isBest });
       });
     });
-    rows.reverse();
+    // Newest first, whatever the skill. Attempts on the same day keep their order.
+    rows.forEach(function (row, i) { row.i = i; row.t = Date.parse(row.h.at || row.h.when) || 0; });
+    rows.sort(function (a, b) { return b.t - a.t || b.i - a.i; });
     return '<div class="page-head"><div class="eyebrow">Activity</div><h1>Assessment history</h1>' +
       '<p class="sub">One row per scored attempt on the ' + esc(r.name) +
         " track. A skill that appears more than once is the same assessment retaken, not a different track, and only the best attempt sets your stars.</p></div>" +

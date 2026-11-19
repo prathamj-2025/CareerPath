@@ -304,6 +304,7 @@ await step('after an assessment students are asked once, and "Not now" means not
   };
   await takeOne();
   ok(await p.isVisible('.fb-prompt'), 'no feedback prompt after the first assessment');
+  ok(!/ 0 leaderboard points/.test(await p.textContent('.result-head')), 'the result says 0 points were added: ' + await p.textContent('.result-head'));
   ok(await p.getAttribute('.fb-prompt a.fb-go', 'href') === 'feedback.html?from=prompt', 'prompt link');
   await p.click('.fb-prompt [data-action="fb-dismiss"]'); await p.waitForTimeout(200);
   ok(!(await p.isVisible('.fb-prompt')), 'Not now did not close it');
