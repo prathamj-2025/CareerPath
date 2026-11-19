@@ -20,6 +20,15 @@ http.createServer(async (req, res) => {
     return;
   }
 
+  // A student message containing BUSY503 gets the answer the real provider gives under load.
+  const lastUser = JSON.stringify(body.messages || []).includes('BUSY503');
+  if (lastUser) {
+    res.statusCode = 503;
+    res.setHeader('content-type', 'application/json');
+    res.end(JSON.stringify([{ error: { code: 503, message: 'This model is currently experiencing high demand. Please try again later.', status: 'UNAVAILABLE' } }]));
+    return;
+  }
+
   // FAIL_MODE lets the tests drive the provider's error paths.
   const mode = process.env.FAIL_MODE || '';
   if (mode === 'quota') {

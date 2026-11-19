@@ -232,6 +232,23 @@ await step('on a shared computer, the next student gets a blank sign-up form aft
 });
 
 stop = false;   // independent of the journey above
+await step('when the AI model is busy, the student sees a plain message, not the provider error', async () => {
+  const ctx = await browser.newContext({ viewport: { width: 1000, height: 800 } }); const q = await ctx.newPage();
+  const email = 'noconfirm.busy' + tag + '@pcc.edu';
+  await q.goto(BASE + '/'); await q.waitForSelector('#auth:not([hidden])');
+  await q.click('[data-tab="signup"]');
+  await q.fill('#su-name', 'Bea Busy'); await q.fill('#su-email', email); await q.fill('#su-pass', 'longenough1');
+  await q.click('[data-action="signup"]'); await q.waitForSelector('#onb-file', { timeout: 15000 });
+  await q.click('[data-action="onb-to-fork"]'); await q.click('[data-action="onb-know"]');
+  await q.click('[data-action="pick-role"][data-role="pm"]'); await q.waitForSelector('#tutor-launch:visible', { timeout: 15000 });
+  await q.click('#tutor-launch'); await q.fill('#tutor-input', 'BUSY503 what is a PM?'); await q.click('#tutor-send');
+  await q.waitForFunction(() => /busy right now/.test(document.getElementById('tutor-log').textContent), null, { timeout: 20000 });
+  const t = await q.textContent('#tutor-log');
+  need(!/Provider said|UNAVAILABLE|\{/.test(t), 'raw provider text shown: ' + t.slice(-200));
+  await ctx.close();
+});
+
+stop = false;   // independent of the journey above
 await step('signing out ends only this device, not the same student elsewhere', async () => {
   stop = false;
   const ctx = await browser.newContext({ viewport: { width: 1000, height: 800 } }); const q = await ctx.newPage();

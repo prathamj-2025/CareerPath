@@ -3262,7 +3262,8 @@
       '<div class="card" style="margin-bottom:18px;text-align:center">' +
         '<div style="font-size:30px;line-height:1">' + starHTML(res.award.stars, "30px") + "</div>" +
         '<p style="margin-top:8px;font-weight:500">' + res.award.label + "</p>" +
-        (res.award.capped ? '<p class="tiny" style="color:var(--warn);margin-top:6px">Scored at mastery level. The fifth star unlocks when your practical project is accepted.</p>' : "") +
+        (res.award.capped ? '<p class="tiny" style="color:var(--warn);margin-top:6px">Scored at mastery level. The fifth star unlocks when your practical project is accepted.</p>'
+          : res.award.stars === 4 ? '<p class="tiny muted" style="margin-top:6px">One more star to go: score 95% or more and get your practical project accepted.</p>' : "") +
       "</div>" +
       (state.preview ? "" : feedbackPrompt()) +
 
@@ -5658,10 +5659,10 @@
     refused: "The model would not answer that one. Try asking it a different way.",
     prompt_too_large: "That is too much text to send at once. Select a smaller piece.",
     // shared
-    rate_limited: "Too many questions at once, or the account is out of quota. Try again in a moment.",
+    rate_limited: "The assistant is getting a lot of questions right now. Wait a few seconds and ask again.",
     empty_completion: "No answer came back. Try asking for less at a time.",
     cancelled: "",
-    upstream_error: "Something went wrong reaching the model. Try again.",
+    upstream_error: "The assistant is busy right now. Wait a few seconds and ask again.",
     // /api/ask
     signed_out: "Your session expired. Sign in again to use the assistant.",
     exam_locked: "The assistant is off while an exam is open. It comes back when you submit or leave the exam.",
@@ -5684,6 +5685,9 @@
   var TUTOR_SHOW_DETAIL = ["exam_locked", "limit_hour", "limit_day", "limit_global", "too_fast", "no_key", "bad_key", "no_quota", "bad_model", "rate_limited", "upstream_error"];
 
   function tutorErrCopy(code, message) {
+    // A busy or failing model is the provider's problem, not the student's: they get a plain line, admins get the detail.
+    var u = me();
+    if ((code === "upstream_error" || code === "rate_limited") && !(u && u.role === "admin")) return TUTOR_ERR[code];
     if (TUTOR_SHOW_DETAIL.indexOf(code) > -1 && message) return message;
     return TUTOR_ERR[code] || TUTOR_ERR.upstream_error;
   }
