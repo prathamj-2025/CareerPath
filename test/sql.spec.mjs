@@ -557,15 +557,15 @@ await step('feedback (015): answers saved by the first version of the table move
   need(await fails(S1, `select * from public.feedback`), 'a student can read the moved answers');
 });
 
-await step('feedback (015): answers saved with short codes by the second version turn into the words on the page, and the view shows full questions', async () => {
+await step('feedback (015): answers saved with short codes by the second version turn into the words on the page (even when older rules are named with a number), and the view shows full questions', async () => {
   await db.exec(`drop view if exists public.feedback_by_question; drop table public.feedback`);
   await db.exec(`create table public.feedback (id bigint generated always as identity primary key, created_at timestamptz not null default now(),
     user_id uuid, source text not null default 'page', status text check (status in ('student', 'working', 'other')), school text, program text,
     target_role text check (target_role in ('pm', 'pjm', 'ba', 'other', 'unsure')), prepare text[] not null default '{}', struggle text[] not null default '{}',
-    heard text check (heard in ('whatsapp', 'friend', 'class', 'linkedin', 'poster', 'other')), tried text not null check (tried in ('yes', 'no')),
+    heard text check (heard in ('whatsapp', 'friend', 'class', 'linkedin', 'poster', 'other')), tried text not null constraint feedback_tried_check1 check (tried in ('yes', 'no')),
     used text[] not null default '{}', ease smallint, device text[] not null default '{}', broken text, lessons smallint, lessons_better text,
-    favorite text, continue_use text check (continue_use in ('regularly', 'sometimes', 'interviews', 'no')), change_mind text,
-    pmf text check (pmf in ('very', 'somewhat', 'not')), recommend smallint, add_or_change text, why_not text, would_try text, email text)`);
+    favorite text, continue_use text constraint feedback_continue_use_check1 check (continue_use in ('regularly', 'sometimes', 'interviews', 'no')), change_mind text,
+    pmf text constraint feedback_pmf_check1 check (pmf in ('very', 'somewhat', 'not')), recommend smallint, add_or_change text, why_not text, would_try text, email text)`);
   await db.exec(`insert into public.feedback (status, target_role, prepare, struggle, heard, tried, used, ease, lessons, favorite, continue_use, pmf, recommend)
                  values ('student', 'pjm', '{google,youtube}', '{order}', 'linkedin', 'yes', '{roadmap,assistant}', 5, 4, 'assistant', 'no', 'somewhat', 7)`);
   await db.exec(`insert into public.feedback (status, target_role, prepare, struggle, heard, tried, why_not) values ('other', 'unsure', '{none}', '{time,other}', 'other', 'no', 'not_sure')`);

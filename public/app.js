@@ -13,8 +13,27 @@
   var ROLES = window.CP_ROLES;
   var LEVELS = window.CP_LEVELS;
   var SCHOOLS = ["USC", "UCLA", "NYU", "Georgia Tech", "UT Austin", "University of Michigan"];
-  var MAJORS = ["Engineering Management", "Computer Science", "Business Administration",
-                "Industrial Engineering", "Economics", "Data Science", "Information Systems"];
+  var MAJORS = ["Engineering Management", "Computer Science", "MBA",
+                "Industrial Engineering", "Economics", "Data Science", "Business Analytics", "Information Systems"];
+  var MAJOR_OTHER = "Other";
+
+  /* Major: a list, plus "Other" with a box to type it in. A saved major that is not in the list shows as Other with the
+     text filled in, so nobody loses what they typed (or a major that has since left the list). */
+  function majorField(prefix, current) {
+    var cur = String(current || "");
+    var other = !!cur && MAJORS.indexOf(cur) < 0;
+    return '<div class="field"><label for="' + prefix + '-major">Major</label><select id="' + prefix + '-major" data-major="' + prefix + '">' +
+        MAJORS.concat([MAJOR_OTHER]).map(function (m) {
+          return "<option" + ((other ? m === MAJOR_OTHER : m === cur) ? " selected" : "") + ">" + esc(m) + "</option>";
+        }).join("") + "</select></div>" +
+      '<div class="field" id="' + prefix + '-major-other-wrap"' + (other ? "" : " hidden") + '><label for="' + prefix + '-major-other">Your major</label>' +
+        '<input id="' + prefix + '-major-other" maxlength="80" placeholder="e.g. Marketing" value="' + (other ? esc(cur) : "") + '"></div>';
+  }
+  function majorVal(prefix) {
+    var v = val(prefix + "-major");
+    return v === MAJOR_OTHER ? val(prefix + "-major-other").slice(0, 80) : v;
+  }
+  function majorMissing(prefix) { return val(prefix + "-major") === MAJOR_OTHER && !val(prefix + "-major-other"); }
 
   var STAR = "&#9733;";
   var REAL = false;   // true when real accounts (Supabase) are switched on for this deployment
@@ -1460,8 +1479,7 @@
         '<div class="field"><label for="gf-year">Graduation</label><select id="gf-year">' +
           ["2026", "2027", "2028", "2029"].map(function (y) { return "<option>" + y + "</option>"; }).join("") + "</select></div>" +
       "</div>" +
-      '<div class="field"><label for="gf-major">Major</label><select id="gf-major">' +
-        MAJORS.map(function (m) { return "<option>" + esc(m) + "</option>"; }).join("") + "</select></div>" +
+      majorField("gf", "") +
       '<button class="btn primary" style="margin-top:6px;justify-content:center" data-action="google-finish"' + (state.authBusy ? " disabled" : "") + '>' + (REAL ? "Continue" : "Create student account") + '</button>' +
       '<button class="btn ghost sm" style="justify-content:center" data-action="google-cancel">Use a different account</button>' +
     "</div>";
@@ -1488,8 +1506,7 @@
         '<div class="field"><label for="su-year">Graduation</label><select id="su-year">' +
           ["2026", "2027", "2028", "2029"].map(function (y) { return "<option" + (y === draft.year ? " selected" : "") + ">" + y + "</option>"; }).join("") + "</select></div>" +
       "</div>" +
-      '<div class="field"><label for="su-major">Major</label><select id="su-major">' +
-        MAJORS.map(function (m) { return "<option" + (m === draft.major ? " selected" : "") + ">" + esc(m) + "</option>"; }).join("") + "</select></div>" +
+      majorField("su", draft.major) +
       '<button class="btn primary" style="margin-top:6px;justify-content:center"' + (state.authBusy ? " disabled" : "") + ' data-action="signup">Create student account</button>' +
       (REAL
         ? '<p class="tiny muted">By creating an account you agree to the <a href="terms.html" target="_blank" rel="noopener">Terms of use</a> ' +
@@ -3416,7 +3433,7 @@
           '<div class="field"><label for="pf-school">School</label><select id="pf-school">' + optionList(SCHOOLS, user.school) + "</select></div>" +
           '<div class="field"><label for="pf-year">Graduation</label><select id="pf-year">' + optionList(["2026", "2027", "2028", "2029"], String(user.gradYear)) + "</select></div>" +
         "</div>" +
-        '<div class="field"><label for="pf-major">Major</label><select id="pf-major">' + optionList(MAJORS, user.major) + "</select></div>" +
+        majorField("pf", user.major) +
         '<label class="check-row"><input type="checkbox" id="pf-board"' + (user.showOnBoard !== false ? " checked" : "") + ">" +
           '<span class="check-text"><span class="check-title">Show me on the leaderboards</span>' +
           '<span class="check-help">Other students see only your first name and last initial. You still see your own place.</span></span></label>' +
@@ -4319,11 +4336,12 @@
       var name = val("su-name"), email = val("su-email"), pass = val("su-pass");
       if (REAL) {
         if (state.authBusy) return;
-        state.authDraft = { name: name, email: email, school: val("su-school"), major: val("su-major"), year: val("su-year") };
+        state.authDraft = { name: name, email: email, school: val("su-school"), major: majorVal("su"), year: val("su-year") };
         if (!name || !email || !pass) { state.authError = "Name, email, and password are all required."; return render(); }
+        if (majorMissing("su")) { state.authDraft.major = ""; state.authError = "Please type your major, or pick one from the list."; return render(); }
         if (pass.length < 8) { state.authError = "Password must be at least 8 characters."; return render(); }
         state.authBusy = true; state.authError = ""; render();
-        return CP_AUTH.signUp(email, pass, { name: name, school: val("su-school"), major: val("su-major"), grad_year: val("su-year") }).then(function (r) {
+        return CP_AUTH.signUp(email, pass, { name: name, school: val("su-school"), major: majorVal("su"), grad_year: val("su-year") }).then(function (r) {
           if (r.error) return authFail(r);
           if (r.session) return startSession();
           state.authBusy = false; state.authNotice = { kind: "verify", email: email }; render();
@@ -4335,7 +4353,7 @@
         state.authError = "An account already exists for that email. Try signing in."; return render();
       }
       var u = newUser({ name: name, email: email, password: pass, role: "student",
-        school: val("su-school"), major: val("su-major"), gradYear: val("su-year") });
+        school: val("su-school"), major: majorVal("su"), gradYear: val("su-year") });
       state.users.push(u);
       state.userId = u.id; state.authError = "";
       state.onb = { step: 1 };
@@ -4367,7 +4385,8 @@
       if (REAL) {
         var uu = state.users.filter(function (x) { return x.id === state.finishUser; })[0];
         if (!uu || state.authBusy) return;
-        var patch = { name: val("gf-name") || g.name, school: val("gf-school"), major: val("gf-major"), grad_year: val("gf-year") };
+        if (majorMissing("gf")) { state.authError = "Please type your major, or pick one from the list."; return render(); }
+        var patch = { name: val("gf-name") || g.name, school: val("gf-school"), major: majorVal("gf"), grad_year: val("gf-year") };
         state.authBusy = true; state.authError = ""; render();
         return CP_AUTH.saveProfile(patch).then(function (r) {
           state.authBusy = false;
@@ -4380,7 +4399,7 @@
         });
       }
       var u = newUser({ name: val("gf-name") || g.name, email: g.email, password: null, role: "student",
-        school: val("gf-school"), major: val("gf-major"), gradYear: val("gf-year") });
+        school: val("gf-school"), major: majorVal("gf"), gradYear: val("gf-year") });
       u.google = true; u.picture = g.picture || null;
       state.users.push(u);
       state.googlePending = null; state.userId = u.id; state.authError = "";
@@ -4391,7 +4410,8 @@
       var u = me(); if (!u || !REAL) return;
       var name = val("pf-name");
       if (!name) { state.acctMsg = "Your name cannot be empty."; return render(); }
-      u.name = name.slice(0, 80); u.school = val("pf-school") || u.school; u.major = val("pf-major") || u.major;
+      if (majorMissing("pf")) { state.acctMsg = "Please type your major, or pick one from the list."; return render(); }
+      u.name = name.slice(0, 80); u.school = val("pf-school") || u.school; u.major = majorVal("pf") || u.major;
       u.gradYear = val("pf-year") || u.gradYear;
       var box = document.getElementById("pf-board"); u.showOnBoard = box ? box.checked : true;
       state.acctMsg = "Saved.";
@@ -5370,6 +5390,12 @@
   });
 
   document.addEventListener("change", function (ev) {
+    var mj = ev.target.closest && ev.target.closest("select[data-major]");
+    if (mj) {
+      var wrap = document.getElementById(mj.dataset.major + "-major-other-wrap");
+      if (wrap) { wrap.hidden = mj.value !== MAJOR_OTHER; if (!wrap.hidden) { var box = wrap.querySelector("input"); if (box) box.focus(); } }
+      return;
+    }
     var el = ev.target.closest && ev.target.closest("[data-filter]");
     if (!el || el.tagName !== "SELECT") return;
     state.studentFilter[el.dataset.filter] = el.value;
