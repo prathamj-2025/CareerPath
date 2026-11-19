@@ -4360,6 +4360,7 @@
         state.authBusy = true; state.authError = ""; render();
         return CP_AUTH.signUp(email, pass, { name: name, school: schoolVal("su"), major: majorVal("su"), grad_year: val("su-year") }).then(function (r) {
           if (r.error) return authFail(r);
+          state.authDraft = {};   // the account exists; the next person on this computer starts with a blank form
           if (r.session) return startSession();
           state.authBusy = false; state.authNotice = { kind: "verify", email: email }; render();
         });
@@ -4520,6 +4521,7 @@
       state.preview = null; state.adminSkill = null; state.adminEdit = null; state.adminMsg = ""; state.adminBusy = false;
       state.onb = null; state.ch = null; state.adminCh = null; state.adminChReview = null;
       state.practiceState = {}; state.projDraft = {};   // drafts belong to the person who wrote them
+      state.authDraft = {}; state.authError = ""; state.authNotice = null;   // never show the last person's sign-up details
       live.feed = []; live.chFeed = []; live.flash = {};
       stopLive();
       tutor.turns = []; tutor.quote = ""; tutor.open = false;   // don't leak one student's chat to the next

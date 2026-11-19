@@ -177,7 +177,12 @@ await step('they change their major on Profile and it sticks', async () => {
 await step('they sign out, sign back in, and nothing is lost', async () => {
   await tap('#mobilebar [data-action="logout"]');
   await p.waitForSelector('#auth:not([hidden])');
+  await tap('[data-tab="signup"]');
+  const left = await p.evaluate(() => ['su-name', 'su-email', 'su-pass', 'su-major-other', 'su-school-other']
+    .map((id) => (document.getElementById(id) || {}).value || '').concat([document.getElementById('su-major').value]).join('|'));
+  need(left === '|||||' + (await p.$eval('#su-major option', (o) => o.value)), 'the sign-up form still shows the last student: ' + left);
   await tap('[data-tab="login"]');
+  need(await p.inputValue('#li-email') === '' && await p.inputValue('#li-pass') === '', 'the sign-in form kept the last details');
   await p.fill('#li-email', EMAIL); await p.fill('#li-pass', PASS);
   await tap('[data-action="login"]');
   await p.waitForSelector('#shell:not([hidden])', { timeout: 15000 });
@@ -201,6 +206,28 @@ await step('later, on a laptop, the same account shows the same progress', async
   need(/1\/28/.test(await q.textContent('#sidebar')) || /job-ready/i.test(await q.textContent('#view')), 'progress not shown');
   need(!e2.length, 'page errors on the laptop: ' + e2.join(' | '));
   await lap.close();
+});
+
+await step('on a shared computer, the next student gets a blank sign-up form after the last one signs out', async () => {
+  // Exactly what happened on the live site, where "Confirm email" is off: sign up, signed straight in, sign out, Create account.
+  stop = false;
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  const q = await ctx.newPage();
+  await q.goto(BASE + '/'); await q.waitForSelector('#auth:not([hidden])');
+  await q.click('[data-tab="signup"]');
+  await q.fill('#su-name', 'Rohan Shared'); await q.fill('#su-email', 'noconfirm.rohan' + tag + '@pcc.edu'); await q.fill('#su-pass', 'longenough1');
+  await q.selectOption('#su-major', 'Other'); await q.fill('#su-major-other', 'Public Policy');
+  await q.click('[data-action="signup"]');
+  await q.waitForSelector('#onb-file', { timeout: 15000 });
+  await q.click('#sidebar [data-action="logout"]');
+  await q.waitForSelector('#auth:not([hidden])');
+  await q.click('[data-tab="signup"]');
+  const left = await q.evaluate(() => ['su-name', 'su-email', 'su-pass'].map((id) => document.getElementById(id).value).join('|') +
+    '|' + document.getElementById('su-major').value + '|' + ((document.getElementById('su-major-other') || {}).value || ''));
+  need(!/Rohan|noconfirm|Public Policy|Other/.test(left), 'the sign-up form still shows the last student: ' + left);
+  await q.click('[data-tab="login"]');
+  need(await q.inputValue('#li-email') === '', 'the sign-in form kept the last email');
+  await ctx.close();
 });
 
 await browser.close();

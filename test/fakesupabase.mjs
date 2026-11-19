@@ -160,10 +160,13 @@ const server = http.createServer(async (req, res) => {
     if (String(body.password || '').length < 8) return send(422, { error_code: 'weak_password', msg: 'Password should be at least 8 characters.' });
     if (!/^\S+@\S+\.\S+$/.test(body.email || '')) return send(400, { error_code: 'validation_failed', msg: 'Unable to validate email address: invalid format' });
     if (users.has(body.email)) return send(200, { id: uuid(), email: body.email, identities: [] });
-    const u = { id: uuid(), email: body.email, password: body.password, confirmed: false, meta: body.data || {} };
+    // Addresses starting "noconfirm." behave like a project with "Confirm email" switched off: signed in at once.
+    const auto = /^noconfirm\./.test(body.email);
+    const u = { id: uuid(), email: body.email, password: body.password, confirmed: auto, meta: body.data || {} };
     users.set(body.email, u);
     profiles.set(u.id, { id: u.id, email: u.email, name: u.meta.name || '', role: 'student', points: 0, show_on_leaderboard: true, school: u.meta.school || '', major: u.meta.major || '',
       grad_year: u.meta.grad_year || '', title: '', picture_url: null, roadmap_id: null, roadmap_history: [], onboarding: {} });
+    if (auto) { const s = session(u); return send(200, { ...s, user: s.user }); }
     return send(200, { id: u.id, email: u.email, identities: [{}] });
   }
   if (p === '/auth/v1/token') {
