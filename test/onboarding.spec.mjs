@@ -207,6 +207,17 @@ await step("the evidence shown is the words the resume actually contains", async
   if (!t.includes("The bars count only the skill areas these roadmaps teach")) throw new Error("does not explain the difference");
 });
 
+await step("each roadmap's count (like 19 / 28) stays on one line, on a laptop and on a phone", async () => {
+  const lines = async () => page.$$eval(".cover-row .mono", els => els.map(e => Math.round(e.getBoundingClientRect().height / parseFloat(getComputedStyle(e).lineHeight || "16"))));
+  const wide = await lines();
+  if (!wide.length || wide.some(n => n > 1)) throw new Error("count wraps at laptop width: " + wide);
+  const vp = page.viewportSize();
+  await page.setViewportSize({ width: 360, height: 800 }); await page.waitForTimeout(200);
+  const narrow = await lines();
+  await page.setViewportSize(vp);
+  if (narrow.some(n => n > 1)) throw new Error("count wraps on a phone: " + narrow);
+});
+
 await step("coverage is reported per roadmap without overclaiming", async () => {
   const rows = await page.$$eval(".cover-row", els => els.map(e => e.textContent.replace(/\s+/g, " ").trim()));
   if (rows.length !== 3) throw new Error("expected a row per roadmap, got " + rows.length);

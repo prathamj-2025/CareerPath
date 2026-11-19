@@ -621,10 +621,11 @@
   .explain b { font-size: 13px; font-weight: 600; display: block; margin-bottom: 4px; }
   .explain p { font-size: 12.5px; color: var(--ink-2); }
 
-  .cover-row { display: grid; grid-template-columns: 150px minmax(60px, 1fr) 44px; gap: 12px; align-items: center; font-size: 13.5px; }
+  /* The count column sizes to its text ("19 / 28") so it never breaks onto two lines. */
+  .cover-row { display: grid; grid-template-columns: 150px minmax(60px, 1fr) max-content; gap: 12px; align-items: center; font-size: 13.5px; }
   .cover-row .bar { height: 5px; }
-  .cover-row .mono { text-align: right; }
-  @media (max-width: 520px) { .cover-row { grid-template-columns: 1fr 40px; } .cover-row .bar { grid-column: 1 / -1; } }
+  .cover-row .mono { text-align: right; white-space: nowrap; }
+  @media (max-width: 520px) { .cover-row { grid-template-columns: 1fr max-content; } .cover-row .bar { grid-column: 1 / -1; } }
 
   .match-row { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 10px; align-items: start; }
   .match-role { font-size: 13px; font-weight: 500; padding-top: 3px; }
