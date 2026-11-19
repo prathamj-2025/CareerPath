@@ -24,6 +24,7 @@ const certs = new Map();      // id -> certificates row (migration 010; written 
 const bursts = new Map(); let burstOff = false;   // take_burst counters (migration 014)
 const ai = new Map(); let aiOff = false;   // take_ai counters (migration 009)
 const subs = new Map();       // 'user|challenge' -> challenge_submissions row (written only with the service key)
+const fb = { rows: [], missing: false };   // feedback answers (015, written only with the service key)
 const SECRET = 'sb_secret_test';
 const log = [];               // every write, so tests can see what the site sent
 
@@ -261,6 +262,22 @@ const server = http.createServer(async (req, res) => {
     const g = bump(zero + '|d|' + ds);
     if (g > body.p_global) return send(200, { ok: false, why: 'global', hour: h, day: d, global: g });
     return send(200, { ok: true, why: '', hour: h, day: d, global: g });
+  }
+  if (p === '/__feedback') return send(200, fb.rows);                                                  // 015: what was saved
+  if (p === '/__feedbackoff') { fb.missing = url.searchParams.get('on') === '1'; return send(200, {}); }   // as if 015 was not run
+  if (p === '/__feedbackclear') { fb.rows = []; return send(200, {}); }
+  if (p === '/rest/v1/feedback') {   // 015: the server only
+    if (!isService(req)) return send(401, { code: '42501', message: 'permission denied for table feedback' });
+    if (fb.missing) return send(404, { code: 'PGRST205', message: 'Could not find the table' });
+    if (req.method === 'GET') return send(200, [...fb.rows].reverse());
+    if (req.method === 'POST') {
+      const r = body || {};
+      const ok = ['yes', 'no'].includes(r.tried) && (r.ease == null || (r.ease >= 1 && r.ease <= 5)) && (r.recommend == null || (r.recommend >= 0 && r.recommend <= 10))
+        && typeof r.answers === 'object' && !Array.isArray(r.answers);
+      if (!ok) return send(400, { code: '23514', message: 'check violation' });
+      fb.rows.push({ id: fb.rows.length + 1, created_at: new Date().toISOString(), user_id: null, ...r });
+      return send(201);
+    }
   }
   if (p === '/__overridesoff') { content.overridesMissing = url.searchParams.get('on') === '1'; return send(200, {}); }   // as if migration 013 was not run
   if (p === '/rest/v1/content_overrides') {   // 013: the server only

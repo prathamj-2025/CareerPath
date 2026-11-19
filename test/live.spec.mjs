@@ -172,7 +172,7 @@ await step('the footer links sit at the bottom of the screen on a short page, an
   for (const h of [700, 900, 1100]) {
     await ann.setViewportSize({ width: 1280, height: h }); await ann.waitForTimeout(150);
     const r = await ann.evaluate(() => { const f = document.getElementById('sitefoot').getBoundingClientRect(); return { bottom: Math.round(f.bottom + window.scrollY), page: document.documentElement.scrollHeight, links: document.querySelectorAll('#sitefoot a').length }; });
-    need(r.links === 6, 'footer links: ' + r.links);
+    need(r.links === 7, 'footer links: ' + r.links);
     need(Math.abs(r.bottom - r.page) <= 2, 'footer not at the bottom at height ' + h + ': ' + JSON.stringify(r));
     need(r.bottom >= h - 2, 'footer floats above the bottom of the screen at height ' + h + ': ' + JSON.stringify(r));
   }

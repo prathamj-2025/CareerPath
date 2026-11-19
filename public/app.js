@@ -52,6 +52,7 @@
     adminHistory: null,   // qid whose version history is open
     adminStudent: null,   // student id whose profile is open
     studentFilter: { role: "all", school: "all", q: "" },
+    feedback: { rows: null, loading: false, err: null },
 
     onb: null,            // onboarding: resume, placement test, recommendation
     ch: null,             // { cid, busy, feedback } while a challenge is being worked on
@@ -1179,7 +1180,7 @@
   /* A refresh keeps you on the page you were on. Only browsing pages are remembered, in this tab only (sessionStorage):
      an exam in progress or a result is not, because those need data the page no longer holds. */
   var KEEP_PAGES = ["roadmap", "roles", "track", "skill", "learn", "certs", "cert", "challenge", "leaderboard", "history", "profile",
-    "a-content", "a-bank", "a-lessons", "a-drafts", "a-challenges", "a-students"];
+    "a-content", "a-bank", "a-lessons", "a-drafts", "a-challenges", "a-students", "a-feedback"];
   function rememberPage() {
     try {
       var r = state.route, u = me();
@@ -1519,7 +1520,8 @@
     { id: "a-content", label: "Content" },
     { id: "a-drafts", label: "Review queue" },
     { id: "a-challenges", label: "Weekly challenge" },
-    { id: "a-students", label: "Students" }
+    { id: "a-students", label: "Students" },
+    { id: "a-feedback", label: "Feedback" }
   ];
 
   function navFor(user) {
@@ -1605,7 +1607,7 @@
   function siteLinks(cls) {
     if (!REAL) return "";
     return '<nav class="site-links ' + (cls || "") + '" aria-label="About CareerPath">' +
-      [["about.html", "About"], ["faq.html", "FAQ"], ["help.html", "Help and support"], ["contact.html", "Contact"],
+      [["about.html", "About"], ["faq.html", "FAQ"], ["help.html", "Help and support"], ["contact.html", "Contact"], ["feedback.html", "Feedback"],
        ["privacy.html", "Privacy"], ["terms.html", "Terms"]].map(function (l) {
         return '<a href="' + l[0] + '" target="_blank" rel="noopener">' + l[1] + "</a>";
       }).join("") + "</nav>";
@@ -1644,6 +1646,7 @@
           '<span class="who-sub mono">' + sub + "</span>" +
         "</span></button>" +
         themeBtn() +
+        (admin ? "" : '<a class="btn sm ghost fb-top" href="' + FEEDBACK_URL + '" target="_blank" rel="noopener">Feedback</a>') +
         '<button class="btn sm ghost" data-action="logout">Sign out</button>' +
       "</div>";
 
@@ -1664,6 +1667,7 @@
           return '<button data-action="nav" data-nav="' + n.id + '" aria-current="' + (act === n.id) + '">' + n.label + "</button>";
         }).join("") +
         '<button data-action="nav" data-nav="profile" aria-current="' + (act === "profile") + '">Profile</button>' +
+        (admin ? "" : '<a class="mb-link" href="' + FEEDBACK_URL + '" target="_blank" rel="noopener">Feedback</a>') +
       "</div>";
   }
 
@@ -3212,6 +3216,7 @@
         '<p style="margin-top:8px;font-weight:500">' + res.award.label + "</p>" +
         (res.award.capped ? '<p class="tiny" style="color:var(--warn);margin-top:6px">Scored at mastery level. The fifth star unlocks when your practical project is accepted.</p>' : "") +
       "</div>" +
+      (state.preview ? "" : feedbackPrompt()) +
 
       '<div class="summary-row">' +
         summaryCell("Score", res.right + "<small> / " + qs.length + "</small>") +
@@ -3749,6 +3754,151 @@
     "</div>";
   }
 
+  /* ---------------- feedback ----------------
+     The form is public/feedback.html (answers go to api/_feedback.js). Students reach it from the top bar, the phone tab row,
+     the site footer, and once from a result page. Admins read every answer in the Feedback tab. */
+  var FEEDBACK_URL = "feedback.html?from=app";
+  var FB_PROMPT_KEY = "cp-fb-prompt";
+  function fbPromptDone() { try { return window.localStorage.getItem(FB_PROMPT_KEY) === "done"; } catch (e) { return true; } }
+  function fbPromptClose() { try { window.localStorage.setItem(FB_PROMPT_KEY, "done"); } catch (e) { /* storage blocked */ } }
+  function feedbackPrompt() {
+    if (fbPromptDone()) return "";
+    return '<div class="card fb-prompt" style="margin-bottom:18px">' +
+      '<div><h3>How is CareerPath working for you?</h3>' +
+      '<p class="tiny muted" style="margin-top:4px">Four minutes of feedback helps us decide what to build next.</p></div>' +
+      '<div class="row" style="gap:8px">' +
+        '<a class="btn primary fb-go" href="feedback.html?from=prompt" target="_blank" rel="noopener">Give feedback</a>' +
+        '<button class="btn ghost" data-action="fb-dismiss">Not now</button>' +
+      "</div></div>";
+  }
+
+  var FB_LABEL = {
+    status: { student: "Student", working: "Working", other: "Other" },
+    role: { pm: "Product Manager", pjm: "Project Manager", ba: "Business Analyst", other: "Something else", unsure: "Not sure yet" },
+    prepare: { google: "Google", youtube: "YouTube", courses: "Online courses", chatgpt: "ChatGPT or AI", linkedin: "LinkedIn", mentors: "Mentors or friends", books: "Books", none: "Not started" },
+    struggle: { order: "What to learn first and next", testing: "Testing what they know", too_many: "Too many resources", time: "Finding the time", interviews: "Interview prep", other: "Something else" },
+    used: { match: "Role match", roadmap: "Roadmap", lessons: "Lessons", practice: "Practice", assessments: "Assessments and stars", assistant: "Study assistant", leaderboard: "Leaderboard", challenge: "Weekly challenge" },
+    device: { phone: "Phone", laptop: "Laptop", tablet: "Tablet" },
+    cont: { regularly: "Yes, regularly", sometimes: "Now and then", interviews: "Only before interviews", no: "No" },
+    why_not: { no_time: "No time yet", not_sure: "Not sure it is for them", forgot: "Forgot", other: "Something else" },
+    source: { page: "Feedback page", app: "From the app", prompt: "After an assessment" }
+  };
+  function fbList(map, arr) { return (arr || []).map(function (k) { return map[k] || k; }).join(", "); }
+
+  function loadFeedback() {
+    var f = state.feedback;
+    if (f.loading) return;
+    f.loading = true; f.err = null;
+    if (!REAL) {
+      var rows = [];
+      try { rows = JSON.parse(window.localStorage.getItem("cp-feedback-demo") || "[]").reverse(); } catch (e) { rows = []; }
+      f.rows = rows; f.loading = false;
+      return;
+    }
+    apiGet("/api/config?task=feedback").then(function (r) {
+      f.loading = false;
+      if (r.error) { f.err = r.error; f.rows = f.rows || []; } else f.rows = (r.data && r.data.rows) || [];
+      if (state.route.name === "a-feedback") render();
+    });
+  }
+
+  function fbStats(rows) {
+    var avg = function (k) { var v = rows.map(function (r) { return r[k]; }).filter(function (x) { return typeof x === "number"; }); return v.length ? (v.reduce(function (a, b) { return a + b; }, 0) / v.length) : null; };
+    var rec = rows.map(function (r) { return r.recommend; }).filter(function (x) { return typeof x === "number"; });
+    var nps = rec.length ? Math.round((rec.filter(function (x) { return x >= 9; }).length - rec.filter(function (x) { return x <= 6; }).length) / rec.length * 100) : null;
+    var cont = rows.map(function (r) { return r.continue_use; }).filter(Boolean);
+    var keep = cont.length ? Math.round(cont.filter(function (x) { return x !== "no"; }).length / cont.length * 100) : null;
+    var tried = rows.filter(function (r) { return r.tried === "yes"; }).length;
+    function top(key, map) {
+      var n = {};
+      rows.forEach(function (r) { var a = (r.answers || {})[key]; (Array.isArray(a) ? a : a ? [a] : []).forEach(function (x) { n[x] = (n[x] || 0) + 1; }); });
+      return Object.keys(n).sort(function (a, b) { return n[b] - n[a]; }).map(function (k) { return { label: map[k] || k, n: n[k] }; });
+    }
+    return { total: rows.length, tried: tried, ease: avg("ease"), lessons: avg("lessons"), nps: nps, recN: rec.length, keep: keep,
+      favorite: top("favorite", FB_LABEL.used), struggle: top("struggle", FB_LABEL.struggle), used: top("used", FB_LABEL.used) };
+  }
+
+  function fbBars(title, list, total) {
+    if (!list.length) return "";
+    return '<div class="card"><h3 style="margin-bottom:10px">' + title + "</h3>" +
+      list.slice(0, 6).map(function (x) {
+        var pct = total ? Math.round(x.n / total * 100) : 0;
+        return '<div class="fb-bar"><span>' + esc(x.label) + '</span><i><b style="width:' + pct + '%"></b></i><span class="mono tiny">' + x.n + "</span></div>";
+      }).join("") + "</div>";
+  }
+
+  function viewAdminFeedback() {
+    var f = state.feedback;
+    if (!f.rows && !f.loading) loadFeedback();
+    var head = '<div class="page-head"><div class="eyebrow">Admin</div><h1>Feedback</h1>' +
+      '<p class="sub">Answers from the feedback form. Share <span class="mono">' + esc(location.origin) + '/feedback.html</span> to collect more.</p></div>';
+    if (!f.rows) return head + '<p class="muted">Loading the answers&hellip;</p>';
+    if (f.err) return head + '<div class="card"><h3>Could not load the feedback</h3><p class="tiny muted" style="margin-top:6px">' + esc(f.err.message || "") + "</p>" +
+      '<div class="row" style="margin-top:12px"><button class="btn" data-action="fb-refresh">Try again</button></div></div>';
+    var rows = f.rows, st = fbStats(rows);
+    var one = function (v, d) { return v == null ? "&ndash;" : v.toFixed(d) ; };
+    var tools = '<div class="row" style="gap:8px;margin-bottom:14px">' +
+      '<button class="btn" data-action="fb-refresh">Refresh</button>' +
+      (rows.length ? '<button class="btn" data-action="fb-csv">Download CSV</button>' : "") +
+      (REAL ? "" : '<span class="tiny muted">Preview copy: shows answers sent from this browser only.</span>') + "</div>";
+    if (!rows.length) return head + tools + '<div class="card"><h3>No answers yet</h3><p class="tiny muted" style="margin-top:6px">Answers appear here as soon as someone sends the form.</p></div>';
+
+    var summary = '<div class="summary-row" style="margin-bottom:16px">' +
+      summaryCell("Answers", String(st.total) + "<small> &middot; " + st.tried + " tried it</small>") +
+      summaryCell("Lessons helpful", one(st.lessons, 1) + "<small> / 5</small>") +
+      summaryCell("Easy to start", one(st.ease, 1) + "<small> / 5</small>") +
+      summaryCell("Recommend score", (st.nps == null ? "&ndash;" : (st.nps > 0 ? "+" : "") + st.nps) + "<small> " + st.recN + " rated</small>") +
+      summaryCell("Will keep using", (st.keep == null ? "&ndash;" : st.keep + "%")) +
+      "</div>";
+    var charts = '<div class="fb-grid">' + fbBars("Hardest part of preparing", st.struggle, st.total) + fbBars("Parts they used", st.used, st.tried) + fbBars("Favorite part", st.favorite, st.tried) + "</div>";
+
+    var list = rows.map(function (r) {
+      var a = r.answers || {};
+      var d = new Date(r.created_at);
+      var when = isNaN(d) ? "" : d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+      var line = function (k, v) { return v ? '<div class="fb-line"><span>' + k + "</span><span>" + v + "</span></div>" : ""; };
+      var txt = function (k, v) { return v ? '<div class="fb-text"><span>' + k + "</span><p>" + esc(v) + "</p></div>" : ""; };
+      return '<div class="card fb-resp">' +
+        '<div class="row" style="justify-content:space-between;gap:8px;margin-bottom:8px">' +
+          '<b>' + esc(FB_LABEL.role[r.target_role] || "Role not given") + '</b>' +
+          '<span class="tiny muted">' + esc(when) + " &middot; " + esc(FB_LABEL.source[r.source] || "") + (r.user_id ? " &middot; linked to an account" : "") + "</span></div>" +
+        line("About", esc([FB_LABEL.status[r.status], a.school, a.program].filter(Boolean).join(" \u00b7 "))) +
+        line("Prepares with", esc(fbList(FB_LABEL.prepare, a.prepare))) +
+        line("Hardest", esc(fbList(FB_LABEL.struggle, a.struggle))) +
+        (r.tried === "yes"
+          ? line("Ratings", "Easy to start " + r.ease + "/5 &middot; Lessons " + r.lessons + "/5 &middot; Recommend " + r.recommend + "/10") +
+            line("Will keep using", esc(FB_LABEL.cont[r.continue_use] || "")) +
+            line("Used", esc(fbList(FB_LABEL.used, a.used))) + line("Favorite", esc(FB_LABEL.used[a.favorite] || "")) +
+            line("Devices", esc(fbList(FB_LABEL.device, a.device))) +
+            txt("Broken or confusing", a.broken) + txt("Make the lessons better", a.lessons_better) +
+            txt("What would change their mind", a.change_mind) + txt("Add or change", a.change)
+          : line("Tried it", "Not yet" + (a.why_not ? " &middot; " + esc(FB_LABEL.why_not[a.why_not] || "") : "")) + txt("Would try it if", a.would_try)) +
+        (r.email ? line("Email", '<span class="mono">' + esc(r.email) + "</span>") : "") +
+        "</div>";
+    }).join("");
+    return head + tools + summary + charts + '<h2 style="margin:20px 0 10px">All answers</h2><div class="stack">' + list + "</div>";
+  }
+
+  function feedbackCsv(rows) {
+    var cols = ["created_at", "source", "status", "target_role", "school", "program", "prepare", "struggle", "tried", "used", "ease", "device",
+      "broken", "lessons", "lessons_better", "favorite", "continue_use", "change_mind", "recommend", "change", "why_not", "would_try", "email", "linked_account"];
+    var q = function (v) { v = v == null ? "" : Array.isArray(v) ? v.join("; ") : String(v); return /[",\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+    var lines = [cols.join(",")].concat(rows.map(function (r) {
+      var a = r.answers || {};
+      return cols.map(function (c) {
+        if (c === "linked_account") return q(r.user_id ? "yes" : "no");
+        if (Object.prototype.hasOwnProperty.call(r, c) && c !== "answers") return q(r[c]);
+        return q(a[c]);
+      }).join(",");
+    }));
+    var blob = new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "careerpath-feedback-" + new Date().toISOString().slice(0, 10) + ".csv";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+  }
+
   function viewAdminStudents(user) {
     var all = state.users.filter(function (u) { return u.role === "student"; });
     var f = state.studentFilter;
@@ -4078,7 +4228,7 @@
          n === "result" ? viewResult(subject) :
          viewSkill(subject));
     } else if (user.role === "admin") {
-      if (["a-content", "a-bank", "a-lessons", "a-drafts", "a-challenges", "a-students", "a-student", "profile"].indexOf(n) === -1) n = "a-content";
+      if (["a-content", "a-bank", "a-lessons", "a-drafts", "a-challenges", "a-students", "a-student", "a-feedback", "profile"].indexOf(n) === -1) n = "a-content";
       html =
         n === "a-bank" ? viewAdminBank() :
         n === "a-lessons" ? viewAdminLessons() :
@@ -4086,6 +4236,7 @@
         n === "a-challenges" ? viewAdminChallenges() :
         n === "a-student" ? viewAdminStudent() :
         n === "a-students" ? viewAdminStudents(user) :
+        n === "a-feedback" ? viewAdminFeedback() :
         n === "profile" ? viewProfile(user) :
         viewAdminContent();
     } else {
@@ -4128,6 +4279,9 @@
   function val(id) { var el = document.getElementById(id); return el ? el.value.trim() : ""; }
 
   var actions = {
+    "fb-dismiss": function () { fbPromptClose(); render(); },
+    "fb-refresh": function () { state.feedback.rows = null; state.feedback.loading = false; loadFeedback(); render(); },
+    "fb-csv": function () { if (state.feedback.rows && state.feedback.rows.length) feedbackCsv(state.feedback.rows); },
     "auth-tab": function (el) { state.authTab = el.dataset.tab; state.authError = ""; state.authInfo = ""; render(); },
 
     fill: function (el) {
@@ -5177,7 +5331,10 @@
       state.roleMenu = false;
       if (!el) return render();
     }
-    if (!el) return;
+    if (!el) {
+      if (ev.target.closest("a.fb-go")) { fbPromptClose(); setTimeout(render, 0); }
+      return;
+    }
     if (el.tagName === "A" && (ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.button)) return;   // open in a new tab as usual
     var fn = actions[el.dataset.action];
     if (fn) { ev.preventDefault(); fn(el); }

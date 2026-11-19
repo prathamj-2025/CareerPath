@@ -7,12 +7,13 @@
 import { writeFileSync } from "node:fs";
 
 const DEFAULT_SUPPORT = "careerpath531@gmail.com";
-const UPDATED = "October 26, 2026";
+const UPDATED = "October 26, 2026";        // Terms
+const PRIVACY_UPDATED = "November 18, 2026";
 const OUT = new URL("../public/", import.meta.url).pathname;
 
 const NAV = [["about.html", "About"], ["faq.html", "FAQ"], ["help.html", "Help and support"], ["contact.html", "Contact"]];
 const FOOT = [["about.html", "About"], ["faq.html", "FAQ"], ["help.html", "Help and support"], ["contact.html", "Contact"],
-              ["privacy.html", "Privacy"], ["terms.html", "Terms"]];
+              ["feedback.html", "Feedback"], ["privacy.html", "Privacy"], ["terms.html", "Terms"]];
 
 const mail = `<a class="support-email" href="mailto:${DEFAULT_SUPPORT}">${DEFAULT_SUPPORT}</a>`;
 
@@ -35,7 +36,7 @@ function page({ file, title, desc, h1, lead, body }) {
 <body>
 <header class="site-head">
   <div class="wrap head-row">
-    <a class="brand" href="/" aria-label="CareerPath home"><span class="brand-mark">${CAP}</span><span class="brand-name">career<span>path</span></span></a>
+    <a class="brand" href="/" aria-label="CareerPath home"><span class="brand-mark">${CAP}</span><span class="brand-name">Career<span>Path</span></span></a>
     <nav aria-label="Site">
       ${NAV.map(([h, l]) => `<a href="${h}"${h === file ? ' aria-current="page"' : ""}>${l}</a>`).join("\n      ")}
     </nav>
@@ -149,7 +150,7 @@ page({
   body: `
   <div class="cards">
     <div class="card"><h3>Questions and support</h3><p>Trouble signing in, a question about your progress, or something that looks wrong.</p><p>${mail}</p></div>
-    <div class="card"><h3>Feedback and ideas</h3><p>A skill you want covered, a lesson that confused you, or a feature you would use.</p><p>${mail}</p></div>
+    <div class="card"><h3>Feedback and ideas</h3><p>A skill you want covered, a lesson that confused you, or a feature you would use.</p><p><a class="btn btn-line" href="feedback.html">Give feedback</a></p><p class="fb-or">Or email ${mail}</p></div>
     <div class="card"><h3>Privacy requests</h3><p>Questions about your data. You can delete your account yourself under Profile at any time.</p><p>${mail}</p></div>
   </div>
   <h2>What to include</h2>
@@ -203,7 +204,7 @@ page({
 page({
   file: "privacy.html", title: "Privacy policy", h1: "Privacy policy",
   desc: "What CareerPath collects, why, where it is kept and how to delete it.",
-  lead: `Last updated ${UPDATED}. This explains what CareerPath collects, why, where it is kept, and the choices you have.`,
+  lead: `Last updated ${PRIVACY_UPDATED}. This explains what CareerPath collects, why, where it is kept, and the choices you have.`,
   body: `
   <h2>What we collect</h2>
   <ul>
@@ -212,6 +213,7 @@ page({
     <li><b>Resume summary (optional).</b> If you upload a resume, it is read in your browser. We save only a short summary with your profile: the file name, its length, and the skills and job titles found in it. The full text is not saved.</li>
     <li><b>Placement result.</b> The outcome of the five role questions and the match score for each roadmap.</li>
     <li><b>Messages to the study assistant.</b> The questions you type and any lesson text you select.</li>
+    <li><b>Feedback (optional).</b> If you fill in the feedback form, we keep your answers. Your email is kept only if you type it in to be contacted. If you are signed in and leave "link this answer to my account" ticked, the answer is linked to your account. Only the CareerPath team reads feedback; it is never shown to other students.</li>
   </ul>
 
   <h2>How we use it</h2>
@@ -220,7 +222,7 @@ page({
     <li>To recommend a roadmap and show your match scores.</li>
     <li>To show the leaderboards.</li>
     <li>To answer study assistant questions and give feedback on written answers.</li>
-    <li>To fix problems and keep the service secure.</li>
+    <li>To fix problems, keep the service secure, and decide what to improve next.</li>
   </ul>
 
   <h2>The leaderboards</h2>
@@ -234,7 +236,7 @@ page({
   </ul>
 
   <h2>Cookies and tracking</h2>
-  <p>CareerPath stores a sign-in token in your browser so you stay signed in, and a few settings such as light or dark mode. We do not use advertising or analytics trackers, and we do not sell or share your information with advertisers.</p>
+  <p>CareerPath stores a sign-in token in your browser so you stay signed in, and a few settings such as light or dark mode. We do not use advertising trackers, and we do not sell or share your information with advertisers. We count page visits with a privacy-friendly counter that sets no cookies and records no names, and when something breaks in your browser the page sends us the error message, the page name and your browser type, but no personal details or answers, so we can fix it.</p>
 
   <h2>Your choices</h2>
   <ul>

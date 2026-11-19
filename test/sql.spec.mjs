@@ -504,5 +504,25 @@ await step('shared request limits (014): take_burst counts per key and window, r
   need(await fails(ADM, `select * from public.rate_hits`), 'an admin read the rate table from the site');
 });
 
+await step('feedback (015): only the server writes answers, nobody reads them from the site, and the checks hold', async () => {
+  await svc(`insert into public.feedback (source, status, target_role, tried, ease, lessons, recommend, continue_use, answers, email)
+             values ('page', 'student', 'pm', 'yes', 4, 5, 9, 'regularly', '{"change":"more SQL"}', 'a@usc.edu')`);
+  await svc(`insert into public.feedback (user_id, tried, answers) values ($1, 'no', '{}')`, [S1]);
+  const r = await svc(`select count(*)::int as n, max(recommend) as top from public.feedback`);
+  need(r.rows[0].n === 2 && r.rows[0].top === 9, JSON.stringify(r.rows));
+  need(await fails(S1, `insert into public.feedback (tried) values ('yes')`), 'a student wrote an answer from the site');
+  need(await fails(S1, `select * from public.feedback`), 'a student read the answers');
+  need(await fails(ADM, `select * from public.feedback`), 'an admin read the answers from the site (they go through the server)');
+  await db.exec(`set role anon`);
+  let anon = null; try { await db.query(`insert into public.feedback (tried) values ('yes')`); } catch (e) { anon = e.message; } finally { await db.exec(`reset role`); }
+  need(anon, 'a signed-out visitor wrote straight into the table');
+  need(await dbFails(`insert into public.feedback (tried) values ('maybe')`), 'a bad tried value was accepted');
+  need(await dbFails(`insert into public.feedback (tried, ease) values ('yes', 6)`), 'an ease of 6 was accepted');
+  need(await dbFails(`insert into public.feedback (tried, recommend) values ('yes', 11)`), 'a recommend of 11 was accepted');
+  need(await dbFails(`insert into public.feedback (tried, answers) values ('yes', '[1,2]')`), 'answers that are not an object were accepted');
+  need(await dbFails(`insert into public.feedback (tried, email) values ('yes', 'nope')`), 'an email without @ was accepted');
+  need(await dbFails(`insert into public.feedback (tried, source) values ('yes', 'elsewhere')`), 'an unknown source was accepted');
+});
+
 console.log(failed ? failed + ' failed' : 'all passed');
 process.exit(failed ? 1 : 0);

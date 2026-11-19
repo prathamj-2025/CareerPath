@@ -275,7 +275,7 @@ await step('admin signs in to a different surface', async () => {
   await page.click('[data-action="login"]');
   await page.waitForTimeout(200);
   const items = await nav();
-  if (items.join(',') !== 'Content,Review queue,Weekly challenge,Students') throw new Error('admin nav = ' + items.join(','));
+  if (items.join(',') !== 'Content,Review queue,Weekly challenge,Students,Feedback') throw new Error('admin nav = ' + items.join(','));
   const h = await page.textContent('.page-head h1');
   if (!h.includes('Roadmaps')) throw new Error('admin landed on: ' + h);
   if ((await page.textContent('#sidebar')).includes('Leaderboard')) throw new Error('admin sees student nav');

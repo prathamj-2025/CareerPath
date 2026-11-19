@@ -144,7 +144,7 @@ for (const [file, h1] of Object.entries(pages)) {
     need(res.status() === 200, 'status ' + res.status());
     need((await p.textContent('h1')).trim() === h1, 'h1 = ' + await p.textContent('h1'));
     need((await p.$$('.site-head nav a')).length === 4, 'header links');
-    need((await p.$$('.site-foot nav a')).length === 6, 'footer links');
+    need((await p.$$('.site-foot nav a')).length === 7, 'footer links');
     const over = await p.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     need(over <= 0, 'horizontal scroll at desktop width');
     await p.setViewportSize({ width: 380, height: 800 });
@@ -184,7 +184,7 @@ await step('on a real deployment the sign-in page links to every website page', 
   if (!up) { console.log('     (real-mode server not running, skipped)'); await p.close(); return; }
   await p.waitForSelector('#auth:not([hidden])');
   const hrefs = await p.$$eval('#auth .site-links a', as => as.map(a => a.getAttribute('href')));
-  need(hrefs.join() === 'about.html,faq.html,help.html,contact.html,privacy.html,terms.html', hrefs.join());
+  need(hrefs.join() === 'about.html,faq.html,help.html,contact.html,feedback.html,privacy.html,terms.html', hrefs.join());
   await p.close();
 });
 

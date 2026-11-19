@@ -1387,6 +1387,26 @@
   #sitefoot { padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }
   body.tutor-docked #sitefoot { padding-bottom: 28px; }
 
+
+  /* Feedback: the top bar link, the phone tab, the one-time prompt and the admin tab. */
+  a.btn { text-decoration: none; }
+  .mb-nav a.mb-link {
+    border: 1px solid var(--line); background: var(--surface); border-radius: 20px; text-decoration: none;
+    padding: 5px 12px; font-size: 13px; font-weight: 600; color: var(--ink-2); white-space: nowrap;
+    display: inline-flex; align-items: center; min-height: 40px;
+  }
+  .fb-prompt { display: flex; align-items: center; justify-content: space-between; gap: 12px 18px; flex-wrap: wrap; border-color: var(--accent); background: var(--accent-soft); }
+  .fb-prompt h3 { font-size: 16px; }
+  .fb-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+  .fb-bar { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) 28px; gap: 10px; align-items: center; font-size: 13px; padding: 4px 0; }
+  .fb-bar i { display: block; height: 8px; border-radius: 99px; background: var(--line); overflow: hidden; }
+  .fb-bar b { display: block; height: 100%; background: var(--accent); }
+  .fb-bar .mono { text-align: right; }
+  .fb-line { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 10px; font-size: 13.5px; padding: 3px 0; }
+  .fb-line > span:first-child, .fb-text > span { color: var(--ink-3); font-size: 12.5px; font-weight: 600; }
+  .fb-text { margin-top: 8px; }
+  .fb-text p { margin: 3px 0 0; font-size: 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  @media (max-width: 560px) { .fb-line { grid-template-columns: 1fr; gap: 0; } }
 </style>
 </head>
 <body>

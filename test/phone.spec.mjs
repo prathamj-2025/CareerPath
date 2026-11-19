@@ -24,7 +24,7 @@ async function run(w) {
   await p.waitForTimeout(800); await A('exam result');
   for (const n of ['leaderboard', 'challenge', 'certs', 'history', 'profile']) { await click(p, '[data-nav="' + n + '"]', 600); await A(n); }
   await click(p, '[data-action="role-menu"]'); await A('role menu open'); await p.keyboard.press('Escape');
-  for (const pg of ['about', 'faq', 'help', 'contact', 'privacy', 'terms']) { const x = await ctx.newPage(); await x.goto(DEMO + '/' + pg + '.html'); await x.waitForTimeout(250); await audit(x, pg + '.html', w); await x.close(); }
+  for (const pg of ['about', 'faq', 'help', 'contact', 'feedback', 'privacy', 'terms']) { const x = await ctx.newPage(); await x.goto(DEMO + '/' + pg + '.html'); await x.waitForTimeout(250); await audit(x, pg + '.html', w); await x.close(); }
   await p.close(); await ctx.close();
   // admin
   const c2 = await browser.newContext({ viewport: { width: w, height: 780 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
