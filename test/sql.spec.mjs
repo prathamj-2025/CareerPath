@@ -585,5 +585,17 @@ await step('feedback (015): answers saved with short codes by the second version
   need(await fails(ADM, `select * from public.feedback_by_question`), 'an admin read the view from the site');
 });
 
+await step('016: leaderboard names are shortened exactly like the website does it, brackets included', async () => {
+  await db.exec('reset role');
+  const src = fs.readFileSync(path.join(import.meta.dirname, '..', 'public', 'app.js'), 'utf8');
+  const i = src.indexOf('function shortName(full)');
+  const shortName = new Function(src.slice(i, src.indexOf('\n  }\n', i) + 4) + '; return shortName;')();
+  for (const n of ['Priya Chavan', 'Pratham Jain (PJ)', 'Ana (Ani) Ruiz', 'Priya (2027) Chavan', '', 'Madonna', 'josé ñúñez',
+    "Mary-Jane O'Neil", '123 456', 'Dr. Sam Lee Jr.', 'Sam (', '((x))', 'Zoë Ångström']) {
+    const d = (await db.query('select public.display_name($1) d', [n])).rows[0].d;
+    need(d === shortName(n), JSON.stringify(n) + ': database ' + JSON.stringify(d) + ', website ' + JSON.stringify(shortName(n)));
+  }
+});
+
 console.log(failed ? failed + ' failed' : 'all passed');
 process.exit(failed ? 1 : 0);

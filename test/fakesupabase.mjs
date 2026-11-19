@@ -5,6 +5,7 @@ import http from 'node:http';
 import { WebSocketServer } from 'ws';
 import { FORM } from '../api/_feedback_form.js';   // 015 allows exactly these words
 const PORT = Number(process.env.FAKE_PORT || 3113);
+let lastLogoutScope = '';
 const users = new Map();      // email -> { id, email, password, confirmed, meta }
 const captcha = { on: false, seen: [] };    // when on, sign-up, password sign-in, resend and recover need the token 'good-token'
 function captchaOk(b) { if (!captcha.on) return true; const t = b && b.gotrue_meta_security && b.gotrue_meta_security.captcha_token; captcha.seen.push(t || null); return t === 'good-token'; }
@@ -99,6 +100,14 @@ const server = http.createServer(async (req, res) => {
   const p = url.pathname;
 
   // ---- test helpers ----
+  // A sign-out of this student somewhere else (Supabase's global sign-out): every access and refresh token stops working.
+  if (p === '/__revoke' || p === '/__expire') {
+    const u = users.get(url.searchParams.get('email')); if (!u) return send(404, {});
+    for (const [k, v] of [...tokens]) if (v === u.id) tokens.delete(k);
+    if (p === '/__revoke') for (const [k, v] of [...refreshes]) if (v === u.id) refreshes.delete(k);
+    return send(200, { ok: true });
+  }
+  if (p === '/__lastLogout') return send(200, { scope: lastLogoutScope });
   if (p === '/__confirm') {            // simulates clicking the link in the email
     const u = users.get(url.searchParams.get('email')); if (!u) return send(404, {});
     u.confirmed = true; const s = session(u);
@@ -195,7 +204,7 @@ const server = http.createServer(async (req, res) => {
   }
   if (p === '/auth/v1/resend') return send(200, {});
   if (p === '/auth/v1/recover') return send(200, {});
-  if (p === '/auth/v1/logout') { tokens.delete(String(req.headers.authorization || '').replace(/^Bearer /, '')); return send(204); }
+  if (p === '/auth/v1/logout') { lastLogoutScope = url.searchParams.get('scope') || 'global'; tokens.delete(String(req.headers.authorization || '').replace(/^Bearer /, '')); return send(204); }
 
   // ---- progress tables (PostgREST). Students read their own rows; 007 removed their right to write scores,
   //      so only the server (service key) writes here. ----

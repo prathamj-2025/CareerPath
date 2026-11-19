@@ -342,7 +342,9 @@
       rtStop();
       var t = session && session.access;
       keep(null);
-      if (t) call("/auth/v1/logout", { method: "POST", token: t });          // best effort
+      // Only this device. A global sign-out would end the same student's session on their phone or another tab too,
+      // and that tab would keep looking signed in until the server refused it.
+      if (t) call("/auth/v1/logout?scope=local", { method: "POST", token: t });   // best effort
     },
 
     /* The signed-in student's own profile row. */
@@ -392,6 +394,8 @@
     },
 
     token: function () { return token(); },
+    /* The server refused the access token: get a new one now. Null means the session was ended (signed out elsewhere). */
+    recheck: function () { return session && session.refresh ? refresh().then(function (s) { return s ? s.access : null; }) : Promise.resolve(null); },
 
     userId: function () { return session && session.user ? session.user.id : null; },
 

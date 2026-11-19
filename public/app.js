@@ -2335,27 +2335,47 @@
      admin preview still grade on the page, which is why they keep the keys. */
   function serverGrading() { return REAL && !state.preview; }
 
-  function apiPost(path, payload) {
+  /* Every call to our own server goes through here. If the server says the session is no longer valid, get a fresh token
+     once and try again. If that fails too the session was ended elsewhere: sign this tab out and say so, rather than
+     looking signed in while every save and grade quietly fails. */
+  function authedFetch(path, init) {
+    var send = function (t) {
+      var h = Object.assign({}, init && init.headers || {}); if (t) h.authorization = "Bearer " + t;
+      return fetch(path, Object.assign({}, init || {}, { headers: h }));
+    };
     return CP_AUTH.token().then(function (t) {
-      if (!t) return { error: { code: "signed_out", message: "Your session expired. Sign in again." } };
-      return fetch(path, { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer " + t }, body: JSON.stringify(payload) })
-        .then(function (r) {
-          return r.json().catch(function () { return null; }).then(function (b) {
-            if (r.ok && b && !b.error) return { data: b };
-            return { error: (b && b.error) || { code: "server_error", message: "The server could not be reached. Try again." } };
-          });
+      if (!t) { sessionLost(); return null; }
+      return send(t).then(function (r) {
+        if (r.status !== 401) return r;
+        return CP_AUTH.recheck().then(function (t2) {
+          if (t2) return send(t2);
+          sessionLost(); return r;
         });
+      });
+    });
+  }
+  function sessionLost() {
+    if (!REAL || !me()) return;
+    actions.logout();
+    state.authError = "You were signed out, possibly from another tab or device. Please sign in again.";
+    render();
+  }
+  function apiPost(path, payload) {
+    return authedFetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) }).then(function (r) {
+      if (!r) return { error: { code: "signed_out", message: "Your session expired. Sign in again." } };
+      return r.json().catch(function () { return null; }).then(function (b) {
+        if (r.ok && b && !b.error) return { data: b };
+        return { error: (b && b.error) || { code: "server_error", message: "The server could not be reached. Try again." } };
+      });
     }).catch(function () { return { error: { code: "network", message: "Could not reach the server. Check your connection and try again." } }; });
   }
 
   function apiGet(path) {
-    return CP_AUTH.token().then(function (t) {
-      if (!t) return { error: { code: "signed_out", message: "Your session expired. Sign in again." } };
-      return fetch(path, { headers: { authorization: "Bearer " + t }, cache: "no-store" }).then(function (r) {
-        return r.json().catch(function () { return null; }).then(function (b) {
-          if (r.ok && b && !b.error) return { data: b };
-          return { error: (b && b.error) || { code: "server_error", message: "The server could not be reached." } };
-        });
+    return authedFetch(path, { cache: "no-store" }).then(function (r) {
+      if (!r) return { error: { code: "signed_out", message: "Your session expired. Sign in again." } };
+      return r.json().catch(function () { return null; }).then(function (b) {
+        if (r.ok && b && !b.error) return { data: b };
+        return { error: (b && b.error) || { code: "server_error", message: "The server could not be reached." } };
       });
     }).catch(function () { return { error: { code: "network", message: "Could not reach the server." } }; });
   }
@@ -3790,8 +3810,10 @@
      the site footer, and once from a result page. Admins read every answer in the Feedback tab. */
   var FEEDBACK_URL = "feedback.html?from=app";
   var FB_PROMPT_KEY = "cp-fb-prompt";
-  function fbPromptDone() { try { return window.localStorage.getItem(FB_PROMPT_KEY) === "done"; } catch (e) { return true; } }
-  function fbPromptClose() { try { window.localStorage.setItem(FB_PROMPT_KEY, "done"); } catch (e) { /* storage blocked */ } }
+  // Remembered per student, so a classmate on the same computer is still asked once.
+  function fbPromptKey() { var u = me(); return FB_PROMPT_KEY + (u ? ":" + u.id : ""); }
+  function fbPromptDone() { try { return window.localStorage.getItem(fbPromptKey()) === "done"; } catch (e) { return true; } }
+  function fbPromptClose() { try { window.localStorage.setItem(fbPromptKey(), "done"); } catch (e) { /* storage blocked */ } }
   function feedbackPrompt() {
     if (fbPromptDone()) return "";
     return '<div class="card fb-prompt" style="margin-bottom:18px">' +
@@ -5620,6 +5642,7 @@
           html += "<p>" + esc(p.trim())
             .replace(/`([^`\n]+)`/g, "<code>$1</code>")
             .replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>")
+            .replace(/(^|[^*\w])\*(?!\s)([^*\n]+?)\*(?![*\w])/g, "$1<i>$2</i>")   // *why* -> why in italics, never a bare asterisk
             .replace(/\n/g, "<br>") + "</p>";
         });
       }
@@ -5682,13 +5705,13 @@
 
   function askApi(o) {
     // On a deployment with real accounts the server wants to know who is asking (limits, and the exam lock).
-    var tok = REAL ? CP_AUTH.token().catch(function () { return ""; }) : Promise.resolve("");
-    return tok.then(function (t) {
-      var h = { "content-type": "application/json" };
-      if (t) h.authorization = "Bearer " + t;
-      return fetch("/api/ask", { method: "POST", headers: h, body: JSON.stringify({ rules: o.rules, messages: o.convo }), signal: o.signal });
-    }).catch(function (e) {
+    var init = { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ rules: o.rules, messages: o.convo }), signal: o.signal };
+    return (REAL && me() ? authedFetch("/api/ask", init).then(function (r) {
+      if (!r) throw { code: "signed_out", message: "signed out" };
+      return r;
+    }) : fetch("/api/ask", init)).catch(function (e) {
       if (e && e.name === "AbortError") throw { code: "cancelled", message: "stopped" };
+      if (e && e.code === "signed_out") throw e;
       throw { code: "upstream_unreachable", message: String(e && e.message || e) };
     }).then(function (res) {
       if (!res.ok) {

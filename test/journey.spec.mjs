@@ -208,6 +208,7 @@ await step('later, on a laptop, the same account shows the same progress', async
   await lap.close();
 });
 
+stop = false;   // independent of the journey above
 await step('on a shared computer, the next student gets a blank sign-up form after the last one signs out', async () => {
   // Exactly what happened on the live site, where "Confirm email" is off: sign up, signed straight in, sign out, Create account.
   stop = false;
@@ -227,6 +228,58 @@ await step('on a shared computer, the next student gets a blank sign-up form aft
   need(!/Rohan|noconfirm|Public Policy|Other/.test(left), 'the sign-up form still shows the last student: ' + left);
   await q.click('[data-tab="login"]');
   need(await q.inputValue('#li-email') === '', 'the sign-in form kept the last email');
+  await ctx.close();
+});
+
+stop = false;   // independent of the journey above
+await step('signing out ends only this device, not the same student elsewhere', async () => {
+  stop = false;
+  const ctx = await browser.newContext({ viewport: { width: 1000, height: 800 } }); const q = await ctx.newPage();
+  const email = 'noconfirm.dev' + tag + '@pcc.edu';
+  await q.goto(BASE + '/'); await q.waitForSelector('#auth:not([hidden])');
+  await q.click('[data-tab="signup"]');
+  await q.fill('#su-name', 'Dev Two'); await q.fill('#su-email', email); await q.fill('#su-pass', 'longenough1');
+  await q.click('[data-action="signup"]'); await q.waitForSelector('#onb-file', { timeout: 15000 });
+  await q.click('#sidebar [data-action="logout"]'); await q.waitForSelector('#auth:not([hidden])'); await q.waitForTimeout(500);
+  need((await j('/__lastLogout')).scope === 'local', 'sign-out was global: ' + JSON.stringify(await j('/__lastLogout')));
+  await ctx.close();
+});
+
+stop = false;   // independent of the journey above
+await step('an expired access token is renewed quietly and the assistant still answers', async () => {
+  stop = false;
+  const ctx = await browser.newContext({ viewport: { width: 1000, height: 800 } }); const q = await ctx.newPage();
+  const email = 'noconfirm.ren' + tag + '@pcc.edu';
+  await q.goto(BASE + '/'); await q.waitForSelector('#auth:not([hidden])');
+  await q.click('[data-tab="signup"]');
+  await q.fill('#su-name', 'Ren Ewal'); await q.fill('#su-email', email); await q.fill('#su-pass', 'longenough1');
+  await q.click('[data-action="signup"]'); await q.waitForSelector('#onb-file', { timeout: 15000 });
+  await q.click('[data-action="onb-to-fork"]'); await q.click('[data-action="onb-know"]');
+  await q.click('[data-action="pick-role"][data-role="pm"]'); await q.waitForSelector('#tutor-launch:visible', { timeout: 15000 });
+  await j('/__expire?email=' + email);   // the server refuses this access token, the refresh token still works
+  await q.click('#tutor-launch'); await q.fill('#tutor-input', 'What does a PM do?'); await q.click('#tutor-send');
+  await q.waitForFunction(() => { const m = document.querySelectorAll('#tutor-log .t-msg.bot'); const t = m.length ? m[m.length - 1].textContent : ''; return t.length > 20 && !/Thinking/.test(t); }, null, { timeout: 30000 });
+  const t = await q.$$eval('#tutor-log .t-msg.bot', (m) => m[m.length - 1].textContent);
+  need(!/expired|sign in/i.test(t), 'the assistant said: ' + t.slice(0, 120));
+  need(!(await q.isHidden('#shell')), 'the student was signed out');
+  await ctx.close();
+});
+
+stop = false;   // independent of the journey above
+await step('signed out on another device: this tab says so and goes to sign-in, instead of failing quietly', async () => {
+  stop = false;
+  const ctx = await browser.newContext({ viewport: { width: 1000, height: 800 } }); const q = await ctx.newPage();
+  const email = 'noconfirm.rev' + tag + '@pcc.edu';
+  await q.goto(BASE + '/'); await q.waitForSelector('#auth:not([hidden])');
+  await q.click('[data-tab="signup"]');
+  await q.fill('#su-name', 'Rev Oked'); await q.fill('#su-email', email); await q.fill('#su-pass', 'longenough1');
+  await q.click('[data-action="signup"]'); await q.waitForSelector('#onb-file', { timeout: 15000 });
+  await q.click('[data-action="onb-to-fork"]'); await q.click('[data-action="onb-know"]');
+  await q.click('[data-action="pick-role"][data-role="pm"]'); await q.waitForSelector('#tutor-launch:visible', { timeout: 15000 });
+  await j('/__revoke?email=' + email);
+  await q.click('#tutor-launch'); await q.fill('#tutor-input', 'What does a PM do?'); await q.click('#tutor-send');
+  await q.waitForSelector('#auth:not([hidden])', { timeout: 20000 });
+  need(/signed out/i.test(await q.textContent('#auth')), 'no message on the sign-in screen');
   await ctx.close();
 });
 
