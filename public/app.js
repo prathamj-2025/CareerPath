@@ -1778,7 +1778,7 @@
         '<hr class="divider" style="margin:18px 0">' +
         (o.paste
           ? '<div class="field"><label for="onb-text">Paste your resume text</label>' +
-            '<textarea id="onb-text" class="ex-input" rows="8" placeholder="Paste the text of your resume here"></textarea></div>' +
+            '<textarea id="onb-text" class="ex-input" rows="8" aria-label="Resume text" placeholder="Paste the text of your resume here"></textarea></div>' +
             '<div class="row" style="margin-top:10px"><button class="btn primary sm" data-action="onb-paste-save">Use this text</button>' +
             '<button class="btn sm ghost" data-action="onb-paste">Cancel</button></div>'
           : '<div class="row"><button class="btn sm" data-action="onb-paste">Paste text instead</button>' +
@@ -2972,7 +2972,7 @@
             ? '<div class="ex-schema"><span class="fl">Tables available</span><pre>' + esc(ex.schema) + "</pre></div>"
             : "") +
 
-          '<textarea class="ex-input' + (ex.kind === "query" || ex.kind === "formula" ? " code" : "") +
+          '<textarea aria-label="Your answer" class="ex-input' + (ex.kind === "query" || ex.kind === "formula" ? " code" : "") +
             '" data-practice="' + key + '" rows="' + (ex.kind === "query" ? 8 : 4) +
             '" placeholder="' + esc(kind.placeholder) + '" spellcheck="false">' + esc(st.text) + "</textarea>" +
 
@@ -3041,7 +3041,7 @@
       (picked ? '<div class="why ' + (st.pick === q.a ? "right" : "wrong") + '"><b>' + (st.pick === q.a ? "Right." : "Not quite.") + "</b> " + esc(q.why) + "</div>" : "") +
 
       '<p class="ex-prompt" style="margin-top:16px"><b>Step 2.</b> ' + esc(w.prompt) + "</p>" +
-      '<textarea class="ex-input" data-practice="' + esc(key) + '" rows="5" placeholder="Write your answer the way you would say it in an interview. Check it when you are done." spellcheck="true">' +
+      '<textarea class="ex-input" aria-label="Your answer" data-practice="' + esc(key) + '" rows="5" placeholder="Write your answer the way you would say it in an interview. Check it when you are done." spellcheck="true">' +
         esc(st.text) + "</textarea>" +
       '<div class="row" style="margin-top:10px">' +
         '<button class="btn sm primary" data-action="scn-check" data-key="' + esc(key) + '"' + (st.checkBusy ? " disabled" : "") + ">" +
@@ -3123,7 +3123,7 @@
 
     return '<div class="card proj" data-proj-card="' + esc(s.id) + '">' + head +
       '<div class="proj-std"><b>What reviewers look for</b><ul>' + PRJ.STANDARD.map(function (x) { return "<li>" + esc(x) + "</li>"; }).join("") + "</ul></div>" +
-      '<textarea class="ex-input proj-input" data-proj="' + esc(s.id) + '" rows="12" spellcheck="true" ' +
+      '<textarea class="ex-input proj-input" aria-label="Your project" data-proj="' + esc(s.id) + '" rows="12" spellcheck="true" ' +
         'placeholder="Write your project here, in your own words. Aim for a clear, specific answer a reviewer could use in about two minutes."' +
         (state.preview ? " disabled" : "") + ">" + esc(text) + "</textarea>" +
       '<div class="row" style="margin-top:10px;justify-content:space-between">' +

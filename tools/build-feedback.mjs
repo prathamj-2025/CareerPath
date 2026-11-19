@@ -31,7 +31,7 @@ const q = (num, legend, body, req, name, hint) =>
   `<span class="fb-lt">${legend}${req ? ' <b class="fb-req" aria-hidden="true">*</b>' : ' <span class="fb-opt">Optional</span>'}</span></legend>` +
   (hint ? `<p class="fb-hint">${hint}</p>` : "") + body + '<p class="fb-err" role="alert" hidden></p></fieldset>\n';
 const ask = (k, req, hint, extra) => q(FORM[k].n, FORM[k].q, chips(k) + (extra || ""), req, NAME[k] || k, hint || (FORM[k].many ? PICK : ""));
-const textarea = (name, rows, ph) => `<textarea name="${name}" rows="${rows}" maxlength="1000"${ph ? ` placeholder="${ph}"` : ""}></textarea>`;
+const textarea = (name, rows, ph) => `<textarea name="${name}" aria-label="${OPEN[name] ? OPEN[name].q : name}" rows="${rows}" maxlength="1000"${ph ? ` placeholder="${ph}"` : ""}></textarea>`;
 const follow = (id, name) => `<label class="fb-field fb-follow"${id ? ` id="${id}" hidden` : ""}><span>${OPEN[name].q} (optional)</span>` +
   `<textarea name="${name}" rows="2" maxlength="1000"></textarea></label>`;
 
