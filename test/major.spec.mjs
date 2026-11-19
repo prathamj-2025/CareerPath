@@ -1,5 +1,5 @@
-/* The Major list on sign-up, Google sign-up and Profile: MBA is offered, "Other" opens a box to type the major, and what is
-   typed is what is saved. Needs the real-mode server (3114) and the fake database (3113). */
+/* The School and Major lists on sign-up, Google sign-up and Profile: MBA and Business Analytics are offered, "Other" opens a
+   box to type the school or major, and what is typed is what is saved. Needs the real-mode server (3114) and the fake database (3113). */
 import { chromium } from 'playwright';
 
 const BASE = process.env.REAL_URL || 'http://localhost:3114';
@@ -78,6 +78,43 @@ await step('on Profile a typed major shows as Other with the text filled in', as
   if (prof) { await prof.click(); await p.waitForTimeout(500); }
   need(await p.$('#pf-major'), 'profile form not reached');
   need(await p.inputValue('#pf-major') === 'Other' && await p.inputValue('#pf-major-other') === 'Marketing', 'profile shows: ' + await p.inputValue('#pf-major'));
+  await ctx.close();
+});
+
+await step('School also has Other: the box appears, an empty one is refused, and a typed school is saved', async () => {
+  const p = await page();
+  const opts = await p.$$eval('#su-school option', o => o.map(x => x.textContent));
+  need(opts[0] === 'USC' && opts[opts.length - 1] === 'Other', opts.join(', '));
+  need(!(await p.isVisible('#su-school-other')), 'the "your school" box shows before Other is picked');
+  const email = 'school-other-' + tag + '@stanford.edu';
+  await fill(p, email);
+  await p.selectOption('#su-school', 'Other');
+  need(await p.isVisible('#su-school-other'), 'the "your school" box did not appear');
+  await p.click('[data-action="signup"]'); await p.waitForTimeout(300);
+  need(/type your school/.test(await p.textContent('#auth')), 'no message for an empty school');
+  need(await p.inputValue('#su-school') === 'Other' && await p.isVisible('#su-school-other'), 'the message reset the Other choice');
+  await p.fill('#su-pass', 'longenough1');   // the password is never kept across a message, on purpose
+  await p.fill('#su-school-other', '  Stanford University ');
+  await p.selectOption('#su-major', 'MBA');
+  await p.click('[data-action="signup"]'); await p.waitForTimeout(600);
+  await j('/__confirm?email=' + email);
+  const prof = await j('/__profile?email=' + email);
+  need(prof && prof.school === 'Stanford University' && prof.major === 'MBA', 'saved: ' + JSON.stringify(prof && [prof.school, prof.major]));
+  await p.context().close();
+});
+
+await step('on Profile a typed school shows as Other with the text filled in, and can be changed', async () => {
+  const email = 'school-other-' + tag + '@stanford.edu';
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const p = await ctx.newPage();
+  await p.goto(BASE + '/'); await p.waitForSelector('#auth:not([hidden])');
+  await p.click('[data-tab="login"]'); await p.fill('#li-email', email); await p.fill('#li-pass', 'longenough1');
+  await p.click('[data-action="login"]'); await p.waitForTimeout(1500);
+  const prof = await p.$('[data-nav="profile"]:visible');
+  if (prof) { await prof.click(); await p.waitForTimeout(500); }
+  need(await p.inputValue('#pf-school') === 'Other' && await p.inputValue('#pf-school-other') === 'Stanford University', 'profile shows: ' + await p.inputValue('#pf-school'));
+  await p.selectOption('#pf-school', 'UCLA');
+  need(!(await p.isVisible('#pf-school-other')), 'the box stayed after picking a listed school');
   await ctx.close();
 });
 

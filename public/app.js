@@ -15,25 +15,35 @@
   var SCHOOLS = ["USC", "UCLA", "NYU", "Georgia Tech", "UT Austin", "University of Michigan"];
   var MAJORS = ["Engineering Management", "Computer Science", "MBA",
                 "Industrial Engineering", "Economics", "Data Science", "Business Analytics", "Information Systems"];
-  var MAJOR_OTHER = "Other";
+  var OTHER = "Other";
 
-  /* Major: a list, plus "Other" with a box to type it in. A saved major that is not in the list shows as Other with the
-     text filled in, so nobody loses what they typed (or a major that has since left the list). */
+  /* School and Major: a list, plus "Other" with a box to type it in. A saved value that is not in the list shows as Other
+     with the text filled in, so nobody loses what they typed (or a value that has since left the list).
+     otherSelect is the dropdown; otherBox is the box, placed where the form has room for a full-width field. */
+  function otherSelect(id, label, list, current) {
+    var cur = String(current || ""), other = !!cur && list.indexOf(cur) < 0;
+    return '<div class="field"><label for="' + id + '">' + label + '</label><select id="' + id + '" data-other="' + id + '">' +
+      list.concat([OTHER]).map(function (m) {
+        return "<option" + ((other ? m === OTHER : m === cur) ? " selected" : "") + ">" + esc(m) + "</option>";
+      }).join("") + "</select></div>";
+  }
+  function otherBox(id, label, list, current, placeholder) {
+    var cur = String(current || ""), other = !!cur && list.indexOf(cur) < 0;
+    if (cur === OTHER) cur = "";   // "Other" picked but nothing typed yet: keep the box open and empty
+    return '<div class="field" id="' + id + '-other-wrap"' + (other ? "" : " hidden") + '><label for="' + id + '-other">' + label + "</label>" +
+      '<input id="' + id + '-other" maxlength="80" placeholder="' + placeholder + '" value="' + (other ? esc(cur) : "") + '"></div>';
+  }
+  function otherVal(id) { var v = val(id); return v === OTHER ? val(id + "-other").slice(0, 80) : v; }
+  function otherMissing(id) { return val(id) === OTHER && !val(id + "-other"); }
+
   function majorField(prefix, current) {
-    var cur = String(current || "");
-    var other = !!cur && MAJORS.indexOf(cur) < 0;
-    return '<div class="field"><label for="' + prefix + '-major">Major</label><select id="' + prefix + '-major" data-major="' + prefix + '">' +
-        MAJORS.concat([MAJOR_OTHER]).map(function (m) {
-          return "<option" + ((other ? m === MAJOR_OTHER : m === cur) ? " selected" : "") + ">" + esc(m) + "</option>";
-        }).join("") + "</select></div>" +
-      '<div class="field" id="' + prefix + '-major-other-wrap"' + (other ? "" : " hidden") + '><label for="' + prefix + '-major-other">Your major</label>' +
-        '<input id="' + prefix + '-major-other" maxlength="80" placeholder="e.g. Marketing" value="' + (other ? esc(cur) : "") + '"></div>';
+    return otherSelect(prefix + "-major", "Major", MAJORS, current) + otherBox(prefix + "-major", "Your major", MAJORS, current, "e.g. Marketing");
   }
-  function majorVal(prefix) {
-    var v = val(prefix + "-major");
-    return v === MAJOR_OTHER ? val(prefix + "-major-other").slice(0, 80) : v;
-  }
-  function majorMissing(prefix) { return val(prefix + "-major") === MAJOR_OTHER && !val(prefix + "-major-other"); }
+  function schoolBox(prefix, current) { return otherBox(prefix + "-school", "Your school", SCHOOLS, current, "e.g. Stanford University"); }
+  function majorVal(prefix) { return otherVal(prefix + "-major"); }
+  function majorMissing(prefix) { return otherMissing(prefix + "-major"); }
+  function schoolVal(prefix) { return otherVal(prefix + "-school"); }
+  function schoolMissing(prefix) { return otherMissing(prefix + "-school"); }
 
   var STAR = "&#9733;";
   var REAL = false;   // true when real accounts (Supabase) are switched on for this deployment
@@ -1474,11 +1484,11 @@
         '<p class="tiny muted" style="margin-top:4px">Signed in with Google as <b>' + esc(g.email) + "</b>. Three quick details and you&rsquo;re in.</p></div>" +
       '<div class="field"><label for="gf-name">Full name</label><input id="gf-name" value="' + esc(g.name) + '"></div>' +
       '<div class="auth-grid">' +
-        '<div class="field"><label for="gf-school">School</label><select id="gf-school">' +
-          SCHOOLS.map(function (s) { return "<option>" + esc(s) + "</option>"; }).join("") + "</select></div>" +
+        otherSelect("gf-school", "School", SCHOOLS, "") +
         '<div class="field"><label for="gf-year">Graduation</label><select id="gf-year">' +
           ["2026", "2027", "2028", "2029"].map(function (y) { return "<option>" + y + "</option>"; }).join("") + "</select></div>" +
       "</div>" +
+      schoolBox("gf", "") +
       majorField("gf", "") +
       '<button class="btn primary" style="margin-top:6px;justify-content:center" data-action="google-finish"' + (state.authBusy ? " disabled" : "") + '>' + (REAL ? "Continue" : "Create student account") + '</button>' +
       '<button class="btn ghost sm" style="justify-content:center" data-action="google-cancel">Use a different account</button>' +
@@ -1501,11 +1511,11 @@
       '<div class="field"><label for="su-email">Email</label><input id="su-email" type="email" placeholder="alex@usc.edu" value="' + esc(draft.email) + '"></div>' +
       '<div class="field"><label for="su-pass">Password</label><input id="su-pass" type="password" autocomplete="new-password" placeholder="' + (REAL ? "At least 8 characters" : "At least 4 characters") + '"></div>' +
       '<div class="auth-grid">' +
-        '<div class="field"><label for="su-school">School</label><select id="su-school">' +
-          SCHOOLS.map(function (s) { return "<option" + (s === draft.school ? " selected" : "") + ">" + esc(s) + "</option>"; }).join("") + "</select></div>" +
+        otherSelect("su-school", "School", SCHOOLS, draft.school) +
         '<div class="field"><label for="su-year">Graduation</label><select id="su-year">' +
           ["2026", "2027", "2028", "2029"].map(function (y) { return "<option" + (y === draft.year ? " selected" : "") + ">" + y + "</option>"; }).join("") + "</select></div>" +
       "</div>" +
+      schoolBox("su", draft.school) +
       majorField("su", draft.major) +
       '<button class="btn primary" style="margin-top:6px;justify-content:center"' + (state.authBusy ? " disabled" : "") + ' data-action="signup">Create student account</button>' +
       (REAL
@@ -3430,9 +3440,10 @@
         '<div class="field"><label for="pf-name">Full name</label><input id="pf-name" maxlength="80" value="' + esc(user.name) + '"></div>' +
         '<div class="field"><label>Email</label><input value="' + esc(user.email) + '" disabled></div>' +
         '<div class="auth-grid">' +
-          '<div class="field"><label for="pf-school">School</label><select id="pf-school">' + optionList(SCHOOLS, user.school) + "</select></div>" +
+          otherSelect("pf-school", "School", SCHOOLS, user.school) +
           '<div class="field"><label for="pf-year">Graduation</label><select id="pf-year">' + optionList(["2026", "2027", "2028", "2029"], String(user.gradYear)) + "</select></div>" +
         "</div>" +
+        schoolBox("pf", user.school) +
         majorField("pf", user.major) +
         '<label class="check-row"><input type="checkbox" id="pf-board"' + (user.showOnBoard !== false ? " checked" : "") + ">" +
           '<span class="check-text"><span class="check-title">Show me on the leaderboards</span>' +
@@ -4336,12 +4347,15 @@
       var name = val("su-name"), email = val("su-email"), pass = val("su-pass");
       if (REAL) {
         if (state.authBusy) return;
-        state.authDraft = { name: name, email: email, school: val("su-school"), major: majorVal("su"), year: val("su-year") };
+        // A draft keeps "Other" picked even before anything is typed, so a message never resets the choice.
+        state.authDraft = { name: name, email: email, school: schoolMissing("su") ? OTHER : schoolVal("su"),
+          major: majorMissing("su") ? OTHER : majorVal("su"), year: val("su-year") };
         if (!name || !email || !pass) { state.authError = "Name, email, and password are all required."; return render(); }
-        if (majorMissing("su")) { state.authDraft.major = ""; state.authError = "Please type your major, or pick one from the list."; return render(); }
+        if (schoolMissing("su")) { state.authError = "Please type your school, or pick one from the list."; return render(); }
+        if (majorMissing("su")) { state.authError = "Please type your major, or pick one from the list."; return render(); }
         if (pass.length < 8) { state.authError = "Password must be at least 8 characters."; return render(); }
         state.authBusy = true; state.authError = ""; render();
-        return CP_AUTH.signUp(email, pass, { name: name, school: val("su-school"), major: majorVal("su"), grad_year: val("su-year") }).then(function (r) {
+        return CP_AUTH.signUp(email, pass, { name: name, school: schoolVal("su"), major: majorVal("su"), grad_year: val("su-year") }).then(function (r) {
           if (r.error) return authFail(r);
           if (r.session) return startSession();
           state.authBusy = false; state.authNotice = { kind: "verify", email: email }; render();
@@ -4353,7 +4367,7 @@
         state.authError = "An account already exists for that email. Try signing in."; return render();
       }
       var u = newUser({ name: name, email: email, password: pass, role: "student",
-        school: val("su-school"), major: majorVal("su"), gradYear: val("su-year") });
+        school: schoolVal("su"), major: majorVal("su"), gradYear: val("su-year") });
       state.users.push(u);
       state.userId = u.id; state.authError = "";
       state.onb = { step: 1 };
@@ -4385,8 +4399,9 @@
       if (REAL) {
         var uu = state.users.filter(function (x) { return x.id === state.finishUser; })[0];
         if (!uu || state.authBusy) return;
+        if (schoolMissing("gf")) { state.authError = "Please type your school, or pick one from the list."; return render(); }
         if (majorMissing("gf")) { state.authError = "Please type your major, or pick one from the list."; return render(); }
-        var patch = { name: val("gf-name") || g.name, school: val("gf-school"), major: majorVal("gf"), grad_year: val("gf-year") };
+        var patch = { name: val("gf-name") || g.name, school: schoolVal("gf"), major: majorVal("gf"), grad_year: val("gf-year") };
         state.authBusy = true; state.authError = ""; render();
         return CP_AUTH.saveProfile(patch).then(function (r) {
           state.authBusy = false;
@@ -4399,7 +4414,7 @@
         });
       }
       var u = newUser({ name: val("gf-name") || g.name, email: g.email, password: null, role: "student",
-        school: val("gf-school"), major: majorVal("gf"), gradYear: val("gf-year") });
+        school: schoolVal("gf"), major: majorVal("gf"), gradYear: val("gf-year") });
       u.google = true; u.picture = g.picture || null;
       state.users.push(u);
       state.googlePending = null; state.userId = u.id; state.authError = "";
@@ -4410,8 +4425,9 @@
       var u = me(); if (!u || !REAL) return;
       var name = val("pf-name");
       if (!name) { state.acctMsg = "Your name cannot be empty."; return render(); }
+      if (schoolMissing("pf")) { state.acctMsg = "Please type your school, or pick one from the list."; return render(); }
       if (majorMissing("pf")) { state.acctMsg = "Please type your major, or pick one from the list."; return render(); }
-      u.name = name.slice(0, 80); u.school = val("pf-school") || u.school; u.major = majorVal("pf") || u.major;
+      u.name = name.slice(0, 80); u.school = schoolVal("pf") || u.school; u.major = majorVal("pf") || u.major;
       u.gradYear = val("pf-year") || u.gradYear;
       var box = document.getElementById("pf-board"); u.showOnBoard = box ? box.checked : true;
       state.acctMsg = "Saved.";
@@ -5390,10 +5406,10 @@
   });
 
   document.addEventListener("change", function (ev) {
-    var mj = ev.target.closest && ev.target.closest("select[data-major]");
+    var mj = ev.target.closest && ev.target.closest("select[data-other]");
     if (mj) {
-      var wrap = document.getElementById(mj.dataset.major + "-major-other-wrap");
-      if (wrap) { wrap.hidden = mj.value !== MAJOR_OTHER; if (!wrap.hidden) { var box = wrap.querySelector("input"); if (box) box.focus(); } }
+      var wrap = document.getElementById(mj.dataset.other + "-other-wrap");
+      if (wrap) { wrap.hidden = mj.value !== OTHER; if (!wrap.hidden) { var box = wrap.querySelector("input"); if (box) box.focus(); } }
       return;
     }
     var el = ev.target.closest && ev.target.closest("[data-filter]");
